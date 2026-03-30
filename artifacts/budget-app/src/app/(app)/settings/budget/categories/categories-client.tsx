@@ -109,22 +109,25 @@ function CategoryDialog({ open, onClose, budgetId, existing, parents, onSaved }:
             </div>
           </div>
 
-          {!existing?.parentId && (
-            <div className="space-y-1.5">
-              <Label>Parent Category <span className="text-muted-foreground font-normal">(optional)</span></Label>
-              <Select value={parentId ?? "none"} onValueChange={(v) => setParentId(v === "none" ? null : v)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Top-level category" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Top-level (no parent)</SelectItem>
-                  {parents.filter((p) => !p.parentId && p.id !== existing?.id).map((p) => (
-                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
+          <div className="space-y-1.5">
+            <Label>Parent Category <span className="text-muted-foreground font-normal">(optional)</span></Label>
+            <Select value={parentId ?? "none"} onValueChange={(v) => setParentId(v === "none" ? null : v)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Top-level category" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Top-level (no parent)</SelectItem>
+                {parents.filter((p) => !p.parentId && p.id !== existing?.id).map((p) => (
+                  <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {existing?.children && existing.children.length > 0 && (
+              <p className="text-xs text-muted-foreground">
+                Note: this category has {existing.children.length} sub-categor{existing.children.length === 1 ? "y" : "ies"} — reparenting it will move it with its children.
+              </p>
+            )}
+          </div>
 
           {error && <p className="text-sm text-destructive">{error}</p>}
         </div>

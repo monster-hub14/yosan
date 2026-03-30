@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, Search, Filter, ChevronDown, Trash2, Pencil, TrendingDown, Loader2, RefreshCw } from "lucide-react";
+import { Plus, Search, Filter, ChevronDown, Trash2, Pencil, TrendingDown, Loader2, RefreshCw, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -59,7 +59,13 @@ interface ExpensesClientProps {
   initialCategories: Category[];
 }
 
+interface SafeToSpend {
+  amount: number;
+  status: string;
+}
+
 export function ExpensesClient({ budgetId, initialCategories }: ExpensesClientProps) {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [total, setTotal] = useState(0);
@@ -78,6 +84,7 @@ export function ExpensesClient({ budgetId, initialCategories }: ExpensesClientPr
   const [editExpense, setEditExpense] = useState<Expense | null>(null);
   const [deleteExpense, setDeleteExpense] = useState<Expense | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [lastSafeToSpend, setLastSafeToSpend] = useState<SafeToSpend | null>(null);
 
   const flatCategories = initialCategories;
 
@@ -118,9 +125,12 @@ export function ExpensesClient({ budgetId, initialCategories }: ExpensesClientPr
     }
   };
 
-  const handleSaved = () => {
+  const handleSaved = (_expense: unknown, safeToSpend: SafeToSpend | null) => {
     setAddOpen(false);
     setEditExpense(null);
+    if (safeToSpend) setLastSafeToSpend(safeToSpend);
+    // Invalidate Next.js server cache so dashboard shows fresh data on next visit
+    router.refresh();
     load();
   };
 
@@ -142,6 +152,44 @@ export function ExpensesClient({ budgetId, initialCategories }: ExpensesClientPr
           <Plus className="h-4 w-4 mr-2" /> Add Expense
         </Button>
       </div>
+
+      {/* Safe-to-spend live update banner */}
+      <AnimatePresence>
+        {lastSafeToSpend && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            className="flex items-center gap-3 px-4 py-3 rounded-lg bg-muted border border-border text-sm"
+          >
+            <Wallet className="w-4 h-4 text-muted-foreground shrink-0" />
+            <span className="text-muted-foreground">Safe to spend updated:</span>
+            <span className="font-semibold">
+              ${Math.abs(lastSafeToSpend.amount).toFixed(2)}/day
+            </span>
+            <Badge
+              variant="outline"
+              className="text-xs"
+              style={{
+                color: lastSafeToSpend.status === "on-track"
+                  ? "#22c55e"
+                  : lastSafeToSpend.status === "caution"
+                  ? "#f59e0b"
+                  : "#ef4444",
+                borderColor: "currentColor",
+              }}
+            >
+              {lastSafeToSpend.status}
+            </Badge>
+            <button
+              className="ml-auto text-muted-foreground hover:text-foreground"
+              onClick={() => setLastSafeToSpend(null)}
+            >
+              ×
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Search + filters */}
       <div className="space-y-3">

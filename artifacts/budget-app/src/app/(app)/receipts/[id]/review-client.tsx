@@ -17,6 +17,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { CategoryPicker, type CategoryNode } from "@/components/expenses/category-picker";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -66,6 +67,8 @@ interface Category {
   icon?: string | null;
   color?: string | null;
   isDefault: boolean;
+  parentId?: string | null;
+  children?: Category[];
 }
 
 interface ReviewClientProps {
@@ -529,27 +532,13 @@ export function ReviewClient({ id }: ReviewClientProps) {
                 <Tag className="w-3.5 h-3.5 text-muted-foreground" />
                 Category (overall)
               </Label>
-              {categories.length > 0 ? (
-                <Select
-                  value={categoryId || "none"}
-                  onValueChange={(v) => setCategoryId(v === "none" ? "" : v)}
-                  disabled={isAlreadyDone}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Choose a category…" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">No category</SelectItem>
-                    {categories.map((cat) => (
-                      <SelectItem key={cat.id} value={cat.id}>
-                        {cat.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              ) : (
-                <Input placeholder="No categories yet" disabled />
-              )}
+              <CategoryPicker
+                categories={categories as CategoryNode[]}
+                value={categoryId || null}
+                onChange={(id) => setCategoryId(id ?? "")}
+                disabled={isAlreadyDone}
+                placeholder="Choose a category…"
+              />
             </div>
           </div>
 
