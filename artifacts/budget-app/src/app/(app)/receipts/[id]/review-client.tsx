@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import {
   ArrowLeft, Loader2, CheckCircle2, XCircle, AlertTriangle, Receipt,
-  Calendar, Store, DollarSign, Tag, Edit3, Save, Trash2, Package, Clock,
+  Calendar, Store, DollarSign, Tag, Edit3, Save, Trash2, Package, Clock, HelpCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,9 +13,10 @@ import { Badge } from "@/components/ui/badge";
 import {
   Card, CardContent, CardHeader, CardTitle,
 } from "@/components/ui/card";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
-  Alert, AlertDescription,
-} from "@/components/ui/alert";
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -31,6 +32,7 @@ interface ExtractedItem {
     confidence: string;
     isAmbiguous: boolean;
     clarificationQuestion: string | null;
+    suggestedOptions?: string[];
   } | null;
 }
 
@@ -58,6 +60,14 @@ interface PendingImport {
   } | null;
 }
 
+interface Category {
+  id: string;
+  name: string;
+  icon?: string | null;
+  color?: string | null;
+  isDefault: boolean;
+}
+
 interface ReviewClientProps {
   id: string;
 }
@@ -73,16 +83,23 @@ export function ReviewClient({ id }: ReviewClientProps) {
   const [loading, setLoading] = useState(true);
   const [imp, setImp] = useState<PendingImport | null>(null);
   const [parsed, setParsed] = useState<ParsedData | null>(null);
+  const [categories, setCategories] = useState<Category[]>([]);
 
-  // Editable fields
+  // Editable top-level fields
   const [merchant, setMerchant] = useState("");
   const [date, setDate] = useState("");
   const [total, setTotal] = useState("");
   const [notes, setNotes] = useState("");
-  const [categoryId, setCategoryId] = useState<string | null>(null);
+  const [categoryId, setCategoryId] = useState<string>("");
+
+  // Per-item category overrides: itemIndex -> categoryId
+  const [itemCategories, setItemCategories] = useState<Record<number, string>>({});
+  // Answers to clarification questions: itemIndex -> answered categoryId
+  const [clarifications, setClarifications] = useState<Record<number, string>>({});
 
   const [confirming, setConfirming] = useState(false);
   const [discarding, setDiscarding] = useState(false);
+  const [savingLater, setSavingLater] = useState(false);
   const [duplicateWarning, setDuplicateWarning] = useState<{
     confidence: string;
     matchedExpenseId: string;
@@ -107,6 +124,14 @@ export function ReviewClient({ id }: ReviewClientProps) {
       setMerchant(p.merchant || "");
       setDate(p.date || new Date().toISOString().slice(0, 10));
       setTotal(p.total != null ? String(p.total) : "");
+      // Pre-fill item categories from AI suggestions
+      const initCats: Record<number, string> = {};
+      (p.items ?? []).forEach((item, i) => {
+        if (item.categorySuggestion?.categoryId && !item.categorySuggestion.isAmbiguous) {
+          initCats[i] = item.categorySuggestion.categoryId;
+        }
+      });
+      setItemCategories(initCats);
     } catch {
       setParsed({ merchant: null, date: null, total: null, items: [], confidence: "low" });
     }
@@ -115,12 +140,42 @@ export function ReviewClient({ id }: ReviewClientProps) {
 
   useEffect(() => { load(); }, [load]);
 
+  // Load categories for budget
+  useEffect(() => {
+    fetch("/api/categories")
+      .then((r) => r.json())
+      .then((d: { categories?: Category[] }) => setCategories(d.categories ?? []))
+      .catch(() => {});
+  }, []);
+
   // Poll if still processing
   useEffect(() => {
     if (!imp || (imp.status !== "PROCESSING" && imp.status !== "PENDING")) return;
     const t = setTimeout(() => load(), 2000);
     return () => clearTimeout(t);
   }, [imp, load]);
+
+  function buildItemsPayload() {
+    return parsed?.items?.map((item, i) => ({
+      description: item.description,
+      amount: item.amount,
+      quantity: item.quantity,
+      categoryId: itemCategories[i] ?? item.categorySuggestion?.categoryId ?? null,
+    }));
+  }
+
+  function buildClarificationsPayload() {
+    return Object.entries(clarifications).map(([idx, catId]) => {
+      const item = parsed?.items?.[parseInt(idx)];
+      const cat = categories.find((c) => c.id === catId);
+      return {
+        itemDescription: item?.description ?? null,
+        categoryId: catId,
+        categoryName: cat?.name ?? null,
+        question: item?.categorySuggestion?.clarificationQuestion ?? null,
+      };
+    });
+  }
 
   async function handleConfirm(duplicateResolution?: string) {
     setConfirming(true);
@@ -135,12 +190,8 @@ export function ReviewClient({ id }: ReviewClientProps) {
           total: total ? parseFloat(total) : null,
           notes: notes || null,
           categoryId: categoryId || null,
-          items: parsed?.items?.map((item) => ({
-            description: item.description,
-            amount: item.amount,
-            quantity: item.quantity,
-            categoryId: item.categorySuggestion?.categoryId || null,
-          })),
+          items: buildItemsPayload(),
+          clarifications: buildClarificationsPayload(),
           duplicateResolution: duplicateResolution ?? null,
         }),
       });
@@ -176,20 +227,23 @@ export function ReviewClient({ id }: ReviewClientProps) {
     }
   }
 
-  const [savingLater, setSavingLater] = useState(false);
-
   async function handleSaveForLater() {
     setSavingLater(true);
     try {
+      // Merge current edits into the data blob
+      let current: Record<string, unknown> = {};
+      try { current = JSON.parse(imp?.data ?? "{}") as Record<string, unknown>; } catch { /* ignore */ }
+      current.merchant = merchant || null;
+      current.date = date || null;
+      current.total = total ? parseFloat(total) : null;
+      current.notes = notes || null;
+      current.categoryId = categoryId || null;
+
       const res = await fetch(`/api/receipts/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          merchant: merchant || null,
-          date: date || null,
-          total: total ? parseFloat(total) : null,
-          notes: notes || null,
-          categoryId: categoryId || null,
+          data: JSON.stringify(current),
           status: "NEEDS_REVIEW",
         }),
       });
@@ -237,6 +291,9 @@ export function ReviewClient({ id }: ReviewClientProps) {
 
   const isProcessing = imp.status === "PROCESSING" || imp.status === "PENDING";
   const isAlreadyDone = imp.status === "CONFIRMED" || imp.status === "DISCARDED";
+  const anyAmbiguous = parsed?.items?.some(
+    (item) => item.categorySuggestion?.isAmbiguous && item.categorySuggestion.clarificationQuestion
+  );
 
   return (
     <div className="max-w-2xl mx-auto py-8 px-4 space-y-6">
@@ -344,6 +401,47 @@ export function ReviewClient({ id }: ReviewClientProps) {
         </Alert>
       )}
 
+      {/* Ambiguous category clarification prompts */}
+      {anyAmbiguous && !isAlreadyDone && !isProcessing && (
+        <Card className="border-amber-500/20 bg-amber-500/3">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2 text-amber-600 dark:text-amber-400">
+              <HelpCircle className="w-4 h-4" />
+              Help categorize these items
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {parsed?.items?.map((item, i) => {
+              if (!item.categorySuggestion?.isAmbiguous || !item.categorySuggestion.clarificationQuestion) return null;
+              return (
+                <div key={i} className="space-y-1.5">
+                  <p className="text-sm font-medium">{item.categorySuggestion.clarificationQuestion}</p>
+                  <p className="text-xs text-muted-foreground">{item.description} — ${item.amount.toFixed(2)}</p>
+                  <Select
+                    value={clarifications[i] ?? itemCategories[i] ?? ""}
+                    onValueChange={(val) => {
+                      setClarifications((prev) => ({ ...prev, [i]: val }));
+                      setItemCategories((prev) => ({ ...prev, [i]: val }));
+                    }}
+                  >
+                    <SelectTrigger className="h-8 text-sm">
+                      <SelectValue placeholder="Choose a category…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {categories.map((cat) => (
+                        <SelectItem key={cat.id} value={cat.id}>
+                          {cat.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Already done banner */}
       {isAlreadyDone && (
         <Alert className={imp.status === "CONFIRMED" ? "border-green-500/30 bg-green-500/5" : ""}>
@@ -420,12 +518,29 @@ export function ReviewClient({ id }: ReviewClientProps) {
             <div className="space-y-1.5">
               <Label className="flex items-center gap-1.5">
                 <Tag className="w-3.5 h-3.5 text-muted-foreground" />
-                Category
+                Category (overall)
               </Label>
-              <Input
-                placeholder="Select category (coming soon)"
-                disabled
-              />
+              {categories.length > 0 ? (
+                <Select
+                  value={categoryId || "none"}
+                  onValueChange={(v) => setCategoryId(v === "none" ? "" : v)}
+                  disabled={isAlreadyDone}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Choose a category…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No category</SelectItem>
+                    {categories.map((cat) => (
+                      <SelectItem key={cat.id} value={cat.id}>
+                        {cat.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input placeholder="No categories yet" disabled />
+              )}
             </div>
           </div>
 
@@ -452,43 +567,63 @@ export function ReviewClient({ id }: ReviewClientProps) {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-2">
+            <div className="space-y-3">
               {parsed.items.map((item, i) => (
                 <motion.div
                   key={i}
                   initial={{ opacity: 0, x: -8 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: i * 0.04 }}
-                  className="flex items-center gap-3 py-2 border-b border-border last:border-0"
+                  className="space-y-1.5 pb-3 border-b border-border last:border-0 last:pb-0"
                 >
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{item.description}</p>
-                    {item.categorySuggestion?.categoryName && (
-                      <p className="text-xs text-muted-foreground">
-                        → {item.categorySuggestion.categoryName}
-                        {item.categorySuggestion.isAmbiguous && (
-                          <span className="text-amber-500 ml-1">(ambiguous)</span>
-                        )}
-                      </p>
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{item.description}</p>
+                    </div>
+                    {item.quantity > 1 && (
+                      <span className="text-xs text-muted-foreground shrink-0">
+                        ×{item.quantity}
+                      </span>
                     )}
-                  </div>
-                  {item.quantity > 1 && (
-                    <span className="text-xs text-muted-foreground shrink-0">
-                      ×{item.quantity}
+                    <span className="text-sm font-semibold tabular-nums shrink-0">
+                      ${item.amount.toFixed(2)}
                     </span>
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                        item.confidence === "high"
+                          ? "bg-green-500"
+                          : item.confidence === "medium"
+                          ? "bg-amber-500"
+                          : "bg-red-500"
+                      }`}
+                    />
+                  </div>
+                  {/* Per-item category override */}
+                  {!isAlreadyDone && categories.length > 0 && (
+                    <Select
+                      value={itemCategories[i] ?? "none"}
+                      onValueChange={(v) =>
+                        setItemCategories((prev) => ({ ...prev, [i]: v === "none" ? "" : v }))
+                      }
+                    >
+                      <SelectTrigger className="h-7 text-xs">
+                        <SelectValue placeholder="Assign category…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No category</SelectItem>
+                        {categories.map((cat) => (
+                          <SelectItem key={cat.id} value={cat.id}>
+                            {cat.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   )}
-                  <span className="text-sm font-semibold tabular-nums shrink-0">
-                    ${item.amount.toFixed(2)}
-                  </span>
-                  <span
-                    className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                      item.confidence === "high"
-                        ? "bg-green-500"
-                        : item.confidence === "medium"
-                        ? "bg-amber-500"
-                        : "bg-red-500"
-                    }`}
-                  />
+                  {isAlreadyDone && item.categorySuggestion?.categoryName && (
+                    <p className="text-xs text-muted-foreground">
+                      → {item.categorySuggestion.categoryName}
+                    </p>
+                  )}
                 </motion.div>
               ))}
             </div>
