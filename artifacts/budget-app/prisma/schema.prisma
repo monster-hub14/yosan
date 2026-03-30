@@ -61,6 +61,8 @@ enum ImportStatus {
   COMPLETED
   FAILED
   NEEDS_REVIEW
+  CONFIRMED
+  DISCARDED
 }
 
 enum InsightType {
@@ -92,7 +94,10 @@ model User {
   incomeEntries         IncomeEntry[]
   notificationPrefs     NotificationPreference[]
   pendingImports        PendingImport[]
+  confirmedImports      PendingImport[] @relation("ConfirmedImports")
   soloShares            BudgetSoloShare[]
+  aiUsageLogs           AIUsageLog[]
+  addedExpenses         Expense[]       @relation("AddedExpenses")
 }
 
 model Budget {
@@ -222,7 +227,9 @@ model Expense {
   id          String   @id @default(cuid())
   budgetId    String
   categoryId  String?
+  addedById   String?
   amount      Float
+  currency    String   @default("USD")
   date        DateTime
   description String?
   merchant    String?
@@ -234,7 +241,9 @@ model Expense {
   budget       Budget        @relation(fields: [budgetId], references: [id], onDelete: Cascade)
   category     Category?     @relation(fields: [categoryId], references: [id])
   receipt      Receipt?      @relation(fields: [receiptId], references: [id])
+  addedBy      User?         @relation("AddedExpenses", fields: [addedById], references: [id])
   receiptItems ReceiptItem[]
+  pendingImport PendingImport?
 }
 
 model Receipt {
@@ -371,6 +380,21 @@ model NotificationPreference {
   @@unique([userId, budgetId, channel, event])
 }
 
+enum AIFeature {
+  EXTRACTION
+  CATEGORIZATION
+  RECURRING_CATEGORIZATION
+  INSIGHTS
+  FORECASTING
+}
+
+enum ImportStatus2 {
+  PENDING
+  CONFIRMED
+  DISCARDED
+  SAVED_FOR_LATER
+}
+
 model AIProviderConfig {
   id        String     @id @default("singleton")
   provider  AIProvider @default(OPENAI)
@@ -378,7 +402,30 @@ model AIProviderConfig {
   apiKey    String?
   baseUrl   String?
   isEnabled Boolean    @default(false)
-  updatedAt DateTime   @updatedAt
+
+  extractionEnabled            Boolean @default(true)
+  categorizationEnabled        Boolean @default(true)
+  recurringCategorizationEnabled Boolean @default(true)
+  insightsEnabled              Boolean @default(true)
+  forecastingEnabled           Boolean @default(false)
+
+  dailyLimitPerUser   Int? @default(50)
+  weeklyLimitPerUser  Int? @default(200)
+  monthlyLimitPerUser Int? @default(500)
+
+  updatedAt DateTime @updatedAt
+}
+
+model AIUsageLog {
+  id          String    @id @default(cuid())
+  userId      String
+  feature     String
+  createdAt   DateTime  @default(now())
+  windowDate  String
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, feature, windowDate])
 }
 
 model EmailConfig {
@@ -404,19 +451,24 @@ model EmailForwardingConfig {
 }
 
 model PendingImport {
-  id        String       @id @default(cuid())
-  budgetId  String
-  userId    String
-  receiptId String?
-  status    ImportStatus @default(PENDING)
-  data      String       @default("{}")
-  error     String?
-  createdAt DateTime     @default(now())
-  updatedAt DateTime     @updatedAt
+  id              String       @id @default(cuid())
+  budgetId        String
+  userId          String
+  receiptId       String?
+  expenseId       String?      @unique
+  confirmedById   String?
+  confirmedAt     DateTime?
+  status          ImportStatus @default(PENDING)
+  data            String       @default("{}")
+  error           String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
 
-  budget  Budget  @relation(fields: [budgetId], references: [id], onDelete: Cascade)
-  user    User    @relation(fields: [userId], references: [id])
-  receipt Receipt? @relation(fields: [receiptId], references: [id])
+  budget      Budget   @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id])
+  receipt     Receipt? @relation(fields: [receiptId], references: [id])
+  confirmedBy User?    @relation("ConfirmedImports", fields: [confirmedById], references: [id])
+  expense     Expense? @relation(fields: [expenseId], references: [id])
 }
 
 model SetupProgress {

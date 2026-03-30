@@ -1,26 +1,21 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader2, Save, Bot, Eye, EyeOff } from "lucide-react";
+import {
+  Loader2, Save, Bot, Eye, EyeOff, Zap, CheckCircle2, XCircle, Activity,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
+  Card, CardContent, CardDescription, CardHeader, CardTitle,
 } from "@/components/ui/card";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 
 const PROVIDERS = [
@@ -39,17 +34,47 @@ const PROVIDERS = [
   { value: "CUSTOM", label: "Custom / OpenAI-compatible", models: [] },
 ];
 
+type TestStatus = "idle" | "testing" | "success" | "error";
+
+interface AIConfig {
+  provider: string;
+  model: string;
+  apiKey: string;
+  baseUrl: string;
+  isEnabled: boolean;
+  extractionEnabled: boolean;
+  categorizationEnabled: boolean;
+  recurringCategorizationEnabled: boolean;
+  insightsEnabled: boolean;
+  forecastingEnabled: boolean;
+  dailyLimitPerUser: number | null;
+  weeklyLimitPerUser: number | null;
+  monthlyLimitPerUser: number | null;
+}
+
+const DEFAULT_CONFIG: AIConfig = {
+  provider: "OPENAI",
+  model: "gpt-4o-mini",
+  apiKey: "",
+  baseUrl: "",
+  isEnabled: false,
+  extractionEnabled: true,
+  categorizationEnabled: true,
+  recurringCategorizationEnabled: true,
+  insightsEnabled: true,
+  forecastingEnabled: false,
+  dailyLimitPerUser: 50,
+  weeklyLimitPerUser: 200,
+  monthlyLimitPerUser: 500,
+};
+
 export function AISettingsForm() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showKey, setShowKey] = useState(false);
-  const [config, setConfig] = useState({
-    provider: "OPENAI",
-    model: "gpt-4o-mini",
-    apiKey: "",
-    baseUrl: "",
-    isEnabled: false,
-  });
+  const [testStatus, setTestStatus] = useState<TestStatus>("idle");
+  const [testMessage, setTestMessage] = useState<string>("");
+  const [config, setConfig] = useState<AIConfig>(DEFAULT_CONFIG);
 
   useEffect(() => {
     fetch("/api/settings/ai")
@@ -57,11 +82,10 @@ export function AISettingsForm() {
       .then((data) => {
         if (data.config) {
           setConfig({
-            provider: data.config.provider || "OPENAI",
-            model: data.config.model || "gpt-4o-mini",
+            ...DEFAULT_CONFIG,
+            ...data.config,
             apiKey: data.config.apiKey || "",
             baseUrl: data.config.baseUrl || "",
-            isEnabled: data.config.isEnabled || false,
           });
         }
       })
@@ -92,6 +116,38 @@ export function AISettingsForm() {
     }
   }
 
+  async function handleTestConnection() {
+    setTestStatus("testing");
+    setTestMessage("");
+    try {
+      const res = await fetch("/api/settings/ai/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          provider: config.provider,
+          model: config.model,
+          apiKey: config.apiKey !== "••••••••" ? config.apiKey : undefined,
+          baseUrl: config.baseUrl || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setTestStatus("success");
+        setTestMessage(`Connected in ${data.latencyMs}ms — ${data.content}`);
+      } else {
+        setTestStatus("error");
+        setTestMessage(data.error || "Connection failed");
+      }
+    } catch {
+      setTestStatus("error");
+      setTestMessage("Network error");
+    }
+  }
+
+  function updateToggle(key: keyof AIConfig) {
+    setConfig((c) => ({ ...c, [key]: !c[key] }));
+  }
+
   if (loading) {
     return (
       <div className="flex justify-center py-12">
@@ -101,7 +157,8 @@ export function AISettingsForm() {
   }
 
   return (
-    <div className="space-y-6 max-w-xl">
+    <div className="space-y-6 max-w-2xl">
+      {/* Provider Config */}
       <Card className="border-border">
         <CardHeader>
           <div className="flex items-center gap-3">
@@ -239,6 +296,39 @@ export function AISettingsForm() {
               </div>
             )}
 
+            {/* Test connection */}
+            <div className="flex items-center gap-3 pt-1">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleTestConnection}
+                disabled={testStatus === "testing"}
+              >
+                {testStatus === "testing" ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Zap className="w-4 h-4 mr-2" />
+                )}
+                Test connection
+              </Button>
+
+              {testStatus === "success" && (
+                <span className="flex items-center gap-1.5 text-sm text-green-500">
+                  <CheckCircle2 className="w-4 h-4" />
+                  {testMessage}
+                </span>
+              )}
+              {testStatus === "error" && (
+                <span className="flex items-center gap-1.5 text-sm text-destructive">
+                  <XCircle className="w-4 h-4" />
+                  {testMessage}
+                </span>
+              )}
+            </div>
+
+            <Separator />
+
             <Button type="submit" disabled={saving} size="sm">
               {saving ? (
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -248,6 +338,85 @@ export function AISettingsForm() {
               Save settings
             </Button>
           </form>
+        </CardContent>
+      </Card>
+
+      {/* Feature Toggles */}
+      <Card className="border-border">
+        <CardHeader>
+          <CardTitle className="text-base">Feature Toggles</CardTitle>
+          <CardDescription>
+            Enable or disable individual AI features globally
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {[
+            { key: "extractionEnabled", label: "Receipt extraction", desc: "Parse merchant, date, total, and items from uploaded receipts" },
+            { key: "categorizationEnabled", label: "Auto-categorization", desc: "Suggest expense categories based on merchant and item names" },
+            { key: "recurringCategorizationEnabled", label: "Recurring detection", desc: "Identify subscription and recurring charges automatically" },
+            { key: "insightsEnabled", label: "Spending insights", desc: "Generate personalized spending analysis and tips" },
+            { key: "forecastingEnabled", label: "Forecasting (beta)", desc: "Predict future expenses based on historical patterns" },
+          ].map(({ key, label, desc }) => (
+            <div key={key} className="flex items-center justify-between">
+              <div>
+                <Label className="font-medium">{label}</Label>
+                <p className="text-xs text-muted-foreground">{desc}</p>
+              </div>
+              <Switch
+                checked={config[key as keyof AIConfig] as boolean}
+                onCheckedChange={() => updateToggle(key as keyof AIConfig)}
+              />
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      {/* Rate Limits */}
+      <Card className="border-border">
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Activity className="w-4 h-4 text-muted-foreground" />
+            <CardTitle className="text-base">Usage Limits</CardTitle>
+          </div>
+          <CardDescription>
+            Per-user AI call limits. Leave empty for unlimited.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {[
+            { key: "dailyLimitPerUser", label: "Daily limit", placeholder: "e.g. 50" },
+            { key: "weeklyLimitPerUser", label: "Weekly limit", placeholder: "e.g. 200" },
+            { key: "monthlyLimitPerUser", label: "Monthly limit", placeholder: "e.g. 500" },
+          ].map(({ key, label, placeholder }) => (
+            <div key={key} className="flex items-center gap-4">
+              <Label className="w-36 shrink-0">{label}</Label>
+              <Input
+                type="number"
+                min={1}
+                className="w-32"
+                placeholder={placeholder}
+                value={String(config[key as keyof AIConfig] ?? "")}
+                onChange={(e) =>
+                  setConfig((c) => ({
+                    ...c,
+                    [key]: e.target.value === "" ? null : parseInt(e.target.value, 10),
+                  }))
+                }
+              />
+              <span className="text-sm text-muted-foreground">AI calls</span>
+            </div>
+          ))}
+
+          <div className="pt-2">
+            <Button
+              onClick={handleSave}
+              disabled={saving}
+              size="sm"
+            >
+              {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+              Save limits
+            </Button>
+          </div>
         </CardContent>
       </Card>
     </div>
