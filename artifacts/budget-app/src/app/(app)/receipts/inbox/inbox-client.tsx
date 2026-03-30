@@ -181,6 +181,45 @@ export function InboxClient() {
     router.push(`/receipts/${id}/review`);
   }
 
+  async function handleCardDirectConfirm(imp: PendingImport) {
+    const d = getParsedData(imp);
+    setCardWorking((prev) => ({ ...prev, [imp.id]: "confirm" }));
+    try {
+      const res = await fetch(`/api/receipts/${imp.id}/confirm`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          merchant: d.merchant ?? null,
+          date: d.date ?? null,
+          total: d.total ?? null,
+          items: (d.items ?? []).map((it: { description: string; amount: number; quantity?: number; categorySuggestion?: { categoryId?: string | null; isAmbiguous?: boolean } | null }) => ({
+            description: it.description,
+            amount: it.amount,
+            quantity: it.quantity ?? 1,
+            categoryId: it.categorySuggestion?.categoryId ?? null,
+            isAmbiguous: it.categorySuggestion?.isAmbiguous === true,
+          })),
+        }),
+      });
+      const data = await res.json();
+      if (res.status === 409 && data.duplicateWarning) {
+        toast.info("Duplicate detected — please review to resolve");
+        router.push(`/receipts/${imp.id}/review`);
+        return;
+      }
+      if (res.ok) {
+        toast.success("Receipt confirmed");
+        await load();
+      } else {
+        toast.error(data.error ?? "Could not confirm");
+      }
+    } catch {
+      toast.error("Something went wrong");
+    } finally {
+      setCardWorking((prev) => { const n = { ...prev }; delete n[imp.id]; return n; });
+    }
+  }
+
   function getParsedData(imp: PendingImport) {
     try { return JSON.parse(imp.data); } catch { return {}; }
   }
@@ -373,9 +412,25 @@ export function InboxClient() {
                   {/* Per-card quick actions for actionable items */}
                   {isActionable && (
                     <div className="flex items-center gap-1.5 px-4 pb-3 border-t border-border pt-3">
+                      {parsed.confidence === "high" && parsed.total != null && imp.status === "NEEDS_REVIEW" ? (
+                        <Button
+                          size="sm"
+                          variant="default"
+                          className="h-7 text-xs bg-green-600 hover:bg-green-700"
+                          onClick={() => handleCardDirectConfirm(imp)}
+                          disabled={!!working}
+                        >
+                          {working === "confirm" ? (
+                            <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                          ) : (
+                            <CheckCircle2 className="w-3 h-3 mr-1" />
+                          )}
+                          Confirm
+                        </Button>
+                      ) : null}
                       <Button
                         size="sm"
-                        variant="default"
+                        variant={parsed.confidence === "high" && parsed.total != null && imp.status === "NEEDS_REVIEW" ? "outline" : "default"}
                         className="h-7 text-xs"
                         onClick={() => handleCardQuickConfirm(imp.id)}
                         disabled={!!working}
