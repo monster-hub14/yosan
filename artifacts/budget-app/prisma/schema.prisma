@@ -327,6 +327,10 @@ model ItemMemory {
   defaultCategoryId String?
   aliases           String   @default("")
   lastUsedAt        DateTime @default(now())
+  /// When true: AI flagged this item as ambiguous. Re-present clarification prompt next time.
+  isAmbiguous       Boolean  @default(false)
+  /// The clarification question to show when isAmbiguous is true.
+  ambiguousQuestion String?
 
   budget          Budget    @relation(fields: [budgetId], references: [id], onDelete: Cascade)
   defaultCategory Category? @relation(fields: [defaultCategoryId], references: [id])

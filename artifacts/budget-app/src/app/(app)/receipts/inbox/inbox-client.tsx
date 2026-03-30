@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Inbox, Loader2, Clock, CheckCircle2, XCircle, AlertCircle, Upload,
-  RefreshCw, Receipt, ChevronRight, Filter, Trash2, Save, Eye,
+  RefreshCw, Receipt, ChevronRight, Filter, Trash2, Save, Eye, Tag,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -326,7 +326,7 @@ export function InboxClient() {
                           </span>
                         )}
                       </div>
-                      <div className="flex items-center gap-2 mt-0.5">
+                      <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                         <Badge
                           variant="secondary"
                           className={`text-xs gap-1 ${meta.color}`}
@@ -334,6 +334,14 @@ export function InboxClient() {
                           <StatusIcon className={`w-3 h-3 ${isProcessing ? "animate-spin" : ""}`} />
                           {meta.label}
                         </Badge>
+                        {parsed.confidence && (
+                          <Badge
+                            variant="outline"
+                            className={`text-xs ${parsed.confidence === "high" ? "border-green-500/40 text-green-600" : parsed.confidence === "medium" ? "border-amber-500/40 text-amber-600" : "border-muted text-muted-foreground"}`}
+                          >
+                            {parsed.confidence} confidence
+                          </Badge>
+                        )}
                         {parsed.date && (
                           <span className="text-xs text-muted-foreground">
                             {parsed.date}
@@ -343,6 +351,14 @@ export function InboxClient() {
                           {formatDistanceToNow(new Date(imp.createdAt), { addSuffix: true })}
                         </span>
                       </div>
+                      {/* Show inferred category for first item if available */}
+                      {parsed.items?.length > 0 && parsed.items[0]?.categorySuggestion?.categoryName && !parsed.items[0]?.categorySuggestion?.isAmbiguous && (
+                        <p className="text-xs text-muted-foreground mt-1 truncate">
+                          <Tag className="w-3 h-3 inline mr-1" />
+                          {parsed.items[0].categorySuggestion.categoryName}
+                          {parsed.items.length > 1 && ` +${parsed.items.length - 1} more`}
+                        </p>
+                      )}
                       {imp.error && (
                         <p className="text-xs text-destructive mt-1 truncate">{imp.error}</p>
                       )}

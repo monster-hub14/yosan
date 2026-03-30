@@ -1,7 +1,13 @@
 /**
  * Server-only duplicate detection module.
- * Compares new pending import against existing expenses.
+ * Compares a new pending import against existing expenses.
  * NEVER import from client components.
+ *
+ * Matching rules (per spec):
+ *   HIGH confidence    — same merchant (normalized) + amount within $0.01 + date within 2 days
+ *   POSSIBLE confidence — same amount within $0.01 + date within 2 days (no merchant match)
+ *
+ * Candidate window: ±2 days, ±$0.01 on amount.
  */
 
 import { db } from "@/lib/db";
@@ -23,58 +29,73 @@ function dateDiffDays(a: Date, b: Date): number {
   return Math.abs((a.getTime() - b.getTime()) / 86400000);
 }
 
+const AMOUNT_TOLERANCE = 0.01; // $0.01
+const DATE_TOLERANCE_DAYS = 2;  // ±2 calendar days
+
 export async function detectDuplicate(
   budgetId: string,
   merchant: string | null,
   total: number | null,
-  date: string | null // YYYY-MM-DD
+  date: string | null // YYYY-MM-DD or ISO string
 ): Promise<DuplicateResult> {
-  if (!total || !date) {
+  if (total == null || !date) {
     return { confidence: "none", matchedExpenseId: null, reason: null };
   }
 
   const checkDate = new Date(date);
+  if (isNaN(checkDate.getTime())) {
+    return { confidence: "none", matchedExpenseId: null, reason: null };
+  }
+
   const normalizedMerchant = normalizeMerchant(merchant);
 
-  // Look for expenses within ±3 days with similar total
+  // Candidate window: ±2 days, ±$0.01
   const startWindow = new Date(checkDate);
-  startWindow.setDate(startWindow.getDate() - 3);
+  startWindow.setUTCDate(startWindow.getUTCDate() - DATE_TOLERANCE_DAYS);
   const endWindow = new Date(checkDate);
-  endWindow.setDate(endWindow.getDate() + 3);
+  endWindow.setUTCDate(endWindow.getUTCDate() + DATE_TOLERANCE_DAYS);
 
   const candidates = await db.expense.findMany({
     where: {
       budgetId,
       date: { gte: startWindow, lte: endWindow },
-      amount: { gte: total - 0.02, lte: total + 0.02 },
+      amount: { gte: total - AMOUNT_TOLERANCE, lte: total + AMOUNT_TOLERANCE },
     },
     select: { id: true, merchant: true, amount: true, date: true },
+    orderBy: { date: "desc" },
+    take: 20,
   });
+
+  let bestPossible: DuplicateResult | null = null;
 
   for (const expense of candidates) {
     const expenseMerchant = normalizeMerchant(expense.merchant);
     const daysDiff = dateDiffDays(checkDate, new Date(expense.date));
-    const amountMatch = Math.abs(expense.amount - total) <= 0.01;
-    const merchantMatch = normalizedMerchant && expenseMerchant
-      ? normalizedMerchant === expenseMerchant
-      : true;
+    const amountDiff = Math.abs(expense.amount - total);
 
-    if (amountMatch && merchantMatch && daysDiff === 0) {
+    if (amountDiff > AMOUNT_TOLERANCE || daysDiff > DATE_TOLERANCE_DAYS) continue;
+
+    const bothHaveMerchant = normalizedMerchant.length > 0 && expenseMerchant.length > 0;
+    const merchantMatch = bothHaveMerchant && normalizedMerchant === expenseMerchant;
+
+    if (merchantMatch && amountDiff <= AMOUNT_TOLERANCE && daysDiff <= DATE_TOLERANCE_DAYS) {
+      // HIGH: merchant + amount + date all match
       return {
         confidence: "high",
         matchedExpenseId: expense.id,
-        reason: `Exact match: ${merchant ?? "same"} for $${total} on ${date}`,
+        reason: `Likely duplicate: ${merchant} for $${total.toFixed(2)} within ${Math.round(daysDiff)} day(s)`,
       };
     }
 
-    if (amountMatch && daysDiff <= 2) {
-      return {
+    // POSSIBLE: amount + date match but no merchant to compare or merchants differ
+    if (!bestPossible) {
+      bestPossible = {
         confidence: "possible",
         matchedExpenseId: expense.id,
-        reason: `Similar transaction: $${total} within 2 days`,
+        reason: `Possible duplicate: $${total.toFixed(2)} within ${Math.round(daysDiff)} day(s) — merchant not confirmed`,
       };
     }
   }
 
-  return { confidence: "none", matchedExpenseId: null, reason: null };
+  return bestPossible ?? { confidence: "none", matchedExpenseId: null, reason: null };
 }

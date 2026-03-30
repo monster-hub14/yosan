@@ -1247,8 +1247,17 @@
       border-color: color-mix(in oklab, var(--color-green-500) 30%, transparent);
     }
   }
+  .border-green-500\/40 {
+    border-color: color-mix(in srgb, oklch(72.3% 0.219 149.579) 40%, transparent);
+    @supports (color: color-mix(in lab, red, red)) {
+      border-color: color-mix(in oklab, var(--color-green-500) 40%, transparent);
+    }
+  }
   .border-input {
     border-color: hsl(var(--input));
+  }
+  .border-muted {
+    border-color: hsl(var(--muted));
   }
   .border-muted-foreground\/30 {
     border-color: hsl(var(--muted-foreground));
