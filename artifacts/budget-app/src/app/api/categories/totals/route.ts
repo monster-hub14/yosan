@@ -22,10 +22,10 @@ export async function GET(request: NextRequest) {
     ? new Date(searchParams.get("periodEnd")!)
     : new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0, 23, 59, 59);
 
-  // Get all categories for the budget (including inherited defaults)
+  // Get all categories for the budget (budget-specific + global defaults only)
   const categories = await db.category.findMany({
     where: {
-      OR: [{ budgetId }, { isDefault: true }],
+      OR: [{ budgetId }, { isDefault: true, budgetId: null }],
     },
     include: {
       targets: { where: { budgetId } },

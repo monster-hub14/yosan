@@ -120,6 +120,18 @@ export async function POST(request: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "Date is required" }, { status: 400 });
   }
 
+  // Validate categoryId: must belong to this budget or be a global default, and must be a leaf node
+  if (body.categoryId) {
+    const cat = await db.category.findUnique({ where: { id: body.categoryId } });
+    if (!cat || (cat.budgetId !== null && cat.budgetId !== budgetId) || (cat.budgetId === null && !cat.isDefault)) {
+      return NextResponse.json({ error: "Invalid category" }, { status: 400 });
+    }
+    const hasChildren = await db.category.count({ where: { parentId: body.categoryId } });
+    if (hasChildren > 0) {
+      return NextResponse.json({ error: "Cannot assign a parent category — choose a sub-category" }, { status: 400 });
+    }
+  }
+
   const expense = await db.expense.create({
     data: {
       budgetId,

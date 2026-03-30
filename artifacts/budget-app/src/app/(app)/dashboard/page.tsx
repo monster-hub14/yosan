@@ -11,6 +11,7 @@ import { Wallet, TrendingDown, PiggyBank, Receipt, Plus, AlertCircle } from "luc
 import Link from "next/link";
 import SafeToSpendWidget from "./SafeToSpendWidget";
 import PayPeriodCard from "./PayPeriodCard";
+import { CategoryTotalsPanel } from "@/components/expenses/category-totals-panel";
 
 export const metadata: Metadata = { title: "Dashboard | Budget" };
 
@@ -242,7 +243,8 @@ export default async function DashboardPage() {
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        <div className="xl:col-span-2 grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card className="border-border">
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
@@ -362,6 +364,24 @@ export default async function DashboardPage() {
             )}
           </CardContent>
         </Card>
+        </div>
+
+        {/* Category spending sidebar */}
+        <div className="hidden xl:block">
+          <Card className="border-border">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base">Spending by Category</CardTitle>
+                <Button variant="ghost" size="sm" asChild>
+                  <Link href="/categories">View all</Link>
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="px-3 pb-4">
+              <CategoryTotalsPanel budgetId={budgetId} />
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   );

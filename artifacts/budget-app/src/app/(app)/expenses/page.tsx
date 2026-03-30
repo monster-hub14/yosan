@@ -17,7 +17,7 @@ export default async function ExpensesPage() {
   if (!budgetId) redirect("/dashboard");
 
   const categories = await db.category.findMany({
-    where: { OR: [{ budgetId }, { isDefault: true }] },
+    where: { OR: [{ budgetId }, { isDefault: true, budgetId: null }] },
     orderBy: [{ parentId: "asc" }, { sortOrder: "asc" }, { name: "asc" }],
     select: { id: true, name: true, color: true, icon: true, parentId: true },
   });

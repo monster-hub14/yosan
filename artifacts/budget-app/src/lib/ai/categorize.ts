@@ -125,7 +125,7 @@ export async function categorizeItem(
   }
 
   const categories = await db.category.findMany({
-    where: { OR: [{ budgetId }, { isDefault: true }] },
+    where: { OR: [{ budgetId }, { isDefault: true, budgetId: null }] },
     select: { id: true, name: true },
     take: 30,
   });

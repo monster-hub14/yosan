@@ -3870,6 +3870,11 @@
       flex-direction: row;
     }
   }
+  .xl\:col-span-2 {
+    @media (width >= 80rem) {
+      grid-column: span 2 / span 2;
+    }
+  }
   .xl\:block {
     @media (width >= 80rem) {
       display: block;
