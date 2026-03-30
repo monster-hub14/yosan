@@ -72,8 +72,10 @@ export async function PUT(request: NextRequest) {
     monthlyLimitPerUser: limitOrNull(monthlyLimitPerUser),
   };
 
-  // Encrypt API key before storing
-  const encryptedKey = apiKey && apiKey !== "••••••••" ? encrypt(apiKey) : undefined;
+  const clearApiKey = body.clearApiKey === true;
+  const encryptedKey = !clearApiKey && apiKey && apiKey !== "••••••••"
+    ? encrypt(apiKey)
+    : undefined;
 
   const config = await db.aIProviderConfig.upsert({
     where: { id: "singleton" },
@@ -84,7 +86,7 @@ export async function PUT(request: NextRequest) {
     },
     update: {
       ...sharedFields,
-      ...(encryptedKey ? { apiKey: encryptedKey } : {}),
+      ...(clearApiKey ? { apiKey: null } : encryptedKey ? { apiKey: encryptedKey } : {}),
     },
   });
 

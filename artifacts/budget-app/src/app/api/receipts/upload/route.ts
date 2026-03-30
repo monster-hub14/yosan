@@ -2,10 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuth, isSessionPayload, requireBudgetWrite } from "@/lib/auth/permissions";
 import { getActiveBudgetId } from "@/lib/active-budget";
 import { db } from "@/lib/db";
-import { extractReceiptFromImage } from "@/lib/ai/extract";
-import { categorizeItem } from "@/lib/ai/categorize";
-import { checkAndRecordUsage, isFeatureEnabled } from "@/lib/ai/usage";
-import { extractPdfText } from "@/lib/ai/pdf-extract";
+import { processReceipt } from "@/lib/ai/process-receipt";
 import fs from "fs";
 import path from "path";
 import { randomUUID } from "crypto";
@@ -140,127 +137,11 @@ export async function POST(request: NextRequest) {
     },
   });
 
-  // Trigger AI extraction (non-blocking — update pending import async)
-  runAIExtraction(pending.id, receipt.id, budgetId, session.userId, fileBuffer, file!.type).catch(
-    (err) => console.error("[receipt/upload] AI extraction error:", err)
+  // Trigger shared AI processing pipeline (non-blocking)
+  processReceipt(pending.id, receipt.id, budgetId, session.userId, filePath, file!.type).catch(
+    (err) => console.error("[receipt/upload] AI processing error:", err)
   );
 
   return NextResponse.json({ pendingImport: { ...pending, status: "PROCESSING" } }, { status: 201 });
 }
 
-async function runAIExtraction(
-  pendingId: string,
-  receiptId: string,
-  budgetId: string,
-  userId: string,
-  fileBuffer: Buffer,
-  mimeType: string
-): Promise<void> {
-  try {
-    const extractionEnabled = await isFeatureEnabled("extraction", userId);
-    if (!extractionEnabled) {
-      await db.pendingImport.update({
-        where: { id: pendingId },
-        data: {
-          status: "NEEDS_REVIEW",
-          data: JSON.stringify({
-            merchant: null, date: null, total: null, items: [],
-            confidence: "low", error: "AI extraction is disabled",
-          }),
-        },
-      });
-      return;
-    }
-
-    const usageCheck = await checkAndRecordUsage(userId, "extraction");
-    if (!usageCheck.allowed) {
-      await db.pendingImport.update({
-        where: { id: pendingId },
-        data: {
-          status: "NEEDS_REVIEW",
-          data: JSON.stringify({
-            merchant: null, date: null, total: null, items: [],
-            confidence: "low", error: usageCheck.reason,
-          }),
-        },
-      });
-      return;
-    }
-
-    const isPdf = mimeType === "application/pdf";
-    let imageUrl: string | null = null;
-    let pdfText: string | null = null;
-
-    if (isPdf) {
-      pdfText = await extractPdfText(fileBuffer);
-      if (!pdfText) pdfText = "[PDF — no text content could be extracted]";
-    } else {
-      imageUrl = `data:${mimeType};base64,${fileBuffer.toString("base64")}`;
-    }
-
-    const extracted = await extractReceiptFromImage(imageUrl, pdfText);
-
-    // Categorize items if enabled (pass userId for per-user override check)
-    const categorizationEnabled = await isFeatureEnabled("categorization", userId);
-    const categorizedItems = [];
-
-    for (const item of extracted.items) {
-      let categorySuggestion = null;
-      if (categorizationEnabled) {
-        try {
-          const cat = await categorizeItem({
-            budgetId,
-            callerUserId: userId,
-            itemDescription: item.description,
-            merchantName: extracted.merchant,
-            amount: item.amount,
-          });
-          categorySuggestion = cat;
-        } catch {
-          // Categorization failure is non-fatal
-        }
-      }
-      categorizedItems.push({ ...item, categorySuggestion });
-    }
-
-    // Update receipt
-    await db.receipt.update({
-      where: { id: receiptId },
-      data: {
-        merchantName: extracted.merchant,
-        receiptDate: extracted.date ? new Date(extracted.date) : null,
-        totalAmount: extracted.total,
-        status: "NEEDS_REVIEW",
-        processedAt: new Date(),
-      },
-    });
-
-    await db.pendingImport.update({
-      where: { id: pendingId },
-      data: {
-        status: "NEEDS_REVIEW",
-        data: JSON.stringify({
-          merchant: extracted.merchant,
-          date: extracted.date,
-          total: extracted.total,
-          items: categorizedItems,
-          confidence: extracted.confidence,
-          error: extracted.error,
-        }),
-      },
-    });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    await db.pendingImport.update({
-      where: { id: pendingId },
-      data: {
-        status: "NEEDS_REVIEW",
-        error: message,
-        data: JSON.stringify({
-          merchant: null, date: null, total: null, items: [],
-          confidence: "low", error: message,
-        }),
-      },
-    });
-  }
-}

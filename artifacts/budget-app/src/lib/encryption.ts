@@ -13,7 +13,20 @@ const TAG_LENGTH = 16;
 const SALT = "budget-app-key-v1"; // fixed — key is per-installation
 
 function deriveKey(): Buffer {
-  const secret = process.env.ENCRYPTION_KEY || process.env.JWT_SECRET || "dev-local-insecure-key-please-set-env";
+  const secret = process.env.ENCRYPTION_KEY || process.env.JWT_SECRET;
+  if (!secret) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error(
+        "[encryption] ENCRYPTION_KEY or JWT_SECRET must be set in production. " +
+        "Set ENCRYPTION_KEY to a random 32+ character string."
+      );
+    }
+    console.warn(
+      "[encryption] WARNING: No ENCRYPTION_KEY or JWT_SECRET set. " +
+      "Using insecure dev fallback. Set these env vars before deploying."
+    );
+    return scryptSync("dev-local-insecure-key-please-set-env", SALT, 32);
+  }
   return scryptSync(secret, SALT, 32);
 }
 
