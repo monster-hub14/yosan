@@ -296,6 +296,7 @@ export async function persistInsight(budgetId: string, result: AnalysisResult): 
         totalSpent: result.totalSpent,
         totalBudget: result.totalBudget,
         safeToSpendPerDay: result.safeToSpendPerDay,
+        narrative: result.narrative,
         insights: result.insights,
         recommendations: result.recommendations,
         generatedByAI: result.generatedByAI,

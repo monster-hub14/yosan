@@ -167,7 +167,7 @@ export async function buildForecast(budgetId: string, userId: string, daysAhead 
     .slice(0, 10);
 
   // AI summary
-  let aiSummary = buildFallbackSummary(dangerDays, minBalance, dailySpendingRate, paydates.length, nextPaydates);
+  let aiSummary = buildFallbackSummary(dangerDays, minBalance, dailySpendingRate, paydates.length, nextPaydates, daysAhead);
   let generatedByAI = false;
 
   try {
@@ -233,7 +233,8 @@ function buildFallbackSummary(
   minBalance: number,
   dailyRate: number,
   paydates: number,
-  nextPaydates: string[]
+  nextPaydates: string[],
+  daysAhead: number
 ): string {
   if (dangerDays > 0) {
     return `Your cash flow projection shows ${dangerDays} day${dangerDays === 1 ? "" : "s"} where your balance may go negative, reaching a low of $${minBalance.toFixed(2)}. Consider reducing discretionary spending or deferring large purchases until after your next paycheck${nextPaydates[0] ? ` on ${nextPaydates[0]}` : ""}.`;
@@ -241,7 +242,7 @@ function buildFallbackSummary(
   if (minBalance < dailyRate * 3) {
     return `Your balance will get tight between paydays — at one point dropping to $${minBalance.toFixed(2)}. Keep an eye on recurring bills and avoid large discretionary purchases in those windows.`;
   }
-  return `Your cash flow looks healthy for the next ${Math.round(dangerDays === 0 ? 42 : 30)} days${nextPaydates[0] ? `, with your next paycheck on ${nextPaydates[0]}` : ""}. Maintain your current spending pace to stay on track.`;
+  return `Your cash flow looks healthy for the next ${daysAhead} days${nextPaydates[0] ? `, with your next paycheck on ${nextPaydates[0]}` : ""}. Maintain your current spending pace to stay on track.`;
 }
 
 function advanceByFrequency(date: Date, frequency: string, customDays?: number): Date {

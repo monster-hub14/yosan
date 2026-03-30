@@ -111,7 +111,7 @@ export function EmailSettingsForm() {
             <div>
               <CardTitle>Email / SMTP</CardTitle>
               <CardDescription>
-                Configure outbound email for notifications and receipt forwarding
+                Configure outbound SMTP for alert and notification emails
               </CardDescription>
             </div>
           </div>
