@@ -5,7 +5,7 @@
  */
 
 import { getAIConfig, chatCompletion, AIClientError } from "./client";
-import type { AIConfig } from "./client";
+import type { AIConfig, AIMessageContent } from "./client";
 
 export interface ExtractedItem {
   description: string;
@@ -59,21 +59,28 @@ Rules:
 - overall_confidence: based on overall receipt quality`;
 
 function buildMessages(config: AIConfig, imageUrl: string | null, rawText: string | null) {
-  const content: Array<{ type: string; text?: string; image_url?: { url: string } }> = [];
+  const content: AIMessageContent[] = [];
 
   if (imageUrl) {
-    if (config.provider === "OPENAI" || config.provider === "OLLAMA" || config.provider === "CUSTOM") {
+    if (config.provider === "ANTHROPIC") {
+      const sepIdx = imageUrl.indexOf(",");
+      const header = sepIdx > -1 ? imageUrl.slice(0, sepIdx) : "";
+      const data = sepIdx > -1 ? imageUrl.slice(sepIdx + 1) : "";
+      const mimeType =
+        header.includes("png") ? "image/png" :
+        header.includes("webp") ? "image/webp" :
+        header.includes("gif") ? "image/gif" :
+        "image/jpeg";
+
+      if (imageUrl.startsWith("data:") && data) {
+        content.push({ type: "image_base64", image_base64: { data, mimeType } });
+      } else if (!imageUrl.startsWith("data:")) {
+        content.push({ type: "image_url", image_url: { url: imageUrl } });
+      } else {
+        content.push({ type: "text", text: "Receipt image could not be parsed for this provider." });
+      }
+    } else {
       content.push({ type: "image_url", image_url: { url: imageUrl } });
-    } else if (config.provider === "GOOGLE") {
-      content.push({ type: "image_url", image_url: { url: imageUrl } });
-    } else if (config.provider === "ANTHROPIC") {
-      const base64Data = imageUrl.split(",")[1] ?? "";
-      const mimeType = imageUrl.startsWith("data:image/png") ? "image/png" : "image/jpeg";
-      content.push({
-        type: "image",
-        // Anthropic uses a different format, but we can send as text for now
-        text: `[Image data: ${mimeType}, ${base64Data.length} bytes]`,
-      } as unknown as { type: string; text: string });
     }
   }
 
@@ -87,7 +94,7 @@ function buildMessages(config: AIConfig, imageUrl: string | null, rawText: strin
 
   return [
     { role: "system" as const, content: SYSTEM_PROMPT },
-    { role: "user" as const, content: content as Parameters<typeof chatCompletion>[1][0]["content"] },
+    { role: "user" as const, content },
   ];
 }
 

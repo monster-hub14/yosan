@@ -13,9 +13,11 @@ export interface AIMessage {
 }
 
 export interface AIMessageContent {
-  type: "text" | "image_url";
+  type: "text" | "image_url" | "image_base64";
   text?: string;
   image_url?: { url: string };
+  /** For providers that require base64 inline (e.g., Anthropic) */
+  image_base64?: { data: string; mimeType: string };
 }
 
 export interface AIConfig {
@@ -137,13 +139,37 @@ async function callAnthropic(
   };
   if (config.apiKey) headers["x-api-key"] = config.apiKey;
 
+  type AnthropicContent =
+    | { type: "text"; text: string }
+    | { type: "image"; source: { type: "base64"; media_type: string; data: string } }
+    | { type: "image"; source: { type: "url"; url: string } };
+
+  function toAnthropicContent(parts: AIMessageContent[]): AnthropicContent[] {
+    return parts.flatMap((p): AnthropicContent[] => {
+      if (p.type === "text") return [{ type: "text", text: p.text ?? "" }];
+      if (p.type === "image_base64" && p.image_base64) {
+        return [{ type: "image", source: { type: "base64", media_type: p.image_base64.mimeType, data: p.image_base64.data } }];
+      }
+      if (p.type === "image_url" && p.image_url) {
+        const url = p.image_url.url;
+        if (url.startsWith("data:")) {
+          const [header, data] = url.split(",");
+          const mimeType = header.replace("data:", "").replace(";base64", "");
+          return [{ type: "image", source: { type: "base64", media_type: mimeType, data: data ?? "" } }];
+        }
+        return [{ type: "image", source: { type: "url", url } }];
+      }
+      return [];
+    });
+  }
+
   const body: Record<string, unknown> = {
     model: config.model,
     max_tokens: opts.maxTokens,
     temperature: opts.temperature,
     messages: userMessages.map((m) => ({
       role: m.role,
-      content: typeof m.content === "string" ? m.content : m.content,
+      content: typeof m.content === "string" ? m.content : toAnthropicContent(m.content),
     })),
   };
   if (systemMsg) body["system"] = typeof systemMsg.content === "string" ? systemMsg.content : "";

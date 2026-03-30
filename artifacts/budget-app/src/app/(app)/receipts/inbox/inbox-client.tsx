@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Inbox, Loader2, Clock, CheckCircle2, XCircle, AlertCircle, Upload,
-  RefreshCw, Receipt, ChevronRight, Filter,
+  RefreshCw, Receipt, ChevronRight, Filter, Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -15,6 +15,7 @@ import { UploadReceiptModal } from "@/components/receipts/upload-modal";
 import { formatDistanceToNow } from "date-fns";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { toast } from "sonner";
 
 interface PendingImport {
   id: string;
@@ -52,6 +53,7 @@ export function InboxClient() {
   const [imports, setImports] = useState<PendingImport[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [bulkWorking, setBulkWorking] = useState(false);
 
   const statusQuery = filter === "needs-review"
     ? INBOX_STATUSES
@@ -81,6 +83,27 @@ export function InboxClient() {
     const t = setTimeout(() => load(), 3000);
     return () => clearTimeout(t);
   }, [imports, load]);
+
+  const reviewableImports = imports.filter((i) => i.status === "NEEDS_REVIEW");
+
+  async function handleBulkDiscard() {
+    if (reviewableImports.length === 0) return;
+    setBulkWorking(true);
+    let failed = 0;
+    await Promise.all(
+      reviewableImports.map(async (imp) => {
+        const res = await fetch(`/api/receipts/${imp.id}/discard`, { method: "POST" });
+        if (!res.ok) failed++;
+      })
+    );
+    setBulkWorking(false);
+    if (failed > 0) {
+      toast.error(`${failed} receipt(s) could not be discarded`);
+    } else {
+      toast.success(`${reviewableImports.length} receipt(s) discarded`);
+    }
+    await load();
+  }
 
   function getParsedData(imp: PendingImport) {
     try { return JSON.parse(imp.data); } catch { return {}; }
@@ -128,6 +151,26 @@ export function InboxClient() {
             <SelectItem value="all">All receipts</SelectItem>
           </SelectContent>
         </Select>
+
+        {/* Bulk actions — only show when viewing reviewable items */}
+        {reviewableImports.length > 1 && (
+          <div className="ml-auto flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleBulkDiscard}
+              disabled={bulkWorking}
+              className="text-destructive border-destructive/30 hover:bg-destructive/10"
+            >
+              {bulkWorking ? (
+                <Loader2 className="w-3 h-3 mr-1.5 animate-spin" />
+              ) : (
+                <Trash2 className="w-3 h-3 mr-1.5" />
+              )}
+              Discard all ({reviewableImports.length})
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* List */}

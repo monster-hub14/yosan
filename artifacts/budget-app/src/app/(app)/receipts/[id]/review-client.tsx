@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import {
   ArrowLeft, Loader2, CheckCircle2, XCircle, AlertTriangle, Receipt,
-  Calendar, Store, DollarSign, Tag, Edit3, Save, Trash2, Package,
+  Calendar, Store, DollarSign, Tag, Edit3, Save, Trash2, Package, Clock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -173,6 +173,37 @@ export function ReviewClient({ id }: ReviewClientProps) {
     } catch {
       toast.error("Something went wrong");
       setConfirming(false);
+    }
+  }
+
+  const [savingLater, setSavingLater] = useState(false);
+
+  async function handleSaveForLater() {
+    setSavingLater(true);
+    try {
+      const res = await fetch(`/api/receipts/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          merchant: merchant || null,
+          date: date || null,
+          total: total ? parseFloat(total) : null,
+          notes: notes || null,
+          categoryId: categoryId || null,
+          status: "NEEDS_REVIEW",
+        }),
+      });
+      if (res.ok) {
+        toast.success("Saved for later — receipt remains in inbox");
+        router.push("/receipts/inbox");
+      } else {
+        const data = await res.json();
+        toast.error(data.error || "Failed to save");
+        setSavingLater(false);
+      }
+    } catch {
+      toast.error("Something went wrong");
+      setSavingLater(false);
     }
   }
 
@@ -471,7 +502,7 @@ export function ReviewClient({ id }: ReviewClientProps) {
           <Button
             className="flex-1"
             onClick={() => handleConfirm()}
-            disabled={confirming || discarding}
+            disabled={confirming || discarding || savingLater}
           >
             {confirming ? (
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -482,8 +513,21 @@ export function ReviewClient({ id }: ReviewClientProps) {
           </Button>
           <Button
             variant="outline"
+            onClick={handleSaveForLater}
+            disabled={confirming || discarding || savingLater}
+            title="Save for later"
+          >
+            {savingLater ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Clock className="w-4 h-4" />
+            )}
+          </Button>
+          <Button
+            variant="outline"
             onClick={handleDiscard}
-            disabled={confirming || discarding}
+            disabled={confirming || discarding || savingLater}
+            title="Discard receipt"
           >
             {discarding ? (
               <Loader2 className="w-4 h-4 animate-spin" />

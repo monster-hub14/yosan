@@ -2,6 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuth, isSessionPayload, requireBudgetRead } from "@/lib/auth/permissions";
 import { getActiveBudgetId } from "@/lib/active-budget";
 import { db } from "@/lib/db";
+import { ImportStatus } from "@prisma/client";
+
+const VALID_STATUSES = new Set<string>(Object.values(ImportStatus));
+
+function toValidStatuses(raw: string): ImportStatus[] {
+  return raw
+    .split(",")
+    .map((s) => s.trim().toUpperCase())
+    .filter((s) => VALID_STATUSES.has(s)) as ImportStatus[];
+}
 
 export async function GET(request: NextRequest) {
   const session = await requireAuth(request);
@@ -15,15 +25,11 @@ export async function GET(request: NextRequest) {
   const access = await requireBudgetRead(session, budgetId);
   if (access instanceof NextResponse) return access;
 
-  const status = searchParams.get("status") ?? "NEEDS_REVIEW,PENDING,PROCESSING";
-  const statuses = status.split(",") as string[];
+  const statusParam = searchParams.get("status") ?? "NEEDS_REVIEW,PENDING,PROCESSING";
+  const statuses = toValidStatuses(statusParam);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const imports = await db.pendingImport.findMany({
-    where: {
-      budgetId,
-      status: { in: statuses as any },
-    },
+    where: { budgetId, status: { in: statuses } },
     orderBy: { createdAt: "desc" },
     take: 100,
     include: {

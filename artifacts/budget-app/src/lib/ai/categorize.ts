@@ -20,6 +20,8 @@ export interface CategorySuggestion {
 
 export interface ItemCategorizationRequest {
   budgetId: string;
+  /** ID of the user making the request — used for per-user rate limit enforcement. */
+  callerUserId: string;
   itemDescription: string;
   merchantName?: string | null;
   amount?: number;
@@ -28,7 +30,7 @@ export interface ItemCategorizationRequest {
 export async function categorizeItem(
   req: ItemCategorizationRequest
 ): Promise<CategorySuggestion> {
-  const { budgetId, itemDescription, merchantName } = req;
+  const { budgetId, callerUserId, itemDescription, merchantName } = req;
   const normalizedItem = itemDescription.toLowerCase().trim();
 
   // 1. Check ItemMemory for exact or close match
@@ -83,22 +85,18 @@ export async function categorizeItem(
     };
   }
 
-  // Enforce per-call rate limits using the userId from the budget owner (fallback)
-  // In the upload flow, userId is passed in req. Here we use budgetId as proxy key.
-  const budget = await db.budget.findUnique({ where: { id: budgetId }, select: { ownerId: true } });
-  if (budget?.ownerId) {
-    const usageCheck = await checkAndRecordUsage(budget.ownerId, "categorization");
-    if (!usageCheck.allowed) {
-      return {
-        categoryId: null,
-        categoryName: null,
-        confidence: "low",
-        fromMemory: false,
-        isAmbiguous: true,
-        clarificationQuestion: `What category does "${itemDescription}" belong to? (${usageCheck.reason})`,
-        suggestedOptions: ["Food & Dining", "Shopping", "Transportation", "Utilities", "Other"],
-      };
-    }
+  // Enforce per-call rate limits against the actual requesting user
+  const usageCheck = await checkAndRecordUsage(callerUserId, "categorization");
+  if (!usageCheck.allowed) {
+    return {
+      categoryId: null,
+      categoryName: null,
+      confidence: "low",
+      fromMemory: false,
+      isAmbiguous: true,
+      clarificationQuestion: `What category does "${itemDescription}" belong to? (${usageCheck.reason})`,
+      suggestedOptions: ["Food & Dining", "Shopping", "Transportation", "Utilities", "Other"],
+    };
   }
 
   // Get budget categories for context

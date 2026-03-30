@@ -200,6 +200,7 @@ async function runAIExtraction(
         try {
           const cat = await categorizeItem({
             budgetId,
+            callerUserId: userId,
             itemDescription: item.description,
             merchantName: extracted.merchant,
             amount: item.amount,

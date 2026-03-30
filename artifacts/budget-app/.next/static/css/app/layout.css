@@ -477,6 +477,9 @@
   .hidden {
     display: none;
   }
+  .inline {
+    display: inline;
+  }
   .inline-block {
     display: inline-block;
   }
@@ -1207,6 +1210,12 @@
   }
   .border-destructive-border {
     border-color: var(--destructive-border);
+  }
+  .border-destructive\/30 {
+    border-color: hsl(var(--destructive));
+    @supports (color: color-mix(in lab, red, red)) {
+      border-color: color-mix(in oklab, hsl(var(--destructive)) 30%, transparent);
+    }
   }
   .border-destructive\/50 {
     border-color: hsl(var(--destructive));
@@ -2476,6 +2485,16 @@
     &:hover {
       @media (hover: hover) {
         background-color: hsl(var(--background));
+      }
+    }
+  }
+  .hover\:bg-destructive\/10 {
+    &:hover {
+      @media (hover: hover) {
+        background-color: hsl(var(--destructive));
+        @supports (color: color-mix(in lab, red, red)) {
+          background-color: color-mix(in oklab, hsl(var(--destructive)) 10%, transparent);
+        }
       }
     }
   }
