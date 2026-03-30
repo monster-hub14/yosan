@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin, isSessionPayload } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
-import { encrypt, decrypt } from "@/lib/encryption";
+import { encrypt } from "@/lib/encryption";
 
 export async function GET(request: NextRequest) {
   const session = await requireAdmin(request);
@@ -85,9 +85,3 @@ export async function PUT(request: NextRequest) {
   });
 }
 
-/** Internal helper — decrypt SMTP password for sending (not exposed to client) */
-export async function getDecryptedSmtpPass(): Promise<string | null> {
-  const config = await db.emailConfig.findUnique({ where: { id: "singleton" } });
-  if (!config?.smtpPass) return null;
-  try { return await decrypt(config.smtpPass); } catch { return null; }
-}

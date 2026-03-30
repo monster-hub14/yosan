@@ -150,7 +150,17 @@ docker-compose up -d
 - Settings categories page (/settings/budget/categories): full CRUD with expand/collapse hierarchy
 - AppSidebar: Categories nav item added
 
-### Tasks #5 — PENDING
-- Dashboard charts and analytics
-- Reports and CSV export
-- AI forecast and analysis
+### Task #5 — AI Analysis, Cash Flow Forecasting & Notifications ✅ COMPLETE
+- AI analysis service: `src/lib/ai/insights.ts` — collects period spending, computes category overspend/pace, generates AI narrative + recommendations (graceful fallback if AI disabled)
+- Cash flow projection engine: `src/lib/forecast.ts` — day-by-day balance projection from income sources + recurring bills, AI summary, danger zone detection
+- Email service: `src/lib/email.ts` — Nodemailer SMTP, HTML email templates (overspending alert, weekly summary, upcoming bill, payday reminder)
+- API routes:
+  - `GET/POST/PATCH /api/analysis/insights` — generate and store spending insights, mark read
+  - `GET /api/analysis/forecast` — build cash flow forecast for 14–90 days
+  - `GET/PUT /api/notifications` — read/save user notification preferences
+  - `POST /api/cron/alerts` — cron-callable endpoint for scheduled email alerts (CRON_SECRET env var)
+  - `POST /api/settings/email/test` — admin test email sender
+- Analysis page (`/analysis`): Live analysis dashboard with status badge, stat cards, category progress bars, AI narrative + numbered recommendations, history view for stored insights
+- Forecast page (`/forecast`): Recharts AreaChart balance projection, stat cards, danger zone banner, upcoming events (paydays + bills), AI cash flow summary, period selector (14/30/42/60 days)
+- Notifications page (`/settings/notifications`): Grid toggle matrix (In-App vs Email per event), persists to DB, cron setup docs
+- CRON_SECRET env var secures the cron alerts endpoint for self-hosted scheduling

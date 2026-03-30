@@ -1,4 +1,3 @@
 {
-  "/api/categories/totals/route": "app/api/categories/totals/route.js",
   "/(auth)/setup/page": "app/(auth)/setup/page.js"
 }
