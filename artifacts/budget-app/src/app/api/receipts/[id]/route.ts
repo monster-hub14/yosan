@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth, isSessionPayload } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
-import { ImportStatus } from "@prisma/client";
-
 interface Params { params: Promise<{ id: string }> }
 
-const VALID_STATUSES = new Set<string>(Object.values(ImportStatus));
+// PATCH may only transition to non-terminal statuses.
+// Terminal transitions (CONFIRMED, DISCARDED) must go through /confirm or /discard.
+const PATCHABLE_STATUSES = new Set(["NEEDS_REVIEW", "SAVED_FOR_LATER", "PENDING"]);
 
 async function verifyAccess(userId: string, importId: string) {
   const pending = await db.pendingImport.findUnique({
@@ -104,9 +104,13 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
   if ("status" in body && typeof body.status === "string") {
     const statusUp = body.status.toUpperCase();
-    if (VALID_STATUSES.has(statusUp)) {
-      updatePayload.status = statusUp;
+    if (!PATCHABLE_STATUSES.has(statusUp)) {
+      return NextResponse.json(
+        { error: `Cannot set status to ${statusUp} via this endpoint. Use /confirm or /discard instead.` },
+        { status: 400 }
+      );
     }
+    updatePayload.status = statusUp;
   }
 
   if (Object.keys(updatePayload).length === 0) {

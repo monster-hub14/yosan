@@ -32,9 +32,19 @@ export async function GET(request: NextRequest, { params }: Params) {
   });
   if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
-  const global = await db.aIProviderConfig.findUnique({ where: { id: "singleton" } });
+  const globalConfig = await db.aIProviderConfig.findUnique({
+    where: { id: "singleton" },
+    select: {
+      isEnabled: true,
+      extractionEnabled: true,
+      categorizationEnabled: true,
+      dailyLimitPerUser: true,
+      weeklyLimitPerUser: true,
+      monthlyLimitPerUser: true,
+    },
+  });
 
-  return NextResponse.json({ user, control: user.aiControl, global });
+  return NextResponse.json({ user, control: user.aiControl, global: globalConfig });
 }
 
 export async function PUT(request: NextRequest, { params }: Params) {
