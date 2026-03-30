@@ -26,12 +26,17 @@ export async function POST(request: NextRequest) {
       data: { completedAt: new Date() },
     });
 
+    const { createSetupToken, SETUP_COOKIE, SETUP_MAX_AGE } = await import(
+      "@/lib/auth/setup-token"
+    );
+    const setupToken = await createSetupToken();
+
     const response = NextResponse.json({ ok: true });
-    response.cookies.set("budget_setup", "done", {
+    response.cookies.set(SETUP_COOKIE, setupToken, {
       httpOnly: true,
       sameSite: "lax",
       path: "/",
-      maxAge: 60 * 60 * 24 * 365 * 10,
+      maxAge: SETUP_MAX_AGE,
     });
     return response;
   } catch (err) {

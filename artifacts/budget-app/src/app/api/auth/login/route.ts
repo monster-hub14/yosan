@@ -2,9 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 import { createSessionToken } from "@/lib/auth/session";
+import {
+  createSetupToken,
+  verifySetupToken,
+  SETUP_COOKIE,
+  SETUP_MAX_AGE,
+} from "@/lib/auth/setup-token";
 
 const SESSION_COOKIE = "budget_session";
-const SETUP_COOKIE = "budget_setup";
 const SESSION_MAX_AGE = 60 * 60 * 24 * 7;
 
 export async function POST(request: NextRequest) {
@@ -50,17 +55,26 @@ export async function POST(request: NextRequest) {
       secure: isProd,
     });
 
-    // If setup is complete in DB but the setup cookie isn't set (e.g. after DB migration
-    // or seed), set it now so middleware can enforce proper routing.
-    const existingSetupCookie = request.cookies.get(SETUP_COOKIE)?.value;
-    if (existingSetupCookie !== "done") {
-      const progress = await db.setupProgress.findUnique({ where: { id: "singleton" } });
+    // Re-issue the signed setup token on every login so the middleware can verify
+    // setup state without hitting the DB. This handles the case where cookies were
+    // cleared after setup was completed.
+    const existingSetupToken = request.cookies.get(SETUP_COOKIE)?.value;
+    const setupAlreadyVerified = existingSetupToken
+      ? await verifySetupToken(existingSetupToken)
+      : false;
+
+    if (!setupAlreadyVerified) {
+      const progress = await db.setupProgress.findUnique({
+        where: { id: "singleton" },
+        select: { completedAt: true },
+      });
       if (progress?.completedAt) {
-        response.cookies.set(SETUP_COOKIE, "done", {
+        const setupToken = await createSetupToken();
+        response.cookies.set(SETUP_COOKIE, setupToken, {
           httpOnly: true,
           sameSite: "lax",
           path: "/",
-          maxAge: 60 * 60 * 24 * 365 * 10,
+          maxAge: SETUP_MAX_AGE,
         });
       }
     }
