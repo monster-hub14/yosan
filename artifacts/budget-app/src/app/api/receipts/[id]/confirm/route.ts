@@ -14,7 +14,8 @@ interface Params { params: Promise<{ id: string }> }
  * Body: {
  *   merchant?, date?, total?, notes?, categoryId?,
  *   items?: [{description, amount, quantity, categoryId?}],
- *   duplicateResolution?: "keep_new" | "keep_existing" | "skip" | null
+ *   clarifications?: [{question, categoryId, categoryName, itemDescription}],
+ *   duplicateResolution?: "keep_new" | "keep_existing" | null
  *   // if omitted and duplicate found, returns 409 with warning
  * }
  */
@@ -23,7 +24,27 @@ export async function POST(request: NextRequest, { params }: Params) {
   if (!isSessionPayload(session)) return session;
 
   const { id } = await params;
-  const body = await request.json();
+  const body = await request.json() as {
+    merchant?: string | null;
+    date?: string | null;
+    total?: number | null;
+    notes?: string | null;
+    categoryId?: string | null;
+    items?: Array<{
+      description: string;
+      amount: number;
+      quantity?: number;
+      categoryId?: string | null;
+      isAmbiguous?: boolean;
+    }>;
+    clarifications?: Array<{
+      question?: string | null;
+      categoryId?: string | null;
+      categoryName?: string | null;
+      itemDescription?: string | null;
+    }>;
+    duplicateResolution?: string | null;
+  };
 
   const pending = await db.pendingImport.findUnique({
     where: { id },
@@ -48,16 +69,10 @@ export async function POST(request: NextRequest, { params }: Params) {
   const total: number | null = body.total != null ? parseFloat(String(body.total)) : null;
   const categoryId: string | null = body.categoryId ?? null;
   const notes: string | null = body.notes ?? null;
-
-  // duplicateResolution values:
-  //   null / undefined = first-time check
-  //   "keep_new"       = save this receipt, ignore potential duplicate
-  //   "keep_existing"  = discard this pending import (keep existing expense as-is)
-  //   "skip"           = same as discard for UI purposes
   const duplicateResolution: string | null = body.duplicateResolution ?? null;
 
-  // Handle "keep_existing" — user chose to not save the new expense
-  if (duplicateResolution === "keep_existing" || duplicateResolution === "skip") {
+  // Handle "keep_existing" — user chose to discard this new import
+  if (duplicateResolution === "keep_existing") {
     await db.$transaction(async (tx) => {
       await tx.pendingImport.update({
         where: { id },
@@ -82,7 +97,6 @@ export async function POST(request: NextRequest, { params }: Params) {
         confidence: duplicate.confidence,
         matchedExpenseId: duplicate.matchedExpenseId,
         reason: duplicate.reason,
-        // Client should display these choices and re-POST with duplicateResolution set
         resolutionOptions: [
           { value: "keep_new", label: "Save as new expense" },
           { value: "keep_existing", label: "Discard this receipt (keep existing)" },
@@ -93,17 +107,20 @@ export async function POST(request: NextRequest, { params }: Params) {
   // "keep_new" or no duplicate found — proceed to create expense
 
   // Build items from body or pending import data
-  const parsedData = JSON.parse(pending.data || "{}");
-  const items: Array<{
-    description: string;
-    amount: number;
-    quantity: number;
-    categoryId?: string | null;
-  }> = body.items ?? parsedData.items ?? [];
+  const parsedData = JSON.parse(pending.data || "{}") as {
+    items?: Array<{
+      description: string;
+      amount: number;
+      quantity: number;
+      categoryId?: string | null;
+      categorySuggestion?: { categoryId?: string | null; isAmbiguous?: boolean } | null;
+    }>;
+  };
+  const items = body.items ?? parsedData.items ?? [];
 
   // Create Expense + ReceiptItems in a transaction
   const expense = await db.$transaction(async (tx) => {
-    const expense = await tx.expense.create({
+    const newExpense = await tx.expense.create({
       data: {
         budgetId: pending.budgetId,
         categoryId: categoryId || undefined,
@@ -122,7 +139,7 @@ export async function POST(request: NextRequest, { params }: Params) {
       await tx.receiptItem.createMany({
         data: items.map((item) => ({
           receiptId: pending.receiptId!,
-          expenseId: expense.id,
+          expenseId: newExpense.id,
           name: item.description,
           price: item.amount,
           quantity: item.quantity ?? 1,
@@ -137,7 +154,7 @@ export async function POST(request: NextRequest, { params }: Params) {
         status: "CONFIRMED",
         confirmedAt: new Date(),
         confirmedById: session.userId,
-        expenseId: expense.id,
+        expenseId: newExpense.id,
       },
     });
 
@@ -149,32 +166,42 @@ export async function POST(request: NextRequest, { params }: Params) {
       });
     }
 
-    // Persist any clarification answers from body
-    const clarifications: Array<{ question: string; answer: string; itemDescription?: string }> =
-      body.clarifications ?? [];
+    // Persist clarification answers: {question, categoryId (= the answer), categoryName, itemDescription}
+    const clarifications = body.clarifications ?? [];
     for (const c of clarifications) {
-      if (c.question && c.answer) {
+      if (c.question && c.categoryName) {
         await tx.clarificationHistory.create({
           data: {
             receiptId: pending.receiptId ?? undefined,
             question: c.question,
-            answer: c.answer,
+            answer: c.categoryName,
             context: c.itemDescription ?? null,
           },
         }).catch(() => {}); // Non-fatal
       }
     }
 
-    return expense;
+    return newExpense;
   });
 
-  // Fire-and-forget: save memory for future categorization
+  // Fire-and-forget: save memory ONLY for non-ambiguous items
+  // Build a set of ambiguous item descriptions from clarifications (answered by user) and body items
+  const ambiguousItemDescs = new Set<string>(
+    (body.clarifications ?? [])
+      .filter((c) => c.itemDescription)
+      .map((c) => (c.itemDescription ?? "").toLowerCase())
+  );
+
   if (merchant && categoryId) {
     saveMerchantMemory(pending.budgetId, merchant, categoryId).catch(() => {});
   }
   for (const item of items) {
     const resolvedCatId = item.categoryId ?? categoryId;
-    if (item.description && resolvedCatId) {
+    const isAmbiguous =
+      ("isAmbiguous" in item && item.isAmbiguous === true) ||
+      ("categorySuggestion" in item && (item as { categorySuggestion?: { isAmbiguous?: boolean } | null }).categorySuggestion?.isAmbiguous === true) ||
+      ambiguousItemDescs.has((item.description ?? "").toLowerCase());
+    if (item.description && resolvedCatId && !isAmbiguous) {
       saveItemMemory(pending.budgetId, item.description, resolvedCatId).catch(() => {});
     }
   }

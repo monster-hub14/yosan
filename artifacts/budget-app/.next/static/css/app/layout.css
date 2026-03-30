@@ -1723,6 +1723,9 @@
   .break-words {
     overflow-wrap: break-word;
   }
+  .text-ellipsis {
+    text-overflow: ellipsis;
+  }
   .whitespace-nowrap {
     white-space: nowrap;
   }
@@ -2024,6 +2027,9 @@
   }
   .\[--cell-size\:2rem\] {
     --cell-size: 2rem;
+  }
+  .paused {
+    animation-play-state: paused;
   }
   .group-focus-within\/menu-item\:opacity-100 {
     &:is(:where(.group\/menu-item):focus-within *) {
