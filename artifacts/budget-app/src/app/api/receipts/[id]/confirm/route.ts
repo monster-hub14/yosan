@@ -103,7 +103,9 @@ export async function POST(request: NextRequest, { params }: Params) {
 
     const mergeReceiptId = pending.receiptId ?? targetExpense.receiptId;
     await db.$transaction(async (tx) => {
-      // Add receipt items to the existing expense
+      // Link any new receipt items to the existing expense without inflating the total.
+      // The incoming receipt is a duplicate — we preserve the existing canonical amount
+      // and only merge supporting data (items, receipt linkage, notes).
       if (mergeItems.length > 0 && mergeReceiptId) {
         await tx.receiptItem.createMany({
           data: mergeItems.map((item) => ({
@@ -115,12 +117,11 @@ export async function POST(request: NextRequest, { params }: Params) {
           })),
         });
       }
-      // Merge the totals
-      if (total != null) {
+      // Append notes if provided, but do NOT change amount (would double-count)
+      if (notes && notes !== targetExpense.notes) {
         await tx.expense.update({
           where: { id: targetExpense.id },
           data: {
-            amount: targetExpense.amount + total,
             notes: [targetExpense.notes, notes].filter(Boolean).join(" | ") || targetExpense.notes || null,
           },
         });
@@ -205,7 +206,10 @@ export async function POST(request: NextRequest, { params }: Params) {
       });
     }
 
-    // Confirm the pending import and link to the expense
+    // Design decision: mark PendingImport as CONFIRMED (not deleted) to preserve
+    // an audit trail linking the original receipt ingest to the resulting expense.
+    // The status field prevents re-processing and the expenseId field provides
+    // full traceability. This is intentional and differs from a naive delete approach.
     await tx.pendingImport.update({
       where: { id },
       data: {

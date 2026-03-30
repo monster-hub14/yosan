@@ -152,11 +152,25 @@ export async function POST(req: NextRequest) {
 
   const results: { pendingId: string; filename: string | null }[] = [];
 
+  // Allowlisted extensions for received attachments
+  const ALLOWED_EXTENSIONS: Record<string, string> = {
+    "image/jpeg": "jpg", "image/jpg": "jpg", "image/png": "png",
+    "image/webp": "webp", "image/gif": "gif",
+    "image/heic": "heic", "image/heif": "heif",
+    "application/pdf": "pdf",
+  };
+
   if (imageAttachments.length > 0) {
     for (const att of imageAttachments) {
-      const ext = att.filename.includes(".") ? att.filename.split(".").pop()! : "bin";
+      // Derive extension strictly from MIME type — never from untrusted filename
+      const ext = ALLOWED_EXTENSIONS[att.contentType.toLowerCase()] ?? "bin";
       const storedFilename = `${Date.now()}-${crypto.randomUUID()}.${ext}`;
       const filePath = path.join(budgetDir, storedFilename);
+      // Guard: resolved path must stay under budget upload directory
+      if (!filePath.startsWith(path.resolve(budgetDir))) {
+        console.error("[email-webhook] path traversal blocked:", filePath);
+        continue;
+      }
       await writeFile(filePath, att.data);
 
       const receipt = await db.receipt.create({
