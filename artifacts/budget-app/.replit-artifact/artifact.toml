@@ -1,0 +1,25 @@
+kind = "web"
+previewPath = "/"
+title = "Budget App"
+version = "1.0.0"
+id = "artifacts/budget-app"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 24432
+
+[services.development]
+run = "pnpm --filter @workspace/budget-app run dev"
+
+[services.env]
+PORT = "24432"
+BASE_PATH = "/"
+DATABASE_URL = "file:./data/budget.db"
+UPLOAD_DIR = "./uploads"
+JWT_SECRET = "dev-only-secret-key-not-for-production-use-min-32"

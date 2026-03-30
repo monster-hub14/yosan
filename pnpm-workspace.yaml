@@ -68,6 +68,10 @@ catalog:
 autoInstallPeers: false
 
 onlyBuiltDependencies:
+  - '@prisma/client'
+  - '@prisma/engines'
+  - prisma
+  - sharp
   - '@swc/core'
   - esbuild
   - msw

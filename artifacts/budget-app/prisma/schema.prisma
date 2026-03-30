@@ -1,0 +1,420 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum BudgetMemberRole {
+  ADMIN
+  MEMBER
+}
+
+enum BudgetShareRole {
+  VIEWER
+  HELPER
+  CO_OWNER
+}
+
+enum PayFrequency {
+  WEEKLY
+  BIWEEKLY
+  SEMIMONTHLY
+  MONTHLY
+  QUARTERLY
+  ANNUALLY
+}
+
+enum ExpenseFrequency {
+  DAILY
+  WEEKLY
+  BIWEEKLY
+  MONTHLY
+  QUARTERLY
+  ANNUALLY
+}
+
+enum AIProvider {
+  OPENAI
+  ANTHROPIC
+  GOOGLE
+  OLLAMA
+  CUSTOM
+}
+
+enum ImportStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  NEEDS_REVIEW
+}
+
+enum InsightType {
+  SPENDING_SPIKE
+  SAVINGS_OPPORTUNITY
+  BUDGET_ALERT
+  FORECAST
+  TIP
+}
+
+enum NotificationChannel {
+  EMAIL
+  IN_APP
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  role         Role     @default(USER)
+  avatarUrl    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  ownedBudgets          Budget[]
+  budgetMemberships     BudgetMembership[]
+  uploadedReceipts      Receipt[]
+  incomeEntries         IncomeEntry[]
+  notificationPrefs     NotificationPreference[]
+  pendingImports        PendingImport[]
+}
+
+model Budget {
+  id          String   @id @default(cuid())
+  name        String
+  currency    String   @default("USD")
+  description String?
+  ownerId     String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  owner                 User                    @relation(fields: [ownerId], references: [id])
+  memberships           BudgetMembership[]
+  soloShares            BudgetSoloShare[]
+  incomeSources         IncomeSource[]
+  incomeEntries         IncomeEntry[]
+  savingsGoals          SavingsGoal[]
+  recurringExpenses     RecurringExpense[]
+  expenses              Expense[]
+  receipts              Receipt[]
+  categories            Category[]
+  merchantMemories      MerchantMemory[]
+  itemMemories          ItemMemory[]
+  forecastSnapshots     ForecastSnapshot[]
+  insights              Insight[]
+  notificationPrefs     NotificationPreference[]
+  emailForwarding       EmailForwardingConfig?
+  pendingImports        PendingImport[]
+}
+
+model BudgetMembership {
+  id        String           @id @default(cuid())
+  budgetId  String
+  userId    String
+  role      BudgetMemberRole @default(MEMBER)
+  createdAt DateTime         @default(now())
+
+  budget Budget @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([budgetId, userId])
+}
+
+model BudgetSoloShare {
+  id          String          @id @default(cuid())
+  budgetId    String
+  shareToken  String          @unique @default(cuid())
+  role        BudgetShareRole @default(VIEWER)
+  label       String?
+  expiresAt   DateTime?
+  isActive    Boolean         @default(true)
+  createdAt   DateTime        @default(now())
+
+  budget Budget @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+}
+
+model IncomeSource {
+  id          String       @id @default(cuid())
+  budgetId    String
+  name        String
+  amount      Float
+  frequency   PayFrequency @default(BIWEEKLY)
+  nextPayDate DateTime?
+  isActive    Boolean      @default(true)
+  notes       String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  budget        Budget        @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  incomeEntries IncomeEntry[]
+}
+
+model IncomeEntry {
+  id             String   @id @default(cuid())
+  budgetId       String
+  incomeSourceId String?
+  userId         String
+  amount         Float
+  date           DateTime
+  note           String?
+  createdAt      DateTime @default(now())
+
+  budget       Budget        @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  incomeSource IncomeSource? @relation(fields: [incomeSourceId], references: [id])
+  user         User          @relation(fields: [userId], references: [id])
+}
+
+model SavingsGoal {
+  id            String    @id @default(cuid())
+  budgetId      String
+  name          String
+  targetAmount  Float
+  currentAmount Float     @default(0)
+  targetDate    DateTime?
+  isActive      Boolean   @default(true)
+  notes         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  budget Budget @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+}
+
+model RecurringExpense {
+  id          String           @id @default(cuid())
+  budgetId    String
+  categoryId  String?
+  name        String
+  amount      Float
+  frequency   ExpenseFrequency @default(MONTHLY)
+  nextDueDate DateTime?
+  isActive    Boolean          @default(true)
+  notes       String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  budget   Budget    @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  category Category? @relation(fields: [categoryId], references: [id])
+}
+
+model Expense {
+  id          String   @id @default(cuid())
+  budgetId    String
+  categoryId  String?
+  amount      Float
+  date        DateTime
+  description String?
+  merchant    String?
+  notes       String?
+  receiptId   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  budget       Budget        @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  category     Category?     @relation(fields: [categoryId], references: [id])
+  receipt      Receipt?      @relation(fields: [receiptId], references: [id])
+  receiptItems ReceiptItem[]
+}
+
+model Receipt {
+  id               String      @id @default(cuid())
+  budgetId         String
+  uploadedById     String
+  originalFilename String
+  storedFilename   String
+  mimeType         String
+  fileSize         Int?
+  uploadedAt       DateTime    @default(now())
+  processedAt      DateTime?
+  rawText          String?
+  totalAmount      Float?
+  merchantName     String?
+  receiptDate      DateTime?
+  status           ImportStatus @default(PENDING)
+  errorMessage     String?
+
+  budget           Budget               @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  uploadedBy       User                 @relation(fields: [uploadedById], references: [id])
+  receiptItems     ReceiptItem[]
+  expenses         Expense[]
+  clarifications   ClarificationHistory[]
+  pendingImports   PendingImport[]
+}
+
+model ReceiptItem {
+  id         String  @id @default(cuid())
+  receiptId  String
+  expenseId  String?
+  name       String
+  price      Float
+  quantity   Float   @default(1)
+  totalPrice Float?
+  category   String?
+  notes      String?
+
+  receipt Receipt  @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  expense Expense? @relation(fields: [expenseId], references: [id])
+}
+
+model Category {
+  id        String   @id @default(cuid())
+  budgetId  String?
+  name      String
+  color     String?
+  icon      String?
+  isDefault Boolean  @default(false)
+  parentId  String?
+  createdAt DateTime @default(now())
+
+  budget           Budget?           @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  parent           Category?         @relation("CategoryChildren", fields: [parentId], references: [id])
+  children         Category[]        @relation("CategoryChildren")
+  expenses         Expense[]
+  recurringExpenses RecurringExpense[]
+  merchantMemories MerchantMemory[]
+  itemMemories     ItemMemory[]
+}
+
+model MerchantMemory {
+  id                String   @id @default(cuid())
+  budgetId          String
+  merchantName      String
+  defaultCategoryId String?
+  lastUsedAt        DateTime @default(now())
+
+  budget          Budget    @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  defaultCategory Category? @relation(fields: [defaultCategoryId], references: [id])
+
+  @@unique([budgetId, merchantName])
+}
+
+model ItemMemory {
+  id                String   @id @default(cuid())
+  budgetId          String
+  itemName          String
+  defaultCategoryId String?
+  aliases           String   @default("")
+  lastUsedAt        DateTime @default(now())
+
+  budget          Budget    @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  defaultCategory Category? @relation(fields: [defaultCategoryId], references: [id])
+
+  @@unique([budgetId, itemName])
+}
+
+model ClarificationHistory {
+  id        String   @id @default(cuid())
+  receiptId String
+  question  String
+  answer    String
+  createdAt DateTime @default(now())
+
+  receipt Receipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+}
+
+model ForecastSnapshot {
+  id           String   @id @default(cuid())
+  budgetId     String
+  forecastDate DateTime
+  data         String
+  createdAt    DateTime @default(now())
+
+  budget Budget @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+}
+
+model Insight {
+  id        String      @id @default(cuid())
+  budgetId  String
+  type      InsightType
+  title     String
+  body      String
+  severity  String      @default("info")
+  metadata  String      @default("{}")
+  isRead    Boolean     @default(false)
+  createdAt DateTime    @default(now())
+
+  budget Budget @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+}
+
+model NotificationPreference {
+  id        String              @id @default(cuid())
+  userId    String
+  budgetId  String?
+  channel   NotificationChannel
+  event     String
+  isEnabled Boolean             @default(true)
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  budget Budget? @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, budgetId, channel, event])
+}
+
+model AIProviderConfig {
+  id        String     @id @default("singleton")
+  provider  AIProvider @default(OPENAI)
+  model     String     @default("gpt-4o-mini")
+  apiKey    String?
+  baseUrl   String?
+  isEnabled Boolean    @default(false)
+  updatedAt DateTime   @updatedAt
+}
+
+model EmailConfig {
+  id          String   @id @default("singleton")
+  smtpHost    String?
+  smtpPort    Int      @default(587)
+  smtpUser    String?
+  smtpPass    String?
+  fromAddress String?
+  fromName    String   @default("Budget App")
+  isEnabled   Boolean  @default(false)
+  updatedAt   DateTime @updatedAt
+}
+
+model EmailForwardingConfig {
+  id             String   @id @default(cuid())
+  budgetId       String   @unique
+  inboundAddress String   @unique
+  isEnabled      Boolean  @default(true)
+  updatedAt      DateTime @updatedAt
+
+  budget Budget @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+}
+
+model PendingImport {
+  id        String       @id @default(cuid())
+  budgetId  String
+  userId    String
+  receiptId String?
+  status    ImportStatus @default(PENDING)
+  data      String       @default("{}")
+  error     String?
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  budget  Budget  @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id])
+  receipt Receipt? @relation(fields: [receiptId], references: [id])
+}
+
+model SetupProgress {
+  id                  String    @id @default("singleton")
+  adminAccountCreated Boolean   @default(false)
+  firstBudgetCreated  Boolean   @default(false)
+  incomeConfigured    Boolean   @default(false)
+  savingsConfigured   Boolean   @default(false)
+  recurringConfigured Boolean   @default(false)
+  aiConfigured        Boolean   @default(false)
+  emailConfigured     Boolean   @default(false)
+  completedAt         DateTime?
+  updatedAt           DateTime  @updatedAt
+}

@@ -1,0 +1,31 @@
+services:
+  budget:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: budget-app
+    restart: unless-stopped
+    ports:
+      - "${HOST_PORT:-3000}:3000"
+    volumes:
+      - budget_data:/data
+      - budget_uploads:/uploads
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=file:/data/budget.db
+      - UPLOAD_DIR=/uploads
+      - PORT=3000
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/setup/status').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  budget_data:
+    driver: local
+  budget_uploads:
+    driver: local

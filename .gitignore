@@ -47,3 +47,13 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# Budget App dev data
+artifacts/budget-app/data/
+artifacts/budget-app/uploads/
+artifacts/budget-app/.env.local
+artifacts/budget-app/.env
+*.db
+*.db-journal
+*.db-wal
+*.db-shm

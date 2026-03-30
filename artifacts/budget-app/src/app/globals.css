@@ -1,0 +1,277 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-card-border: hsl(var(--card-border));
+
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-popover-border: hsl(var(--popover-border));
+
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-primary-border: var(--primary-border);
+
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-secondary-border: var(--secondary-border);
+
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-muted-border: var(--muted-border);
+
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-accent-border: var(--accent-border);
+
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-destructive-border: var(--destructive-border);
+
+  --color-chart-1: hsl(var(--chart-1));
+  --color-chart-2: hsl(var(--chart-2));
+  --color-chart-3: hsl(var(--chart-3));
+  --color-chart-4: hsl(var(--chart-4));
+  --color-chart-5: hsl(var(--chart-5));
+
+  --color-sidebar: hsl(var(--sidebar));
+  --color-sidebar-foreground: hsl(var(--sidebar-foreground));
+  --color-sidebar-border: hsl(var(--sidebar-border));
+  --color-sidebar-primary: hsl(var(--sidebar-primary));
+  --color-sidebar-primary-foreground: hsl(var(--sidebar-primary-foreground));
+  --color-sidebar-primary-border: var(--sidebar-primary-border);
+  --color-sidebar-accent: hsl(var(--sidebar-accent));
+  --color-sidebar-accent-foreground: hsl(var(--sidebar-accent-foreground));
+  --color-sidebar-accent-border: var(--sidebar-accent-border);
+  --color-sidebar-ring: hsl(var(--sidebar-ring));
+
+  --font-sans: var(--app-font-sans);
+  --font-serif: var(--app-font-serif);
+  --font-mono: var(--app-font-mono);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+/* LIGHT MODE */
+:root {
+  --button-outline: rgba(0, 0, 0, 0.1);
+  --badge-outline: rgba(0, 0, 0, 0.05);
+  --opaque-button-border-intensity: -8;
+  --elevate-1: rgba(0, 0, 0, 0.03);
+  --elevate-2: rgba(0, 0, 0, 0.08);
+
+  --background: 220 20% 97%;
+  --foreground: 220 30% 8%;
+
+  --border: 220 15% 88%;
+  --input: 220 15% 90%;
+  --ring: 243 75% 59%;
+
+  --card: 0 0% 100%;
+  --card-foreground: 220 30% 8%;
+  --card-border: 220 15% 90%;
+
+  --sidebar: 220 20% 95%;
+  --sidebar-foreground: 220 30% 12%;
+  --sidebar-border: 220 15% 86%;
+  --sidebar-primary: 243 75% 59%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 220 15% 90%;
+  --sidebar-accent-foreground: 220 30% 12%;
+  --sidebar-ring: 243 75% 59%;
+
+  --popover: 0 0% 100%;
+  --popover-foreground: 220 30% 8%;
+  --popover-border: 220 15% 88%;
+
+  --primary: 243 75% 59%;
+  --primary-foreground: 0 0% 100%;
+
+  --secondary: 220 15% 92%;
+  --secondary-foreground: 220 30% 15%;
+
+  --muted: 220 15% 94%;
+  --muted-foreground: 220 10% 46%;
+
+  --accent: 154 60% 40%;
+  --accent-foreground: 0 0% 100%;
+
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 0 0% 100%;
+
+  --chart-1: 243 75% 59%;
+  --chart-2: 154 60% 40%;
+  --chart-3: 32 90% 58%;
+  --chart-4: 0 72% 51%;
+  --chart-5: 200 75% 52%;
+
+  --app-font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  --app-font-serif: Georgia, serif;
+  --app-font-mono: "Fira Code", "Cascadia Code", Menlo, monospace;
+  --radius: 0.5rem;
+
+  --shadow-2xs: 0px 1px 2px 0px rgba(0, 0, 0, 0.04);
+  --shadow-xs: 0px 1px 3px 0px rgba(0, 0, 0, 0.06);
+  --shadow-sm: 0px 1px 3px 0px rgba(0, 0, 0, 0.08),
+    0px 1px 2px -1px rgba(0, 0, 0, 0.06);
+  --shadow: 0px 2px 6px 0px rgba(0, 0, 0, 0.08),
+    0px 1px 3px -1px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0px 4px 8px -1px rgba(0, 0, 0, 0.1),
+    0px 2px 4px -2px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0px 8px 16px -4px rgba(0, 0, 0, 0.12),
+    0px 4px 8px -4px rgba(0, 0, 0, 0.08);
+  --shadow-xl: 0px 16px 24px -8px rgba(0, 0, 0, 0.14),
+    0px 8px 12px -6px rgba(0, 0, 0, 0.1);
+  --shadow-2xl: 0px 24px 40px -12px rgba(0, 0, 0, 0.18);
+  --tracking-normal: 0em;
+  --spacing: 0.25rem;
+}
+
+/* DARK MODE */
+.dark {
+  --button-outline: rgba(255, 255, 255, 0.12);
+  --badge-outline: rgba(255, 255, 255, 0.08);
+  --opaque-button-border-intensity: 8;
+  --elevate-1: rgba(255, 255, 255, 0.04);
+  --elevate-2: rgba(255, 255, 255, 0.08);
+
+  --background: 224 28% 9%;
+  --foreground: 220 15% 93%;
+
+  --border: 220 20% 22%;
+  --input: 220 20% 22%;
+  --ring: 243 75% 65%;
+
+  --card: 224 28% 13%;
+  --card-foreground: 220 15% 93%;
+  --card-border: 220 20% 20%;
+
+  --sidebar: 224 28% 11%;
+  --sidebar-foreground: 220 15% 90%;
+  --sidebar-border: 220 20% 18%;
+  --sidebar-primary: 243 75% 65%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 220 20% 18%;
+  --sidebar-accent-foreground: 220 15% 88%;
+  --sidebar-ring: 243 75% 65%;
+
+  --popover: 224 28% 13%;
+  --popover-foreground: 220 15% 93%;
+  --popover-border: 220 20% 22%;
+
+  --primary: 243 75% 65%;
+  --primary-foreground: 0 0% 100%;
+
+  --secondary: 220 20% 20%;
+  --secondary-foreground: 220 15% 85%;
+
+  --muted: 220 20% 16%;
+  --muted-foreground: 220 10% 55%;
+
+  --accent: 154 55% 48%;
+  --accent-foreground: 0 0% 100%;
+
+  --destructive: 0 75% 60%;
+  --destructive-foreground: 0 0% 100%;
+
+  --chart-1: 243 75% 65%;
+  --chart-2: 154 55% 48%;
+  --chart-3: 32 90% 62%;
+  --chart-4: 0 75% 60%;
+  --chart-5: 200 75% 58%;
+
+  --shadow-2xs: 0px 1px 2px 0px rgba(0, 0, 0, 0.3);
+  --shadow-xs: 0px 1px 3px 0px rgba(0, 0, 0, 0.4);
+  --shadow-sm: 0px 1px 3px 0px rgba(0, 0, 0, 0.4),
+    0px 1px 2px -1px rgba(0, 0, 0, 0.3);
+  --shadow: 0px 2px 6px 0px rgba(0, 0, 0, 0.4),
+    0px 1px 3px -1px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0px 4px 8px -1px rgba(0, 0, 0, 0.45),
+    0px 2px 4px -2px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0px 8px 16px -4px rgba(0, 0, 0, 0.5),
+    0px 4px 8px -4px rgba(0, 0, 0, 0.35);
+  --shadow-xl: 0px 16px 24px -8px rgba(0, 0, 0, 0.55),
+    0px 8px 12px -6px rgba(0, 0, 0, 0.4);
+  --shadow-2xl: 0px 24px 40px -12px rgba(0, 0, 0, 0.6);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: var(--font-sans);
+  }
+
+  :focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+  }
+}
+
+@layer utilities {
+  .toggle-elevate::before {
+    content: "";
+    pointer-events: none;
+    position: absolute;
+    inset: 0px;
+    border-radius: inherit;
+    z-index: 999;
+  }
+
+  .toggle-elevate.active::before {
+    background-color: var(--elevate-2);
+  }
+
+  .hover-elevate,
+  .active-elevate,
+  .hover-elevate-2,
+  .active-elevate-2 {
+    position: relative;
+    z-index: 0;
+  }
+
+  .hover-elevate::after,
+  .active-elevate::after,
+  .hover-elevate-2::after,
+  .active-elevate-2::after {
+    content: "";
+    pointer-events: none;
+    position: absolute;
+    inset: 0px;
+    border-radius: inherit;
+    z-index: 999;
+  }
+
+  .hover-elevate:hover::after,
+  .active-elevate:active::after {
+    background-color: var(--elevate-1);
+  }
+
+  .hover-elevate-2:hover::after,
+  .active-elevate-2:active::after {
+    background-color: var(--elevate-2);
+  }
+
+  .border.hover-elevate::after,
+  .border.active-elevate::after,
+  .border.hover-elevate-2::after,
+  .border.active-elevate-2::after {
+    inset: -1px;
+  }
+}

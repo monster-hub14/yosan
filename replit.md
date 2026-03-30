@@ -1,96 +1,124 @@
-# Workspace
+# Budget App — Self-Hosted AI-Powered Budget Tracker
 
-## Overview
+## Project Overview
+A self-hosted, AI-powered, receipt-driven budget tracking application built with Next.js 15 App Router. Designed for deployment on TrueNAS SCALE and other self-hosting environments. No cloud dependencies, no SaaS lock-in.
 
-pnpm workspace monorepo using TypeScript. Each package manages its own dependencies.
+## Architecture
 
-## Stack
+### Tech Stack
+- **Framework**: Next.js 15 App Router (TypeScript)
+- **Styling**: Tailwind CSS v4 + shadcn/ui + Framer Motion
+- **Database**: Prisma ORM + SQLite (development) / PostgreSQL (production option)
+- **Auth**: Custom JWT (jose) + bcryptjs, httpOnly cookies
+- **Deployment**: Docker + Docker Compose, TrueNAS SCALE-ready
 
-- **Monorepo tool**: pnpm workspaces
-- **Node.js version**: 24
-- **Package manager**: pnpm
-- **TypeScript version**: 5.9
-- **API framework**: Express 5
-- **Database**: PostgreSQL + Drizzle ORM
-- **Validation**: Zod (`zod/v4`), `drizzle-zod`
-- **API codegen**: Orval (from OpenAPI spec)
-- **Build**: esbuild (CJS bundle)
-
-## Structure
-
-```text
-artifacts-monorepo/
-├── artifacts/              # Deployable applications
-│   └── api-server/         # Express API server
-├── lib/                    # Shared libraries
-│   ├── api-spec/           # OpenAPI spec + Orval codegen config
-│   ├── api-client-react/   # Generated React Query hooks
-│   ├── api-zod/            # Generated Zod schemas from OpenAPI
-│   └── db/                 # Drizzle ORM schema + DB connection
-├── scripts/                # Utility scripts (single workspace package)
-│   └── src/                # Individual .ts scripts, run via `pnpm --filter @workspace/scripts run <script>`
-├── pnpm-workspace.yaml     # pnpm workspace (artifacts/*, lib/*, lib/integrations/*, scripts)
-├── tsconfig.base.json      # Shared TS options (composite, bundler resolution, es2022)
-├── tsconfig.json           # Root TS project references
-└── package.json            # Root package with hoisted devDeps
+### Monorepo Structure
+```
+artifacts/
+  budget-app/          # Main Next.js 15 application
+    src/
+      app/
+        (app)/         # Authenticated app shell
+          dashboard/
+          expenses/
+          income/
+          receipts/
+          reports/
+          savings/
+          settings/    # Settings with admin/user/budget sections
+        (auth)/        # Auth pages (login, setup wizard)
+      components/
+        layout/        # AppSidebar, AppHeader
+        setup/         # SetupWizard (multi-step, Framer Motion)
+        ui/            # shadcn/ui components
+      lib/
+        auth/          # session.ts, permissions.ts, types.ts
+        db.ts          # Prisma client singleton
+        startup.ts     # Server startup checks
+    prisma/
+      schema.prisma    # Full schema (20+ models)
+      seed.ts          # Development seed data
+    middleware.ts      # Route protection + setup redirect
+    next.config.ts
+    Dockerfile         # Multi-stage Docker build
+    docker-compose.yml
+    SELF_HOSTING.md    # TrueNAS SCALE deployment guide
+  api-server/          # Hono.js API server (separate artifact)
+  mockup-sandbox/      # Component preview server for canvas
 ```
 
-## TypeScript & Composite Projects
+### Settings URL Structure
+- `/settings/account` — User account settings
+- `/settings/notifications` — User notification preferences
+- `/settings/budget` — Budget configuration
+- `/settings/budget/categories` — Expense categories
+- `/settings/budget/members` — Budget members
+- `/settings/ai` — AI provider config (admin only)
+- `/settings/email` — Email/SMTP config (admin only)
+- `/settings/users` — User management (admin only)
 
-Every package extends `tsconfig.base.json` which sets `composite: true`. The root `tsconfig.json` lists all packages as project references. This means:
+## Key Configuration
 
-- **Always typecheck from the root** — run `pnpm run typecheck` (which runs `tsc --build --emitDeclarationOnly`). This builds the full dependency graph so that cross-package imports resolve correctly. Running `tsc` inside a single package will fail if its dependencies haven't been built yet.
-- **`emitDeclarationOnly`** — we only emit `.d.ts` files during typecheck; actual JS bundling is handled by esbuild/tsx/vite...etc, not `tsc`.
-- **Project references** — when package A depends on package B, A's `tsconfig.json` must list B in its `references` array. `tsc --build` uses this to determine build order and skip up-to-date packages.
+### Environment Variables
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `DATABASE_URL` | SQLite URL | `file:./data/budget.db` |
+| `JWT_SECRET` | JWT signing secret (≥32 chars) | Set in artifact env |
+| `UPLOAD_DIR` | Receipt upload directory | `./uploads` |
+| `PORT` | Server port | `24432` (dev) |
 
-## Root Scripts
+The artifact environment sets `DATABASE_URL=file:./data/budget.db` to avoid conflicts with Replit's global `DATABASE_URL` (PostgreSQL).
 
-- `pnpm run build` — runs `typecheck` first, then recursively runs `build` in all packages that define it
-- `pnpm run typecheck` — runs `tsc --build --emitDeclarationOnly` using project references
+### Auth
+- Cookie name: `budget_session`
+- JWT expiry: 7 days
+- Password hashing: bcryptjs (12 rounds)
+- Roles: `USER`, `ADMIN`
 
-## Packages
+### Dev Credentials (after seed)
+- Admin: `admin@budget.local` / `admin1234`
+- User: `user@budget.local` / `user1234`
 
-### `artifacts/api-server` (`@workspace/api-server`)
+## Setup (Development)
 
-Express 5 API server. Routes live in `src/routes/` and use `@workspace/api-zod` for request and response validation and `@workspace/db` for persistence.
+```bash
+# Install dependencies
+pnpm install
 
-- Entry: `src/index.ts` — reads `PORT`, starts Express
-- App setup: `src/app.ts` — mounts CORS, JSON/urlencoded parsing, routes at `/api`
-- Routes: `src/routes/index.ts` mounts sub-routers; `src/routes/health.ts` exposes `GET /health` (full path: `/api/health`)
-- Depends on: `@workspace/db`, `@workspace/api-zod`
-- `pnpm --filter @workspace/api-server run dev` — run the dev server
-- `pnpm --filter @workspace/api-server run build` — production esbuild bundle (`dist/index.cjs`)
-- Build bundles an allowlist of deps (express, cors, pg, drizzle-orm, zod, etc.) and externalizes the rest
+# Generate Prisma client
+cd artifacts/budget-app && DATABASE_URL=file:./data/budget.db npx prisma generate
 
-### `lib/db` (`@workspace/db`)
+# Push schema & seed
+DATABASE_URL=file:./data/budget.db npx prisma db push
+DATABASE_URL=file:./data/budget.db NODE_ENV=development npx tsx prisma/seed.ts
 
-Database layer using Drizzle ORM with PostgreSQL. Exports a Drizzle client instance and schema models.
+# Start dev server (via workflow)
+pnpm --filter @workspace/budget-app run dev
+```
 
-- `src/index.ts` — creates a `Pool` + Drizzle instance, exports schema
-- `src/schema/index.ts` — barrel re-export of all models
-- `src/schema/<modelname>.ts` — table definitions with `drizzle-zod` insert schemas (no models definitions exist right now)
-- `drizzle.config.ts` — Drizzle Kit config (requires `DATABASE_URL`, automatically provided by Replit)
-- Exports: `.` (pool, db, schema), `./schema` (schema only)
+## Setup (Self-Hosted Production)
 
-Production migrations are handled by Replit when publishing. In development, we just use `pnpm --filter @workspace/db run push`, and we fallback to `pnpm --filter @workspace/db run push-force`.
+See `artifacts/budget-app/SELF_HOSTING.md` for full Docker/TrueNAS SCALE instructions.
 
-### `lib/api-spec` (`@workspace/api-spec`)
+```bash
+cp .env.example .env
+# Edit .env with your JWT_SECRET and settings
+docker-compose up -d
+```
 
-Owns the OpenAPI 3.1 spec (`openapi.yaml`) and the Orval config (`orval.config.ts`). Running codegen produces output into two sibling packages:
+## Status
 
-1. `lib/api-client-react/src/generated/` — React Query hooks + fetch client
-2. `lib/api-zod/src/generated/` — Zod schemas
+### Task #1 — Foundation, Auth & Self-Hosting Setup ✅ COMPLETE
+- Next.js 15 App Router project with full TypeScript
+- Prisma schema with 20+ models (users, budgets, expenses, receipts, AI config, etc.)
+- JWT auth with httpOnly cookies, bcryptjs password hashing
+- Multi-step setup wizard (Framer Motion) for first-run configuration
+- Full settings hierarchy (user, budget, admin/instance)
+- Docker multi-stage build + docker-compose with named volumes
+- TrueNAS SCALE self-hosting guide
 
-Run codegen: `pnpm --filter @workspace/api-spec run codegen`
-
-### `lib/api-zod` (`@workspace/api-zod`)
-
-Generated Zod schemas from the OpenAPI spec (e.g. `HealthCheckResponse`). Used by `api-server` for response validation.
-
-### `lib/api-client-react` (`@workspace/api-client-react`)
-
-Generated React Query hooks and fetch client from the OpenAPI spec (e.g. `useHealthCheck`, `healthCheck`).
-
-### `scripts` (`@workspace/scripts`)
-
-Utility scripts package. Each script is a `.ts` file in `src/` with a corresponding npm script in `package.json`. Run scripts via `pnpm --filter @workspace/scripts run <script>`. Scripts can import any workspace package (e.g., `@workspace/db`) by adding it as a dependency in `scripts/package.json`.
+### Tasks #2–#5 — PENDING
+- Receipt scanning with AI (OCR + LLM extraction)
+- Dashboard with charts and analytics
+- Budget tracking with categories and limits
+- Reports and CSV export
