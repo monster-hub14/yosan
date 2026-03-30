@@ -11,13 +11,12 @@ function isStatic(pathname: string): boolean {
   return STATIC_PREFIXES.some((p) => pathname.startsWith(p));
 }
 
-function isSetupPath(pathname: string): boolean {
-  return (
-    pathname === "/setup" ||
-    pathname.startsWith("/setup/") ||
-    pathname === "/api/setup" ||
-    pathname.startsWith("/api/setup/")
-  );
+function isSetupPagePath(pathname: string): boolean {
+  return pathname === "/setup" || pathname.startsWith("/setup/");
+}
+
+function isSetupApiPath(pathname: string): boolean {
+  return pathname === "/api/setup" || pathname.startsWith("/api/setup/");
 }
 
 function isAuthApiPath(pathname: string): boolean {
@@ -34,18 +33,21 @@ function isAuthApiPath(pathname: string): boolean {
  *
  * Routing decisions:
  *
- *   STATIC / AUTH-API / SETUP-API paths → always pass through
+ *   STATIC / AUTH-API paths → always pass through
  *
- *   Setup NOT complete (cookie absent or signature invalid):
+ *   Setup NOT complete (cookie absent or invalid signature):
  *     /login         → pass through (DB-authoritative page redirects to /setup
- *                       if setup is not done, preventing redirect loops)
- *     /setup/*       → pass through (wizard itself)
+ *                       if setup is truly not done, preventing redirect loops)
+ *     /setup/*       → pass through (wizard pages)
+ *     /api/setup/*   → pass through (wizard API routes, guarded per-route)
  *     /api/*         → 503 Setup not complete
  *     everything else → redirect to /setup
  *
  *   Setup complete (valid signed cookie):
- *     /login or /setup + session present → redirect to /dashboard
- *     /login or /setup + no session     → pass through
+ *     /login or /setup/* + session       → redirect to /dashboard
+ *     /login or /setup/* + no session   → pass through
+ *     /api/setup/* (post-setup)         → requires session (401 if absent),
+ *                                         then per-route guardSetupRoute() returns 401
  *     /api/* + no session               → 401 Unauthorized
  *     everything else + no session      → redirect to /login?from=<path>
  *     everything else + session         → pass through
@@ -63,7 +65,9 @@ export async function middleware(request: NextRequest) {
   const setupDone = setupToken ? await verifySetupToken(setupToken) : false;
 
   if (!setupDone) {
-    if (isSetupPath(pathname)) return NextResponse.next();
+    // Allow setup pages and setup API routes (per-route guards handle auth)
+    if (isSetupPagePath(pathname)) return NextResponse.next();
+    if (isSetupApiPath(pathname)) return NextResponse.next();
     // Always allow /login — its DB-authoritative check redirects to /setup if
     // setup is truly not done, preventing /login → /setup → /login loops.
     if (pathname === "/login") return NextResponse.next();
@@ -74,8 +78,10 @@ export async function middleware(request: NextRequest) {
   }
 
   // Setup is complete from here on.
+  // /api/setup/* is NO longer exempted — it falls through to the session check.
+  // Per-route guardSetupRoute() will return 401 for post-setup calls.
 
-  if (isSetupPath(pathname) || pathname === "/login") {
+  if (isSetupPagePath(pathname) || pathname === "/login") {
     if (session) return NextResponse.redirect(new URL("/dashboard", request.url));
     return NextResponse.next();
   }

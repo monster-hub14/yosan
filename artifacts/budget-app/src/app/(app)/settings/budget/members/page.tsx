@@ -14,6 +14,7 @@ export const metadata: Metadata = {
 export default async function BudgetMembersPage() {
   const session = await getSession();
   if (!session) redirect("/login");
+  if (session.role !== "ADMIN") redirect("/dashboard");
 
   const budget = await db.budget.findFirst({
     where: {
