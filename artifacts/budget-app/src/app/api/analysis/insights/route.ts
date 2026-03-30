@@ -53,6 +53,9 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // Whether AI is unavailable (not a limit — just unconfigured or disabled)
+  const aiUnavailable = !limitCheck.allowed && !limitCheck.limitExceeded;
+
   try {
     const result = await generateInsights(budgetId, session.userId);
     const insightId = await persistInsight(budgetId, result);
@@ -60,7 +63,12 @@ export async function POST(request: NextRequest) {
     if (result.generatedByAI) {
       await recordUsage(session.userId, "insights");
     }
-    return NextResponse.json({ analysis: result, insightId }, { status: 201 });
+    return NextResponse.json({
+      analysis: result,
+      insightId,
+      aiUnavailable: aiUnavailable || !result.generatedByAI,
+      aiUnavailableReason: aiUnavailable ? limitCheck.reason : undefined,
+    }, { status: 201 });
   } catch (err) {
     console.error("[analysis] generateInsights failed:", err);
     return NextResponse.json({ error: "Analysis generation failed" }, { status: 500 });

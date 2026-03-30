@@ -168,7 +168,10 @@ export async function generateInsights(budgetId: string, userId: string): Promis
   try {
     const config = await getAIConfig();
     const aiConfig = await db.aIProviderConfig.findUnique({ where: { id: "singleton" } });
-    if (config && aiConfig?.insightsEnabled) {
+    // Per-user AI eligibility check
+    const userControl = await db.userAIControl.findUnique({ where: { userId } });
+    const userAIEnabled = !userControl || (userControl.aiEnabled && userControl.insightsEnabled !== false);
+    if (config && aiConfig?.insightsEnabled && userAIEnabled) {
       const categoryLines = topCategories
         .slice(0, 6)
         .map(({ cat, actual, target, percentUsed }) => {

@@ -150,7 +150,10 @@ export async function buildForecast(budgetId: string, userId: string, daysAhead 
   try {
     const config = await getAIConfig();
     const aiDbConfig = await db.aIProviderConfig.findUnique({ where: { id: "singleton" } });
-    if (config && aiDbConfig?.forecastingEnabled) {
+    // Per-user AI eligibility check
+    const userControl = await db.userAIControl.findUnique({ where: { userId } });
+    const userAIEnabled = !userControl || (userControl.aiEnabled && userControl.forecastingEnabled !== false);
+    if (config && aiDbConfig?.forecastingEnabled && userAIEnabled) {
       const billSummary = upcomingBills.slice(0, 5)
         .map((b) => `${b.name} ($${b.amount}) due ${b.date}`)
         .join(", ") || "none";

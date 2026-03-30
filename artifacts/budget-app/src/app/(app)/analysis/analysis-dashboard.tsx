@@ -206,9 +206,16 @@ export function AnalysisDashboard() {
         return;
       }
       if (res.ok) {
-        const data = await res.json() as { analysis: AnalysisResult };
-        setAiStatus("ok");
-        setAiStatusMsg(null);
+        const data = await res.json() as { analysis: AnalysisResult; aiUnavailable?: boolean; aiUnavailableReason?: string };
+        if (data.aiUnavailable && !data.analysis.generatedByAI) {
+          const reason = data.aiUnavailableReason ?? "";
+          const isDisabled = reason.toLowerCase().includes("disabled");
+          setAiStatus(isDisabled ? "disabled" : "unconfigured");
+          setAiStatusMsg(reason || null);
+        } else {
+          setAiStatus("ok");
+          setAiStatusMsg(null);
+        }
         setAnalysis(data.analysis);
         await loadStoredInsights();
       }

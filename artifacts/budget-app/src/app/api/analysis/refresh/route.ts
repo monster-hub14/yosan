@@ -35,6 +35,8 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const aiUnavailable = !limitCheck.allowed && !limitCheck.limitExceeded;
+
   try {
     const result = await generateInsights(budgetId, session.userId);
     const insightId = await persistInsight(budgetId, result);
@@ -45,6 +47,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       analysis: result,
       insightId,
+      aiUnavailable: aiUnavailable || !result.generatedByAI,
+      aiUnavailableReason: aiUnavailable ? limitCheck.reason : undefined,
     }, { status: 201 });
   } catch (err) {
     console.error("[analysis/refresh] failed:", err);
