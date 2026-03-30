@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { Plus, Search, Filter, ChevronDown, Trash2, Pencil, TrendingDown, Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -59,6 +60,7 @@ interface ExpensesClientProps {
 }
 
 export function ExpensesClient({ budgetId, initialCategories }: ExpensesClientProps) {
+  const searchParams = useSearchParams();
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -71,7 +73,8 @@ export function ExpensesClient({ budgetId, initialCategories }: ExpensesClientPr
   const [dateTo, setDateTo] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
 
-  const [addOpen, setAddOpen] = useState(false);
+  // Support ?add=1 to auto-open the "add expense" modal (e.g. from dashboard CTA)
+  const [addOpen, setAddOpen] = useState(() => searchParams.get("add") === "1");
   const [editExpense, setEditExpense] = useState<Expense | null>(null);
   const [deleteExpense, setDeleteExpense] = useState<Expense | null>(null);
   const [deleting, setDeleting] = useState(false);

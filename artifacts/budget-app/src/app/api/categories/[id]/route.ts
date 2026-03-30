@@ -45,6 +45,10 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     if (!parent) return NextResponse.json({ error: "Parent category not found" }, { status: 404 });
     if (parent.parentId) return NextResponse.json({ error: "Cannot nest more than 2 levels" }, { status: 400 });
     if (body.parentId === id) return NextResponse.json({ error: "Cannot be its own parent" }, { status: 400 });
+    // Parent must be in same budget or be a global default (budgetId: null, isDefault: true)
+    if (cat.budgetId && parent.budgetId !== cat.budgetId && !(parent.isDefault && parent.budgetId === null)) {
+      return NextResponse.json({ error: "Parent category does not belong to this budget" }, { status: 400 });
+    }
   }
 
   const updated = await db.category.update({

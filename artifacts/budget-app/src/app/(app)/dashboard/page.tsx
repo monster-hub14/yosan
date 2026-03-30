@@ -156,7 +156,7 @@ export default async function DashboardPage() {
           </p>
         </div>
         <Button asChild size="sm">
-          <Link href="/expenses/new">
+          <Link href="/expenses?add=1">
             <Plus className="w-4 h-4 mr-1" />
             Add expense
           </Link>
@@ -263,7 +263,7 @@ export default async function DashboardPage() {
                 <Receipt className="w-8 h-8 text-muted-foreground/50" />
                 <p className="text-sm text-muted-foreground">No expenses this period</p>
                 <Button variant="outline" size="sm" asChild>
-                  <Link href="/expenses/new">
+                  <Link href="/expenses?add=1">
                     <Plus className="w-3.5 h-3.5 mr-1" />
                     Add expense
                   </Link>

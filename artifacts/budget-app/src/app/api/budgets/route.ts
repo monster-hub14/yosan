@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth, requireAdmin, isSessionPayload } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
+import { seedDefaultCategories } from "@/lib/default-categories";
 
 function buildAccessWhere(userId: string) {
   const now = new Date();
@@ -82,6 +83,9 @@ export async function POST(request: NextRequest) {
       },
     },
   });
+
+  // Seed the full default category hierarchy for the new budget
+  await seedDefaultCategories(db, budget.id);
 
   return NextResponse.json({ budget }, { status: 201 });
 }

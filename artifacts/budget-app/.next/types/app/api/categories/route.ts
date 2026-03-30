@@ -1,8 +1,8 @@
-// File: /home/runner/workspace/artifacts/budget-app/src/app/api/budgets/[id]/category-targets/route.ts
-import * as entry from '../../../../../../../src/app/api/budgets/[id]/category-targets/route.js'
+// File: /home/runner/workspace/artifacts/budget-app/src/app/api/categories/route.ts
+import * as entry from '../../../../../src/app/api/categories/route.js'
 import type { NextRequest } from 'next/server.js'
 
-type TEntry = typeof import('../../../../../../../src/app/api/budgets/[id]/category-targets/route.js')
+type TEntry = typeof import('../../../../../src/app/api/categories/route.js')
 
 type SegmentParams<T extends Object = any> = T extends Record<string, any>
   ? { [K in keyof T]: T[K] extends string ? string | string[] | undefined : never }

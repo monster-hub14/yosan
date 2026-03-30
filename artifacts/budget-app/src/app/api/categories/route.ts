@@ -77,6 +77,10 @@ export async function POST(request: NextRequest) {
     const parent = await db.category.findUnique({ where: { id: body.parentId } });
     if (!parent) return NextResponse.json({ error: "Parent category not found" }, { status: 404 });
     if (parent.parentId) return NextResponse.json({ error: "Cannot nest more than 2 levels" }, { status: 400 });
+    // Parent must be in same budget or be a global default
+    if (budgetId && parent.budgetId !== budgetId && !(parent.isDefault && parent.budgetId === null)) {
+      return NextResponse.json({ error: "Parent category does not belong to this budget" }, { status: 400 });
+    }
   }
 
   const category = await db.category.create({
