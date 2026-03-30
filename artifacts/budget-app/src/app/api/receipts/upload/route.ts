@@ -151,7 +151,7 @@ async function runAIExtraction(
   mimeType: string
 ): Promise<void> {
   try {
-    const extractionEnabled = await isFeatureEnabled("extraction");
+    const extractionEnabled = await isFeatureEnabled("extraction", userId);
     if (!extractionEnabled) {
       await db.pendingImport.update({
         where: { id: pendingId },
@@ -190,8 +190,8 @@ async function runAIExtraction(
       mimeType.startsWith("application/pdf") ? "[PDF file — text extraction not available]" : null
     );
 
-    // Categorize items if enabled
-    const categorizationEnabled = await isFeatureEnabled("categorization");
+    // Categorize items if enabled (pass userId for per-user override check)
+    const categorizationEnabled = await isFeatureEnabled("categorization", userId);
     const categorizedItems = [];
 
     for (const item of extracted.items) {

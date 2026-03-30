@@ -156,12 +156,19 @@ export function ReviewClient({ id }: ReviewClientProps) {
   }, [imp, load]);
 
   function buildItemsPayload() {
-    return parsed?.items?.map((item, i) => ({
-      description: item.description,
-      amount: item.amount,
-      quantity: item.quantity,
-      categoryId: itemCategories[i] ?? item.categorySuggestion?.categoryId ?? null,
-    }));
+    return parsed?.items?.map((item, i) => {
+      const hasUserAnswer = clarifications[i] !== undefined;
+      const isAmbiguous =
+        (item.categorySuggestion?.isAmbiguous === true) && !hasUserAnswer;
+      return {
+        description: item.description,
+        amount: item.amount,
+        quantity: item.quantity,
+        // Prefer user-supplied clarification answer, then manual item override, then AI suggestion
+        categoryId: clarifications[i] ?? itemCategories[i] ?? item.categorySuggestion?.categoryId ?? null,
+        isAmbiguous,
+      };
+    });
   }
 
   function buildClarificationsPayload() {

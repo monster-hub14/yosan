@@ -164,7 +164,7 @@ export async function POST(req: NextRequest) {
           budgetId,
           uploadedById: budget.ownerId,
           originalFilename: att.filename,
-          storedFilename: filePath,
+          storedFilename,
           mimeType: att.contentType,
           fileSize: att.data.length,
           status: "PENDING",
