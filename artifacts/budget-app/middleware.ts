@@ -5,7 +5,6 @@ const SETUP_COOKIE = "budget_setup";
 const SESSION_COOKIE = "budget_session";
 
 const STATIC_PREFIXES = ["/_next", "/favicon.ico"];
-const ALWAYS_PUBLIC_API = ["/api/auth/login", "/api/auth/logout", "/api/auth/register"];
 
 function isStatic(pathname: string): boolean {
   return STATIC_PREFIXES.some((p) => pathname.startsWith(p));
@@ -16,8 +15,8 @@ function isSetupPath(pathname: string): boolean {
     pathname === "/api/setup" || pathname.startsWith("/api/setup/");
 }
 
-function isAlwaysPublicApi(pathname: string): boolean {
-  return ALWAYS_PUBLIC_API.some((p) => pathname === p || pathname.startsWith(p + "/"));
+function isAuthApiPath(pathname: string): boolean {
+  return pathname === "/api/auth" || pathname.startsWith("/api/auth/");
 }
 
 export async function middleware(request: NextRequest) {
@@ -29,8 +28,8 @@ export async function middleware(request: NextRequest) {
   const sessionToken = request.cookies.get(SESSION_COOKIE)?.value;
   const session = sessionToken ? await verifySessionToken(sessionToken) : null;
 
-  // Always-public: auth login/logout/register
-  if (isAlwaysPublicApi(pathname)) return NextResponse.next();
+  // All /api/auth/* routes are always accessible (login, logout, register, me, password)
+  if (isAuthApiPath(pathname)) return NextResponse.next();
 
   // /setup paths
   if (isSetupPath(pathname)) {
@@ -51,7 +50,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // All other routes require setup to be done
+  // All other routes require setup to be done first
   if (!setupDone) {
     if (pathname.startsWith("/api/")) {
       return NextResponse.json({ error: "Setup not complete" }, { status: 503 });

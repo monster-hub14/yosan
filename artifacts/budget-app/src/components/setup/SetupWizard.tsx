@@ -46,7 +46,7 @@ type Step = {
 const steps: Step[] = [
   { id: "account", label: "Admin Account", icon: UserRound },
   { id: "budget", label: "First Budget", icon: Wallet },
-  { id: "income", label: "Income", icon: TrendingUp, optional: true },
+  { id: "income", label: "Income", icon: TrendingUp },
   { id: "savings", label: "Savings Goal", icon: PiggyBank, optional: true },
   { id: "recurring", label: "Recurring Bills", icon: RefreshCw, optional: true },
   { id: "email", label: "Email / SMTP", icon: Mail, optional: true },
@@ -122,7 +122,11 @@ export default function SetupWizard() {
         if (!res.ok) { toast.error(data.error); return; }
       }
 
-      if (step.id === "income" && incomeData.amount) {
+      if (step.id === "income") {
+        if (!incomeData.amount || !incomeData.name) {
+          toast.error("Income source name and amount are required");
+          return;
+        }
         const res = await fetch("/api/setup/income", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -174,11 +178,13 @@ export default function SetupWizard() {
       }
 
       if (step.id === "ai" && aiData.apiKey) {
-        await fetch("/api/settings/ai", {
-          method: "PUT",
+        const res = await fetch("/api/setup/ai", {
+          method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...aiData, isEnabled: true }),
+          body: JSON.stringify(aiData),
         });
+        const data = await res.json();
+        if (!res.ok) { toast.error(data.error); return; }
       }
 
       if (step.id === "done") {
