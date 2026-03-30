@@ -51,8 +51,8 @@ export async function POST(request: NextRequest, { params }: Params) {
     include: { receipt: true },
   });
   if (!pending) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  if (pending.status === "CONFIRMED" || pending.status === "DISCARDED") {
-    return NextResponse.json({ error: `Already ${pending.status.toLowerCase()}` }, { status: 409 });
+  if (pending.status === "DISCARDED") {
+    return NextResponse.json({ error: "Already discarded" }, { status: 409 });
   }
 
   const access = await requireBudgetWrite(session, pending.budgetId);
@@ -74,10 +74,7 @@ export async function POST(request: NextRequest, { params }: Params) {
   // Handle "keep_existing" — user chose to discard this new import
   if (duplicateResolution === "keep_existing") {
     await db.$transaction(async (tx) => {
-      await tx.pendingImport.update({
-        where: { id },
-        data: { status: "DISCARDED" },
-      });
+      await tx.pendingImport.delete({ where: { id } });
       if (pending.receiptId) {
         await tx.receipt.update({
           where: { id: pending.receiptId },
@@ -126,20 +123,11 @@ export async function POST(request: NextRequest, { params }: Params) {
           },
         });
       }
-      // Mark this import as discarded (merged into existing)
-      await tx.pendingImport.update({
-        where: { id },
-        data: {
-          status: "DISCARDED",
-          confirmedAt: new Date(),
-          confirmedById: session.userId,
-          expenseId: targetExpense.id,
-        },
-      });
+      await tx.pendingImport.delete({ where: { id } });
       if (pending.receiptId) {
         await tx.receipt.update({
           where: { id: pending.receiptId },
-          data: { status: "DISCARDED" },
+          data: { status: "CONFIRMED" },
         });
       }
     });
@@ -206,19 +194,7 @@ export async function POST(request: NextRequest, { params }: Params) {
       });
     }
 
-    // Design decision: mark PendingImport as CONFIRMED (not deleted) to preserve
-    // an audit trail linking the original receipt ingest to the resulting expense.
-    // The status field prevents re-processing and the expenseId field provides
-    // full traceability. This is intentional and differs from a naive delete approach.
-    await tx.pendingImport.update({
-      where: { id },
-      data: {
-        status: "CONFIRMED",
-        confirmedAt: new Date(),
-        confirmedById: session.userId,
-        expenseId: newExpense.id,
-      },
-    });
+    await tx.pendingImport.delete({ where: { id } });
 
     // Update receipt status
     if (pending.receiptId) {
@@ -246,8 +222,6 @@ export async function POST(request: NextRequest, { params }: Params) {
     return newExpense;
   });
 
-  // Fire-and-forget: save memory ONLY for non-ambiguous items
-  // Build a set of ambiguous item descriptions from clarifications (answered by user) and body items
   const ambiguousItemDescs = new Set<string>(
     (body.clarifications ?? [])
       .filter((c) => c.itemDescription)
