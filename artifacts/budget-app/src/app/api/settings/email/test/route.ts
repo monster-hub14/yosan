@@ -35,10 +35,11 @@ export async function POST(request: NextRequest) {
     const result = await testEmailConfig({
       host: config.smtpHost,
       port: config.smtpPort,
+      smtpEncryption: (config as { smtpEncryption?: string }).smtpEncryption ?? "STARTTLS",
       user: config.smtpUser ?? undefined,
       pass: decryptedPass ?? undefined,
       fromAddress: config.fromAddress,
-      fromName: config.fromName,
+      fromName: config.fromName ?? "Budget App",
       toAddress: body.toAddress,
     });
     return NextResponse.json(result);

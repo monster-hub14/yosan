@@ -79,6 +79,7 @@ export async function sendMail(options: SendMailOptions): Promise<{ ok: boolean;
 export async function testEmailConfig(config: {
   host: string;
   port: number;
+  smtpEncryption?: string;
   user?: string;
   pass?: string;
   fromAddress: string;
@@ -86,11 +87,13 @@ export async function testEmailConfig(config: {
   toAddress: string;
 }): Promise<{ ok: boolean; error?: string }> {
   try {
+    const enc = config.smtpEncryption ?? (config.port === 465 ? "TLS" : "STARTTLS");
     const nodemailer = await import("nodemailer");
     const transporter = nodemailer.createTransport({
       host: config.host,
       port: config.port,
-      secure: config.port === 465,
+      secure: enc === "TLS",
+      requireTLS: enc === "STARTTLS",
       auth: config.user && config.pass ? { user: config.user, pass: config.pass } : undefined,
     });
 
