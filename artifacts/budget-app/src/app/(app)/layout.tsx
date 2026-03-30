@@ -4,6 +4,7 @@ import { getActiveBudgetId } from "@/lib/active-budget";
 import AppSidebar from "@/components/layout/AppSidebar";
 import AppHeader from "@/components/layout/AppHeader";
 import { UploadFAB } from "@/components/receipts/upload-fab";
+import { LoginReceiptPrompt } from "@/components/receipts/login-receipt-prompt";
 
 export default async function AppLayout({
   children,
@@ -26,6 +27,7 @@ export default async function AppLayout({
         <main className="flex-1 overflow-y-auto p-6">{children}</main>
       </div>
       <UploadFAB />
+      <LoginReceiptPrompt />
     </div>
   );
 }

@@ -20,6 +20,7 @@ import { db } from "@/lib/db";
 import { writeFile, mkdir } from "fs/promises";
 import path from "path";
 import crypto from "crypto";
+import { processReceipt } from "@/lib/ai/process-receipt";
 
 const UPLOAD_DIR = process.env.UPLOAD_DIR ?? "./uploads";
 const WEBHOOK_SECRET = process.env.WEBHOOK_EMAIL_SECRET;
@@ -175,7 +176,7 @@ export async function POST(req: NextRequest) {
           budgetId,
           userId: budget.ownerId,
           receiptId: receipt.id,
-          status: "PENDING",
+          status: "PROCESSING",
           data: JSON.stringify({
             emailFrom: email.from,
             emailSubject: email.subject,
@@ -184,6 +185,10 @@ export async function POST(req: NextRequest) {
           }),
         },
       });
+
+      // Trigger AI extraction (non-blocking)
+      processReceipt(pending.id, receipt.id, budgetId, budget.ownerId, filePath, att.contentType)
+        .catch((err) => console.error("[email-webhook] AI processing error:", err));
 
       results.push({ pendingId: pending.id, filename: att.filename });
     }

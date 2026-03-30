@@ -98,6 +98,7 @@ model User {
   confirmedImports      PendingImport[] @relation("ConfirmedImports")
   soloShares            BudgetSoloShare[]
   aiUsageLogs           AIUsageLog[]
+  aiControl             UserAIControl?
   addedExpenses         Expense[]       @relation("AddedExpenses")
 }
 
@@ -421,6 +422,23 @@ model AIUsageLog {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, feature, windowDate])
+}
+
+/// Per-user AI feature overrides managed by admins.
+/// NULL on a limit field means "use the global default from AIProviderConfig".
+/// aiEnabled=false hard-disables AI for this user regardless of global setting.
+model UserAIControl {
+  id                  String   @id @default(cuid())
+  userId              String   @unique
+  aiEnabled           Boolean  @default(true)
+  extractionEnabled   Boolean  @default(true)
+  categorizationEnabled Boolean @default(true)
+  dailyLimit          Int?
+  weeklyLimit         Int?
+  monthlyLimit        Int?
+  updatedAt           DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model EmailConfig {

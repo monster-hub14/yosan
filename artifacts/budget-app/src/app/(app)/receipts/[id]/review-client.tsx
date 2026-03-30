@@ -217,6 +217,8 @@ export function ReviewClient({ id }: ReviewClientProps) {
 
       if (data.action === "discarded") {
         toast.info("Receipt discarded — existing expense kept");
+      } else if (data.action === "merged") {
+        toast.success("Receipt merged into existing expense");
       } else {
         toast.success("Receipt confirmed and added to your budget");
       }

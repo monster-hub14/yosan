@@ -19,6 +19,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { UserRound, Shield } from "lucide-react";
+import { UserAIControlButton } from "./user-ai-controls";
 
 export const metadata: Metadata = {
   title: "Users | Settings | Budget",
@@ -39,6 +40,7 @@ export default async function UsersPage() {
       email: true,
       role: true,
       createdAt: true,
+      aiControl: { select: { id: true } },
       _count: { select: { ownedBudgets: true } },
     },
   });
@@ -61,6 +63,7 @@ export default async function UsersPage() {
                 <TableHead>Email</TableHead>
                 <TableHead>Role</TableHead>
                 <TableHead>Budgets</TableHead>
+                <TableHead>AI</TableHead>
                 <TableHead>Joined</TableHead>
               </TableRow>
             </TableHeader>
@@ -92,6 +95,16 @@ export default async function UsersPage() {
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
                     {user._count.ownedBudgets}
+                  </TableCell>
+                  <TableCell>
+                    <UserAIControlButton
+                      user={{
+                        id: user.id,
+                        name: user.name,
+                        email: user.email,
+                        hasOverride: user.aiControl != null,
+                      }}
+                    />
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
                     {new Date(user.createdAt).toLocaleDateString("en-US", {

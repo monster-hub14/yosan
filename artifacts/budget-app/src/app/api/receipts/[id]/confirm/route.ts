@@ -88,6 +88,63 @@ export async function POST(request: NextRequest, { params }: Params) {
     return NextResponse.json({ ok: true, action: "discarded" });
   }
 
+  // Handle "merge" — merge the new receipt's items/notes into the existing matched expense
+  if (duplicateResolution?.startsWith("merge:")) {
+    const targetExpenseId = duplicateResolution.slice("merge:".length);
+    const targetExpense = await db.expense.findFirst({
+      where: { id: targetExpenseId, budgetId: pending.budgetId },
+      select: { id: true, amount: true, notes: true, receiptId: true },
+    });
+    if (!targetExpense) {
+      return NextResponse.json({ error: "Merge target not found" }, { status: 404 });
+    }
+    const parsedDataForMerge = JSON.parse(pending.data || "{}") as { items?: Array<{ description: string; amount: number; quantity?: number }> };
+    const mergeItems = body.items ?? parsedDataForMerge.items ?? [];
+
+    const mergeReceiptId = pending.receiptId ?? targetExpense.receiptId;
+    await db.$transaction(async (tx) => {
+      // Add receipt items to the existing expense
+      if (mergeItems.length > 0 && mergeReceiptId) {
+        await tx.receiptItem.createMany({
+          data: mergeItems.map((item) => ({
+            receiptId: mergeReceiptId,
+            expenseId: targetExpense.id,
+            name: item.description,
+            price: item.amount,
+            quantity: item.quantity ?? 1,
+          })),
+        });
+      }
+      // Merge the totals
+      if (total != null) {
+        await tx.expense.update({
+          where: { id: targetExpense.id },
+          data: {
+            amount: targetExpense.amount + total,
+            notes: [targetExpense.notes, notes].filter(Boolean).join(" | ") || targetExpense.notes || null,
+          },
+        });
+      }
+      // Mark this import as discarded (merged into existing)
+      await tx.pendingImport.update({
+        where: { id },
+        data: {
+          status: "DISCARDED",
+          confirmedAt: new Date(),
+          confirmedById: session.userId,
+          expenseId: targetExpense.id,
+        },
+      });
+      if (pending.receiptId) {
+        await tx.receipt.update({
+          where: { id: pending.receiptId },
+          data: { status: "DISCARDED" },
+        });
+      }
+    });
+    return NextResponse.json({ ok: true, action: "merged", expenseId: targetExpenseId });
+  }
+
   // Duplicate check (only if not already resolved)
   if (!duplicateResolution) {
     const duplicate = await detectDuplicate(pending.budgetId, merchant, total, dateStr);
@@ -99,6 +156,7 @@ export async function POST(request: NextRequest, { params }: Params) {
         reason: duplicate.reason,
         resolutionOptions: [
           { value: "keep_new", label: "Save as new expense" },
+          { value: `merge:${duplicate.matchedExpenseId}`, label: "Merge into existing expense" },
           { value: "keep_existing", label: "Discard this receipt (keep existing)" },
         ],
       }, { status: 409 });

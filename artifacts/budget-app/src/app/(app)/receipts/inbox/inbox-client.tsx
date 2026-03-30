@@ -110,6 +110,45 @@ export function InboxClient() {
     await load();
   }
 
+  const highConfidenceImports = imports.filter((imp) => {
+    if (imp.status !== "NEEDS_REVIEW") return false;
+    const d = getParsedData(imp);
+    return d.confidence === "high" && d.total != null;
+  });
+
+  async function handleBulkConfirmHighConfidence() {
+    if (highConfidenceImports.length === 0) return;
+    setBulkWorking(true);
+    let succeeded = 0;
+    let failed = 0;
+    await Promise.all(
+      highConfidenceImports.map(async (imp) => {
+        const d = getParsedData(imp);
+        const res = await fetch(`/api/receipts/${imp.id}/confirm`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            merchant: d.merchant ?? null,
+            date: d.date ?? null,
+            total: d.total ?? null,
+            items: (d.items ?? []).map((it: { description: string; amount: number; quantity?: number; categorySuggestion?: { categoryId?: string | null } | null }) => ({
+              description: it.description,
+              amount: it.amount,
+              quantity: it.quantity ?? 1,
+              categoryId: it.categorySuggestion?.categoryId ?? null,
+            })),
+          }),
+        });
+        if (res.ok) succeeded++;
+        else failed++;
+      })
+    );
+    setBulkWorking(false);
+    if (succeeded > 0) toast.success(`${succeeded} high-confidence receipt(s) confirmed`);
+    if (failed > 0) toast.error(`${failed} receipt(s) could not be confirmed`);
+    await load();
+  }
+
   async function handleCardDiscard(id: string) {
     setCardWorking((prev) => ({ ...prev, [id]: "discard" }));
     const res = await fetch(`/api/receipts/${id}/discard`, { method: "POST" });
@@ -190,8 +229,24 @@ export function InboxClient() {
           </SelectContent>
         </Select>
 
-        {reviewableImports.length > 1 && (
-          <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-2">
+          {highConfidenceImports.length > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleBulkConfirmHighConfidence}
+              disabled={bulkWorking}
+              className="text-green-600 border-green-500/30 hover:bg-green-500/10"
+            >
+              {bulkWorking ? (
+                <Loader2 className="w-3 h-3 mr-1.5 animate-spin" />
+              ) : (
+                <CheckCircle2 className="w-3 h-3 mr-1.5" />
+              )}
+              Confirm high-confidence ({highConfidenceImports.length})
+            </Button>
+          )}
+          {reviewableImports.length > 1 && (
             <Button
               variant="outline"
               size="sm"
@@ -206,8 +261,8 @@ export function InboxClient() {
               )}
               Discard all ({reviewableImports.length})
             </Button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* List */}
