@@ -122,7 +122,7 @@ export function UploadReceiptModal({ open, onClose, budgetId }: UploadModalProps
       toast.success("Receipt added to inbox");
       setTimeout(() => {
         handleClose();
-        if (importId) router.push(`/receipts/${importId}`);
+        if (importId) router.push(`/receipts/${importId}/review`);
         else router.push("/receipts/inbox");
       }, 1000);
     } catch (err) {
@@ -134,7 +134,7 @@ export function UploadReceiptModal({ open, onClose, budgetId }: UploadModalProps
   async function pollUntilReady(id: string, attempts = 0) {
     if (!id || attempts > 20) {
       setUploadState("done");
-      setTimeout(() => { handleClose(); router.push(`/receipts/${id}`); }, 800);
+      setTimeout(() => { handleClose(); router.push(`/receipts/${id}/review`); }, 800);
       return;
     }
     await new Promise((r) => setTimeout(r, 1500));
@@ -145,7 +145,7 @@ export function UploadReceiptModal({ open, onClose, budgetId }: UploadModalProps
       const status = (data as { import?: { status: string } }).import?.status;
       if (status === "NEEDS_REVIEW" || status === "FAILED") {
         setUploadState("done");
-        setTimeout(() => { handleClose(); router.push(`/receipts/${id}`); }, 800);
+        setTimeout(() => { handleClose(); router.push(`/receipts/${id}/review`); }, 800);
       } else {
         await pollUntilReady(id, attempts + 1);
       }

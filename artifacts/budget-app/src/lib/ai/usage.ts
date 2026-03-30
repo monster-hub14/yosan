@@ -79,10 +79,14 @@ export async function checkAndRecordUsage(
     db.aIUsageLog.count({ where: { userId, feature, windowDate: monthKey } }),
   ]);
 
-  // Resolve effective limits (per-user overrides global if set)
-  const effectiveDailyLimit = userControl?.dailyLimit ?? config?.dailyLimitPerUser ?? null;
-  const effectiveWeeklyLimit = userControl?.weeklyLimit ?? config?.weeklyLimitPerUser ?? null;
-  const effectiveMonthlyLimit = userControl?.monthlyLimit ?? config?.monthlyLimitPerUser ?? null;
+  // Resolve effective limits: global cap always applies; per-user limit further restricts if set
+  const minLimit = (a: number | null | undefined, b: number | null | undefined): number | null => {
+    if (a != null && b != null) return Math.min(a, b);
+    return (a ?? b ?? null) as number | null;
+  };
+  const effectiveDailyLimit = minLimit(userControl?.dailyLimit, config?.dailyLimitPerUser);
+  const effectiveWeeklyLimit = minLimit(userControl?.weeklyLimit, config?.weeklyLimitPerUser);
+  const effectiveMonthlyLimit = minLimit(userControl?.monthlyLimit, config?.monthlyLimitPerUser);
 
   if (effectiveDailyLimit != null && dayCount >= effectiveDailyLimit) {
     return {
