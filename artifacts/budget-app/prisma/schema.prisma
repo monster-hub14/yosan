@@ -61,6 +61,7 @@ enum ImportStatus {
   COMPLETED
   FAILED
   NEEDS_REVIEW
+  SAVED_FOR_LATER
   CONFIRMED
   DISCARDED
 }
@@ -387,13 +388,6 @@ enum AIFeature {
   RECURRING_CATEGORIZATION
   INSIGHTS
   FORECASTING
-}
-
-enum ImportStatus2 {
-  PENDING
-  CONFIRMED
-  DISCARDED
-  SAVED_FOR_LATER
 }
 
 model AIProviderConfig {

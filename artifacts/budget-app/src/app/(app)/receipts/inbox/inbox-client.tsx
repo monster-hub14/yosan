@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Inbox, Loader2, Clock, CheckCircle2, XCircle, AlertCircle, Upload,
-  RefreshCw, Receipt, ChevronRight, Filter, Trash2,
+  RefreshCw, Receipt, ChevronRight, Filter, Trash2, Save, Eye,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -14,7 +14,7 @@ import {
 import { UploadReceiptModal } from "@/components/receipts/upload-modal";
 import { formatDistanceToNow } from "date-fns";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 interface PendingImport {
@@ -37,16 +37,18 @@ const STATUS_LABELS: Record<string, { label: string; color: string; icon: React.
   PENDING: { label: "Pending", color: "text-muted-foreground", icon: Clock },
   PROCESSING: { label: "Processing", color: "text-blue-500", icon: Loader2 },
   NEEDS_REVIEW: { label: "Needs review", color: "text-amber-500", icon: AlertCircle },
+  SAVED_FOR_LATER: { label: "Saved for later", color: "text-blue-400", icon: Clock },
   CONFIRMED: { label: "Confirmed", color: "text-green-500", icon: CheckCircle2 },
   DISCARDED: { label: "Discarded", color: "text-muted-foreground", icon: XCircle },
   FAILED: { label: "Failed", color: "text-destructive", icon: XCircle },
 };
 
-const ALL_STATUSES = "PENDING,PROCESSING,NEEDS_REVIEW,CONFIRMED,DISCARDED,FAILED";
-const INBOX_STATUSES = "PENDING,PROCESSING,NEEDS_REVIEW";
+const ALL_STATUSES = "PENDING,PROCESSING,NEEDS_REVIEW,SAVED_FOR_LATER,CONFIRMED,DISCARDED,FAILED";
+const INBOX_STATUSES = "PENDING,PROCESSING,NEEDS_REVIEW,SAVED_FOR_LATER";
 
 export function InboxClient() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const initialStatus = searchParams.get("status") ?? "needs-review";
 
   const [filter, setFilter] = useState<string>(initialStatus);
@@ -54,6 +56,7 @@ export function InboxClient() {
   const [loading, setLoading] = useState(true);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [bulkWorking, setBulkWorking] = useState(false);
+  const [cardWorking, setCardWorking] = useState<Record<string, string>>({});
 
   const statusQuery = filter === "needs-review"
     ? INBOX_STATUSES
@@ -84,7 +87,9 @@ export function InboxClient() {
     return () => clearTimeout(t);
   }, [imports, load]);
 
-  const reviewableImports = imports.filter((i) => i.status === "NEEDS_REVIEW");
+  const reviewableImports = imports.filter(
+    (i) => i.status === "NEEDS_REVIEW" || i.status === "SAVED_FOR_LATER"
+  );
 
   async function handleBulkDiscard() {
     if (reviewableImports.length === 0) return;
@@ -103,6 +108,38 @@ export function InboxClient() {
       toast.success(`${reviewableImports.length} receipt(s) discarded`);
     }
     await load();
+  }
+
+  async function handleCardDiscard(id: string) {
+    setCardWorking((prev) => ({ ...prev, [id]: "discard" }));
+    const res = await fetch(`/api/receipts/${id}/discard`, { method: "POST" });
+    if (res.ok) {
+      toast.success("Receipt discarded");
+      await load();
+    } else {
+      toast.error("Failed to discard");
+    }
+    setCardWorking((prev) => { const n = { ...prev }; delete n[id]; return n; });
+  }
+
+  async function handleCardSaveForLater(id: string, currentData: string) {
+    setCardWorking((prev) => ({ ...prev, [id]: "save" }));
+    const res = await fetch(`/api/receipts/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ data: currentData, status: "SAVED_FOR_LATER" }),
+    });
+    if (res.ok) {
+      toast.success("Saved for later");
+      await load();
+    } else {
+      toast.error("Failed to save");
+    }
+    setCardWorking((prev) => { const n = { ...prev }; delete n[id]; return n; });
+  }
+
+  async function handleCardQuickConfirm(id: string) {
+    router.push(`/receipts/${id}`);
   }
 
   function getParsedData(imp: PendingImport) {
@@ -137,24 +174,24 @@ export function InboxClient() {
         </div>
       </div>
 
-      {/* Filter */}
-      <div className="flex items-center gap-2">
+      {/* Filter + Bulk actions */}
+      <div className="flex items-center gap-2 flex-wrap">
         <Filter className="w-4 h-4 text-muted-foreground" />
         <Select value={filter} onValueChange={setFilter}>
           <SelectTrigger className="w-44">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="needs-review">Needs review</SelectItem>
+            <SelectItem value="needs-review">Inbox (active)</SelectItem>
+            <SelectItem value="SAVED_FOR_LATER">Saved for later</SelectItem>
             <SelectItem value="CONFIRMED">Confirmed</SelectItem>
             <SelectItem value="DISCARDED">Discarded</SelectItem>
             <SelectItem value="all">All receipts</SelectItem>
           </SelectContent>
         </Select>
 
-        {/* Bulk actions — only show when viewing reviewable items */}
         {reviewableImports.length > 1 && (
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto">
             <Button
               variant="outline"
               size="sm"
@@ -206,63 +243,130 @@ export function InboxClient() {
               const meta = STATUS_LABELS[imp.status] ?? STATUS_LABELS.FAILED;
               const StatusIcon = meta.icon;
               const isProcessing = imp.status === "PROCESSING" || imp.status === "PENDING";
-              const clickable = imp.status === "NEEDS_REVIEW" || imp.status === "CONFIRMED";
+              const isActionable = imp.status === "NEEDS_REVIEW" || imp.status === "SAVED_FOR_LATER";
+              const clickable = isActionable || imp.status === "CONFIRMED";
+              const working = cardWorking[imp.id];
 
-              const inner = (
+              return (
                 <motion.div
                   key={imp.id}
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, height: 0 }}
-                  className={`rounded-xl border border-border bg-card p-4 flex items-center gap-4 ${
-                    clickable ? "hover:border-primary/40 transition-colors cursor-pointer" : ""
-                  }`}
+                  className="rounded-xl border border-border bg-card"
                 >
-                  <div className="p-2 rounded-lg bg-muted/50 shrink-0">
-                    <Receipt className="w-5 h-5 text-muted-foreground" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="font-medium truncate">
-                        {parsed.merchant || imp.receipt?.originalFilename || "Unknown receipt"}
-                      </p>
-                      {parsed.total != null && (
-                        <span className="text-sm font-semibold text-primary shrink-0">
-                          ${Number(parsed.total).toFixed(2)}
+                  {/* Main card row */}
+                  <div className="p-4 flex items-center gap-4">
+                    <div className="p-2 rounded-lg bg-muted/50 shrink-0">
+                      <Receipt className="w-5 h-5 text-muted-foreground" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium truncate">
+                          {parsed.merchant || imp.receipt?.originalFilename || "Unknown receipt"}
+                        </p>
+                        {parsed.total != null && (
+                          <span className="text-sm font-semibold text-primary shrink-0">
+                            ${Number(parsed.total).toFixed(2)}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <Badge
+                          variant="secondary"
+                          className={`text-xs gap-1 ${meta.color}`}
+                        >
+                          <StatusIcon className={`w-3 h-3 ${isProcessing ? "animate-spin" : ""}`} />
+                          {meta.label}
+                        </Badge>
+                        {parsed.date && (
+                          <span className="text-xs text-muted-foreground">
+                            {parsed.date}
+                          </span>
+                        )}
+                        <span className="text-xs text-muted-foreground ml-auto">
+                          {formatDistanceToNow(new Date(imp.createdAt), { addSuffix: true })}
                         </span>
+                      </div>
+                      {imp.error && (
+                        <p className="text-xs text-destructive mt-1 truncate">{imp.error}</p>
                       )}
                     </div>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <Badge
-                        variant="secondary"
-                        className={`text-xs gap-1 ${meta.color}`}
-                      >
-                        <StatusIcon className={`w-3 h-3 ${isProcessing ? "animate-spin" : ""}`} />
-                        {meta.label}
-                      </Badge>
-                      {parsed.date && (
-                        <span className="text-xs text-muted-foreground">
-                          {parsed.date}
-                        </span>
-                      )}
-                      <span className="text-xs text-muted-foreground ml-auto">
-                        {formatDistanceToNow(new Date(imp.createdAt), { addSuffix: true })}
-                      </span>
-                    </div>
-                    {imp.error && (
-                      <p className="text-xs text-destructive mt-1 truncate">{imp.error}</p>
+                    {clickable && (
+                      <Link href={`/receipts/${imp.id}`}>
+                        <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+                      </Link>
                     )}
                   </div>
-                  {clickable && <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />}
-                </motion.div>
-              );
 
-              return clickable ? (
-                <Link key={imp.id} href={`/receipts/${imp.id}`}>
-                  {inner}
-                </Link>
-              ) : (
-                <div key={imp.id}>{inner}</div>
+                  {/* Per-card quick actions for actionable items */}
+                  {isActionable && (
+                    <div className="flex items-center gap-1.5 px-4 pb-3 border-t border-border pt-3">
+                      <Button
+                        size="sm"
+                        variant="default"
+                        className="h-7 text-xs"
+                        onClick={() => handleCardQuickConfirm(imp.id)}
+                        disabled={!!working}
+                      >
+                        <Eye className="w-3 h-3 mr-1" />
+                        Review
+                      </Button>
+                      {imp.status !== "SAVED_FOR_LATER" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs"
+                          onClick={() => handleCardSaveForLater(imp.id, imp.data)}
+                          disabled={!!working}
+                        >
+                          {working === "save" ? (
+                            <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                          ) : (
+                            <Save className="w-3 h-3 mr-1" />
+                          )}
+                          Save for later
+                        </Button>
+                      )}
+                      {imp.status === "SAVED_FOR_LATER" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs"
+                          onClick={async () => {
+                            setCardWorking((prev) => ({ ...prev, [imp.id]: "unsave" }));
+                            const res = await fetch(`/api/receipts/${imp.id}`, {
+                              method: "PATCH",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ status: "NEEDS_REVIEW" }),
+                            });
+                            if (res.ok) { toast.success("Moved back to inbox"); await load(); }
+                            else toast.error("Failed");
+                            setCardWorking((prev) => { const n = { ...prev }; delete n[imp.id]; return n; });
+                          }}
+                          disabled={!!working}
+                        >
+                          <RefreshCw className="w-3 h-3 mr-1" />
+                          Return to inbox
+                        </Button>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+                        onClick={() => handleCardDiscard(imp.id)}
+                        disabled={!!working}
+                      >
+                        {working === "discard" ? (
+                          <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                        ) : (
+                          <Trash2 className="w-3 h-3 mr-1" />
+                        )}
+                        Discard
+                      </Button>
+                    </div>
+                  )}
+                </motion.div>
               );
             })}
           </div>

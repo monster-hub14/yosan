@@ -244,7 +244,7 @@ export function ReviewClient({ id }: ReviewClientProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           data: JSON.stringify(current),
-          status: "NEEDS_REVIEW",
+          status: "SAVED_FOR_LATER",
         }),
       });
       if (res.ok) {
