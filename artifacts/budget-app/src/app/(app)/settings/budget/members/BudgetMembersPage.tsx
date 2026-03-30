@@ -37,6 +37,7 @@ interface Share {
 interface SoloShare {
   id: string;
   userId: string;
+  role: string;
   user: User;
 }
 
@@ -238,7 +239,15 @@ export default function BudgetMembersPage({ budget, shares: initialShares, soloS
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Badge variant="secondary">Viewer</Badge>
+                      {(() => {
+                        const Icon = ROLE_ICONS[share.role] ?? Eye;
+                        return (
+                          <Badge variant="secondary" className="flex items-center gap-1">
+                            <Icon className="w-3 h-3" />
+                            {ROLE_LABELS[share.role] ?? share.role}
+                          </Badge>
+                        );
+                      })()}
                       <Button
                         variant="ghost"
                         size="icon"

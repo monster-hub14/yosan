@@ -61,6 +61,7 @@ export default async function BudgetMembersServerPage() {
       soloShares={budget.soloShares.map((s) => ({
         id: s.id,
         userId: s.userId ?? "",
+        role: s.role,
         user: s.user ?? { id: "", name: "Unknown", email: "" },
       }))}
       availableUsers={allUsers}

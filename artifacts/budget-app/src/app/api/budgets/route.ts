@@ -2,17 +2,31 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuth, requireAdmin, isSessionPayload } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 
+function buildAccessWhere(userId: string) {
+  const now = new Date();
+  return {
+    OR: [
+      { ownerId: userId },
+      { memberships: { some: { userId } } },
+      {
+        soloShares: {
+          some: {
+            userId,
+            isActive: true,
+            OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+          },
+        },
+      },
+    ],
+  };
+}
+
 export async function GET(request: NextRequest) {
   const session = await requireAuth(request);
   if (!isSessionPayload(session)) return session;
 
   const budgets = await db.budget.findMany({
-    where: {
-      OR: [
-        { ownerId: session.userId },
-        { memberships: { some: { userId: session.userId } } },
-      ],
-    },
+    where: buildAccessWhere(session.userId),
     orderBy: { createdAt: "asc" },
     include: {
       owner: { select: { id: true, name: true, email: true } },

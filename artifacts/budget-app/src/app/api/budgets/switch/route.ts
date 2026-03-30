@@ -9,12 +9,22 @@ export async function POST(request: NextRequest) {
 
   const { budgetId } = await request.json();
 
+  const now = new Date();
   const budget = await db.budget.findFirst({
     where: {
       id: budgetId,
       OR: [
         { ownerId: session.userId },
         { memberships: { some: { userId: session.userId } } },
+        {
+          soloShares: {
+            some: {
+              userId: session.userId,
+              isActive: true,
+              OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+            },
+          },
+        },
       ],
     },
     select: { id: true, name: true },

@@ -40,13 +40,23 @@ export function requireRole(
 export type BudgetAccessRole = "MEMBER" | "ADMIN";
 
 /**
+ * Map a BudgetSoloShare role string to a BudgetAccessRole tier.
+ * CO_OWNER → "ADMIN", everything else (VIEWER, HELPER) → "MEMBER"
+ */
+function soloRoleToAccessTier(role: string): BudgetAccessRole {
+  return role === "CO_OWNER" ? "ADMIN" : "MEMBER";
+}
+
+/**
  * Verify access to a budget.
  *
  * Access is granted if ANY of the following conditions are met:
  *   1. `user.role === "ADMIN"` — instance-level superuser override.
  *   2. `user.userId === budget.ownerId` — budget owner.
  *   3. The user has a `BudgetMembership` row with a role >= minRole.
- *   4. A valid `shareToken` is provided that matches an active `BudgetSoloShare`
+ *   4. The user has an active, non-expired `BudgetSoloShare` (authenticated user sharing)
+ *      with a solo role that maps to >= minRole.
+ *   5. A valid `shareToken` is provided that matches an active `BudgetSoloShare`
  *      for this budget with a role >= minRole (anonymous/token-based access).
  *
  * @param user        Authenticated session, or null for share-token-only access.
@@ -65,12 +75,23 @@ export async function requireBudgetAccess(
       return { membership: { role: "ADMIN" } };
     }
 
+    const now = new Date();
+
     const budget = await db.budget.findUnique({
       where: { id: budgetId },
       select: {
         ownerId: true,
         memberships: {
           where: { userId: user.userId },
+          take: 1,
+          select: { role: true },
+        },
+        soloShares: {
+          where: {
+            userId: user.userId,
+            isActive: true,
+            OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+          },
           take: 1,
           select: { role: true },
         },
@@ -91,6 +112,15 @@ export async function requireBudgetAccess(
         return forbidden("Budget admin access required");
       }
       return { membership };
+    }
+
+    const soloShare = budget.soloShares[0];
+    if (soloShare) {
+      const tier = soloRoleToAccessTier(soloShare.role);
+      if (minRole === "ADMIN" && tier !== "ADMIN") {
+        return forbidden("Budget admin access required");
+      }
+      return { membership: { role: soloShare.role } };
     }
   }
 
