@@ -129,6 +129,7 @@ model Budget {
   notificationPrefs     NotificationPreference[]
   emailForwarding       EmailForwardingConfig?
   pendingImports        PendingImport[]
+  categoryTargets       CategoryTarget[]
 }
 
 model BudgetMembership {
@@ -296,6 +297,7 @@ model Category {
   icon      String?
   isDefault Boolean  @default(false)
   parentId  String?
+  sortOrder Int      @default(0)
   createdAt DateTime @default(now())
 
   budget           Budget?           @relation(fields: [budgetId], references: [id], onDelete: Cascade)
@@ -305,6 +307,22 @@ model Category {
   recurringExpenses RecurringExpense[]
   merchantMemories MerchantMemory[]
   itemMemories     ItemMemory[]
+  targets          CategoryTarget[]
+}
+
+model CategoryTarget {
+  id         String   @id @default(cuid())
+  budgetId   String
+  categoryId String
+  amount     Float
+  periodType String   @default("monthly")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  budget   Budget   @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([budgetId, categoryId])
 }
 
 model MerchantMemory {

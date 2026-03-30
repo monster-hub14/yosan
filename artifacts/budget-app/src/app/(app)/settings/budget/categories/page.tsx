@@ -1,45 +1,22 @@
 import { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
-import { db } from "@/lib/db";
-import { requireBudgetRead } from "@/lib/auth/permissions";
+import { getActiveBudgetId } from "@/lib/active-budget";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tag } from "lucide-react";
+import { CategoriesClient } from "./categories-client";
 
-export const metadata: Metadata = {
-  title: "Categories | Settings | Budget",
-};
+export const metadata: Metadata = { title: "Categories | Settings | Budget" };
 
 export default async function CategoriesPage() {
   const session = await getSession();
   if (!session) redirect("/login");
-  if (session.role !== "ADMIN") redirect("/dashboard");
 
-  const budget = await db.budget.findFirst({
-    where: {
-      OR: [
-        { ownerId: session.userId },
-        { memberships: { some: { userId: session.userId } } },
-      ],
-    },
-    include: {
-      categories: {
-        where: { parentId: null },
-        orderBy: { name: "asc" },
-      },
-    },
-  });
-
-  if (budget) {
-    const access = await requireBudgetRead(session, budget.id);
-    if (access instanceof NextResponse) redirect("/dashboard");
-  }
-
-  const categories = budget?.categories || [];
+  const budgetId = await getActiveBudgetId(session.userId);
+  if (!budgetId) redirect("/dashboard");
 
   return (
-    <div className="space-y-6 max-w-xl">
+    <div className="space-y-6 max-w-2xl">
       <Card className="border-border">
         <CardHeader>
           <div className="flex items-center gap-3">
@@ -48,29 +25,12 @@ export default async function CategoriesPage() {
             </div>
             <div>
               <CardTitle>Expense Categories</CardTitle>
-              <CardDescription>{categories.length} categories configured</CardDescription>
+              <CardDescription>Manage your budget&apos;s category hierarchy</CardDescription>
             </div>
           </div>
         </CardHeader>
         <CardContent>
-          {categories.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No categories yet.</p>
-          ) : (
-            <div className="grid grid-cols-2 gap-2">
-              {categories.map((cat) => (
-                <div
-                  key={cat.id}
-                  className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border"
-                >
-                  <div
-                    className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                    style={{ backgroundColor: cat.color || "#6b7280" }}
-                  />
-                  <span className="text-sm truncate">{cat.name}</span>
-                </div>
-              ))}
-            </div>
-          )}
+          <CategoriesClient budgetId={budgetId} isAdmin={session.role === "ADMIN"} />
         </CardContent>
       </Card>
     </div>

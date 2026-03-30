@@ -126,8 +126,31 @@ docker-compose up -d
 - UI pages: Dashboard (SafeToSpendWidget + PayPeriodCard with Framer Motion animations), Income, Savings Goals, Recurring Bills, Budget Members management, New Budget creation
 - AppHeader: Budget switcher dropdown with user menu
 
-### Tasks #3–#5 — PENDING
-- Expense tracking, receipt scanning with AI (OCR + LLM extraction)
+### Task #3 — Receipt Capture, AI Processing & Pending Queue ✅ COMPLETE
+- File upload + email ingest → async AI extraction → PendingImport inbox/review flow
+- AI extraction/categorization with confidence, ItemMemory/MerchantMemory persistence
+- Duplicate detection with user resolution (keep_new/keep_existing/merge)
+- Email inbound webhook (multipart + JSON) with budget-scoped forwarding addresses
+- Per-user AI feature toggles (extraction, categorization, recurringCategorization, insights, forecasting)
+- Encrypted API key storage (AES-256-GCM); key never returned to client after save
+- PDF text extraction via pdfjs-dist; inline upload → review navigation
+- Security: path traversal guard, webhook secret required in production, terminal status protection
+
+### Task #4 — Expenses Management & Category System ✅ COMPLETE
+- Hierarchical category system: 11 top-level + 40+ subcategories seeded (Groceries, Utilities, Recreation > Fishing & Boating, etc.)
+- CategoryTarget model for per-category spend targets with period-based tracking
+- Full expense CRUD API: GET/POST/PATCH/DELETE /api/budgets/[id]/expenses/[expenseId]
+- Category CRUD API: GET/POST/PATCH/DELETE /api/categories/[id] with 2-level nesting guard
+- Category totals API: /api/categories/totals with actuals vs. targets, status per category
+- Category targets API: /api/budgets/[id]/category-targets
+- Expenses list page (/expenses): grouped by date, search, category filter, date range filter
+- Expense form modal with hierarchical category picker (searchable tree), Framer Motion safe-to-spend animation
+- Category totals panel: progress bars, color-coded status (on-track/approaching/over), click-to-set-target
+- Categories page (/categories): spending breakdown + management side by side
+- Settings categories page (/settings/budget/categories): full CRUD with expand/collapse hierarchy
+- AppSidebar: Categories nav item added
+
+### Tasks #5 — PENDING
 - Dashboard charts and analytics
 - Reports and CSV export
 - AI forecast and analysis

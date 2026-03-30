@@ -16,6 +16,7 @@ import {
   RefreshCw,
   LineChart,
   Sparkles,
+  Tag,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { type SessionPayload } from "@/lib/auth/types";
@@ -28,6 +29,7 @@ const navItems = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
   { href: "/income", icon: TrendingUp, label: "Income" },
   { href: "/expenses", icon: TrendingDown, label: "Expenses" },
+  { href: "/categories", icon: Tag, label: "Categories" },
   { href: "/receipts", icon: Receipt, label: "Receipts" },
   { href: "/recurring", icon: RefreshCw, label: "Recurring" },
   { href: "/savings", icon: PiggyBank, label: "Savings" },
