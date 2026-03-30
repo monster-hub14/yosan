@@ -1,5 +1,5 @@
 services:
-  budget:
+  app:
     build:
       context: .
       dockerfile: Dockerfile
@@ -8,14 +8,14 @@ services:
     ports:
       - "${HOST_PORT:-3000}:3000"
     volumes:
-      - budget_data:/data
-      - budget_uploads:/uploads
+      - budget_data:/app/data
+      - budget_uploads:/app/uploads
     env_file:
       - .env
     environment:
       - NODE_ENV=production
-      - DATABASE_URL=file:/data/budget.db
-      - UPLOAD_DIR=/uploads
+      - DATABASE_URL=file:/app/data/budget.db
+      - UPLOAD_DIR=/app/uploads
       - PORT=3000
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/setup/status').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"]

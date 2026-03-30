@@ -41,13 +41,13 @@ COPY --from=builder /workspace/artifacts/budget-app/prisma ./prisma
 COPY --from=builder /workspace/artifacts/budget-app/package.json ./package.json
 COPY --from=builder /workspace/artifacts/budget-app/next.config.ts ./next.config.ts
 
-RUN mkdir -p /data /uploads
-VOLUME ["/data", "/uploads"]
+RUN mkdir -p /app/data /app/uploads
+VOLUME ["/app/data", "/app/uploads"]
 
 # Non-root user for security
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs && \
-    chown -R nextjs:nodejs /app /data /uploads
+    chown -R nextjs:nodejs /app
 USER nextjs
 
 EXPOSE 3000
