@@ -12,6 +12,11 @@ enum Role {
   ADMIN
 }
 
+enum BudgetType {
+  SHARED
+  SOLO
+}
+
 enum BudgetMemberRole {
   ADMIN
   MEMBER
@@ -30,6 +35,7 @@ enum PayFrequency {
   MONTHLY
   QUARTERLY
   ANNUALLY
+  CUSTOM
 }
 
 enum ExpenseFrequency {
@@ -86,16 +92,18 @@ model User {
   incomeEntries         IncomeEntry[]
   notificationPrefs     NotificationPreference[]
   pendingImports        PendingImport[]
+  soloShares            BudgetSoloShare[]
 }
 
 model Budget {
-  id          String   @id @default(cuid())
+  id          String     @id @default(cuid())
   name        String
-  currency    String   @default("USD")
+  currency    String     @default("USD")
   description String?
   ownerId     String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  budgetType  BudgetType @default(SHARED)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
 
   owner                 User                    @relation(fields: [ownerId], references: [id])
   memberships           BudgetMembership[]
@@ -132,6 +140,7 @@ model BudgetMembership {
 model BudgetSoloShare {
   id          String          @id @default(cuid())
   budgetId    String
+  userId      String?
   shareToken  String          @unique @default(cuid())
   role        BudgetShareRole @default(VIEWER)
   label       String?
@@ -140,6 +149,7 @@ model BudgetSoloShare {
   createdAt   DateTime        @default(now())
 
   budget Budget @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  user   User?  @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model IncomeSource {
@@ -148,6 +158,7 @@ model IncomeSource {
   name        String
   amount      Float
   frequency   PayFrequency @default(BIWEEKLY)
+  customDays  Int?
   nextPayDate DateTime?
   isActive    Boolean      @default(true)
   notes       String?
@@ -174,16 +185,18 @@ model IncomeEntry {
 }
 
 model SavingsGoal {
-  id            String    @id @default(cuid())
-  budgetId      String
-  name          String
-  targetAmount  Float
-  currentAmount Float     @default(0)
-  targetDate    DateTime?
-  isActive      Boolean   @default(true)
-  notes         String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id                String    @id @default(cuid())
+  budgetId          String
+  name              String
+  targetAmount      Float
+  currentAmount     Float     @default(0)
+  perPaycheckAmount Float?
+  isMonthlyGoal     Boolean   @default(false)
+  targetDate        DateTime?
+  isActive          Boolean   @default(true)
+  notes             String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   budget Budget @relation(fields: [budgetId], references: [id], onDelete: Cascade)
 }

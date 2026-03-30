@@ -1,57 +1,69 @@
 import { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
+import { getActiveBudgetId } from "@/lib/active-budget";
 import { db } from "@/lib/db";
-import { requireBudgetAccess } from "@/lib/auth/permissions";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users } from "lucide-react";
+import BudgetMembersPage from "./BudgetMembersPage";
+import { Button } from "@/components/ui/button";
+import Link from "next/link";
+import { Lock } from "lucide-react";
 
-export const metadata: Metadata = {
-  title: "Budget Members | Settings | Budget",
-};
+export const metadata: Metadata = { title: "Budget Members | Budget" };
 
-export default async function BudgetMembersPage() {
+export default async function BudgetMembersServerPage() {
   const session = await getSession();
   if (!session) redirect("/login");
   if (session.role !== "ADMIN") redirect("/dashboard");
 
-  const budget = await db.budget.findFirst({
-    where: {
-      OR: [
-        { ownerId: session.userId },
-        { memberships: { some: { userId: session.userId } } },
-      ],
-    },
-    select: { id: true },
-  });
+  const budgetId = await getActiveBudgetId(session.userId);
 
-  if (budget) {
-    const access = await requireBudgetAccess(session, budget.id, "MEMBER");
-    if (access instanceof NextResponse) redirect("/dashboard");
+  if (!budgetId) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full gap-4 text-center">
+        <Lock className="w-12 h-12 text-muted-foreground" />
+        <div>
+          <h2 className="text-xl font-semibold">No budget selected</h2>
+          <p className="text-muted-foreground text-sm mt-1">Create a budget first to manage members.</p>
+        </div>
+        <Button asChild><Link href="/budgets/new">Create budget</Link></Button>
+      </div>
+    );
   }
 
+  const budget = await db.budget.findUnique({
+    where: { id: budgetId },
+    include: {
+      memberships: { include: { user: { select: { id: true, name: true, email: true } } } },
+      soloShares: { where: { isActive: true }, include: { user: { select: { id: true, name: true, email: true } } } },
+    },
+  });
+
+  if (!budget) redirect("/dashboard");
+
+  const allUsers = await db.user.findMany({
+    where: { id: { not: session.userId } },
+    select: { id: true, name: true, email: true },
+  });
+
   return (
-    <div className="space-y-6 max-w-xl">
-      <Card className="border-border">
-        <CardHeader>
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-muted">
-              <Users className="w-5 h-5 text-muted-foreground" />
-            </div>
-            <div>
-              <CardTitle>Budget Members</CardTitle>
-              <CardDescription>Manage who can access this budget</CardDescription>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">
-            Member management features are coming soon. You can invite users from
-            the Users settings page.
-          </p>
-        </CardContent>
-      </Card>
-    </div>
+    <BudgetMembersPage
+      budget={{
+        id: budget.id,
+        name: budget.name,
+        budgetType: budget.budgetType,
+        ownerId: budget.ownerId,
+      }}
+      shares={budget.memberships.map((s) => ({
+        id: s.id,
+        role: s.role,
+        user: s.user,
+      }))}
+      soloShares={budget.soloShares.map((s) => ({
+        id: s.id,
+        userId: s.userId ?? "",
+        user: s.user ?? { id: "", name: "Unknown", email: "" },
+      }))}
+      availableUsers={allUsers}
+    />
   );
 }

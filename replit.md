@@ -117,8 +117,17 @@ docker-compose up -d
 - Docker multi-stage build + docker-compose with named volumes
 - TrueNAS SCALE self-hosting guide
 
-### Tasks #2–#5 — PENDING
-- Receipt scanning with AI (OCR + LLM extraction)
-- Dashboard with charts and analytics
-- Budget tracking with categories and limits
+### Task #2 — Budget Model, Income & Pay-Period Engine ✅ COMPLETE
+- Schema: `BudgetType` (SHARED/SOLO), `CUSTOM` pay frequency, `customDays`, `perPaycheckAmount`, `isMonthlyGoal`, `userId` on `BudgetSoloShare`
+- Pay-period engine: `computePayPeriod()`, `monthlyToPerPeriod()`, `getPeriodsPerMonth()` in `src/lib/pay-period.ts`
+- Safe-to-spend engine: `computeSafeToSpend()` returns status: `on-track | caution | at-risk` in `src/lib/safe-to-spend.ts`
+- Active budget helper: cookie-based budget switcher in `src/lib/active-budget.ts`
+- API routes: `/api/budgets`, `/api/budgets/[id]`, `/api/budgets/[id]/members`, `/api/budgets/[id]/income-sources`, `/api/budgets/[id]/income-entries`, `/api/budgets/[id]/savings-goals`, `/api/budgets/[id]/recurring`, `/api/budgets/switch`, `/api/dashboard`
+- UI pages: Dashboard (SafeToSpendWidget + PayPeriodCard with Framer Motion animations), Income, Savings Goals, Recurring Bills, Budget Members management, New Budget creation
+- AppHeader: Budget switcher dropdown with user menu
+
+### Tasks #3–#5 — PENDING
+- Expense tracking, receipt scanning with AI (OCR + LLM extraction)
+- Dashboard charts and analytics
 - Reports and CSV export
+- AI forecast and analysis
