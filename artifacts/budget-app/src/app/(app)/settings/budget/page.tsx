@@ -1,9 +1,12 @@
 import { Metadata } from "next";
+import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
+import { requireBudgetAccess } from "@/lib/auth/permissions";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Wallet } from "lucide-react";
+import { NextResponse } from "next/server";
 
 export const metadata: Metadata = {
   title: "Budget Settings | Budget",
@@ -11,26 +14,25 @@ export const metadata: Metadata = {
 
 export default async function BudgetSettingsPage() {
   const session = await getSession();
+  if (!session) redirect("/login");
 
-  const budget = session
-    ? await db.budget.findFirst({
-        where: {
-          OR: [
-            { ownerId: session.userId },
-            { memberships: { some: { userId: session.userId } } },
-          ],
+  const budget = await db.budget.findFirst({
+    where: {
+      OR: [
+        { ownerId: session.userId },
+        { memberships: { some: { userId: session.userId } } },
+      ],
+    },
+    include: {
+      _count: {
+        select: {
+          memberships: true,
+          expenses: true,
+          incomeSources: true,
         },
-        include: {
-          _count: {
-            select: {
-              memberships: true,
-              expenses: true,
-              incomeSources: true,
-            },
-          },
-        },
-      })
-    : null;
+      },
+    },
+  });
 
   if (!budget) {
     return (
@@ -42,6 +44,11 @@ export default async function BudgetSettingsPage() {
         </Card>
       </div>
     );
+  }
+
+  const access = await requireBudgetAccess(session, budget.id, "MEMBER");
+  if (access instanceof NextResponse) {
+    redirect("/dashboard");
   }
 
   return (
@@ -61,25 +68,35 @@ export default async function BudgetSettingsPage() {
         <CardContent className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Currency</p>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">
+                Currency
+              </p>
               <Badge variant="secondary">{budget.currency}</Badge>
             </div>
             <div className="space-y-1">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Members</p>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">
+                Members
+              </p>
               <p className="text-sm font-medium">{budget._count.memberships + 1}</p>
             </div>
             <div className="space-y-1">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Income Sources</p>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">
+                Income Sources
+              </p>
               <p className="text-sm font-medium">{budget._count.incomeSources}</p>
             </div>
             <div className="space-y-1">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Total Expenses</p>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">
+                Total Expenses
+              </p>
               <p className="text-sm font-medium">{budget._count.expenses}</p>
             </div>
           </div>
           {budget.description && (
             <div className="space-y-1">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Description</p>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">
+                Description
+              </p>
               <p className="text-sm">{budget.description}</p>
             </div>
           )}

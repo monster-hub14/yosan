@@ -11,8 +11,12 @@ function isStatic(pathname: string): boolean {
 }
 
 function isSetupPath(pathname: string): boolean {
-  return pathname === "/setup" || pathname.startsWith("/setup/") ||
-    pathname === "/api/setup" || pathname.startsWith("/api/setup/");
+  return (
+    pathname === "/setup" ||
+    pathname.startsWith("/setup/") ||
+    pathname === "/api/setup" ||
+    pathname.startsWith("/api/setup/")
+  );
 }
 
 function isAuthApiPath(pathname: string): boolean {
@@ -24,12 +28,17 @@ export async function middleware(request: NextRequest) {
 
   if (isStatic(pathname)) return NextResponse.next();
 
-  const setupDone = request.cookies.get(SETUP_COOKIE)?.value === "done";
   const sessionToken = request.cookies.get(SESSION_COOKIE)?.value;
   const session = sessionToken ? await verifySessionToken(sessionToken) : null;
 
-  // All /api/auth/* routes are always accessible (login, logout, register, me, password)
+  // All /api/auth/* routes are always accessible
   if (isAuthApiPath(pathname)) return NextResponse.next();
+
+  // Determine setup state from cookie OR from a valid session.
+  // A valid budget_session JWT can only exist after setup account creation,
+  // so its presence is authoritative proof that setup has been done.
+  const cookieSetupDone = request.cookies.get(SETUP_COOKIE)?.value === "done";
+  const setupDone = cookieSetupDone || session !== null;
 
   // /setup paths
   if (isSetupPath(pathname)) {

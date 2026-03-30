@@ -1,6 +1,9 @@
 import { Metadata } from "next";
+import { redirect } from "next/navigation";
+import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
+import { requireBudgetAccess } from "@/lib/auth/permissions";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tag } from "lucide-react";
 
@@ -10,23 +13,27 @@ export const metadata: Metadata = {
 
 export default async function CategoriesPage() {
   const session = await getSession();
+  if (!session) redirect("/login");
 
-  const budget = session
-    ? await db.budget.findFirst({
-        where: {
-          OR: [
-            { ownerId: session.userId },
-            { memberships: { some: { userId: session.userId } } },
-          ],
-        },
-        include: {
-          categories: {
-            where: { parentId: null },
-            orderBy: { name: "asc" },
-          },
-        },
-      })
-    : null;
+  const budget = await db.budget.findFirst({
+    where: {
+      OR: [
+        { ownerId: session.userId },
+        { memberships: { some: { userId: session.userId } } },
+      ],
+    },
+    include: {
+      categories: {
+        where: { parentId: null },
+        orderBy: { name: "asc" },
+      },
+    },
+  });
+
+  if (budget) {
+    const access = await requireBudgetAccess(session, budget.id, "MEMBER");
+    if (access instanceof NextResponse) redirect("/dashboard");
+  }
 
   const categories = budget?.categories || [];
 

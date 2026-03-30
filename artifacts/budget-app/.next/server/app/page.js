@@ -193,7 +193,7 @@ module.exports = require("next/dist/server/app-render/dynamic-access-async-stora
 
 /***/ }),
 
-/***/ "../app-render/work-async-storage.external":
+/***/ "./work-async-storage.external":
 /*!*****************************************************************************!*\
   !*** external "next/dist/server/app-render/work-async-storage.external.js" ***!
   \*****************************************************************************/
@@ -343,7 +343,7 @@ module.exports = require("util");
 var __webpack_require__ = require("../webpack-runtime.js");
 __webpack_require__.C(exports);
 var __webpack_exec__ = (moduleId) => (__webpack_require__(__webpack_require__.s = moduleId))
-var __webpack_exports__ = __webpack_require__.X(0, ["vendor-chunks/next@15.5.14_react-dom@19.1.0_react@19.1.0__react@19.1.0","vendor-chunks/sonner@2.0.7_react-dom@19.1.0_react@19.1.0__react@19.1.0","vendor-chunks/next-themes@0.4.6_react-dom@19.1.0_react@19.1.0__react@19.1.0","vendor-chunks/@swc+helpers@0.5.15","vendor-chunks/jose@5.10.0"], () => (__webpack_exec__("(rsc)/../../node_modules/.pnpm/next@15.5.14_react-dom@19.1.0_react@19.1.0__react@19.1.0/node_modules/next/dist/build/webpack/loaders/next-app-loader/index.js?name=app%2Fpage&page=%2Fpage&appPaths=%2Fpage&pagePath=private-next-app-dir%2Fpage.tsx&appDir=%2Fhome%2Frunner%2Fworkspace%2Fartifacts%2Fbudget-app%2Fsrc%2Fapp&pageExtensions=tsx&pageExtensions=ts&pageExtensions=jsx&pageExtensions=js&rootDir=%2Fhome%2Frunner%2Fworkspace%2Fartifacts%2Fbudget-app&isDev=true&tsconfigPath=tsconfig.json&basePath=&assetPrefix=&nextConfigOutput=&preferredRegion=&middlewareConfig=e30%3D&isGlobalNotFoundEnabled=!")));
+var __webpack_exports__ = __webpack_require__.X(0, ["vendor-chunks/next@15.5.14_react-dom@19.1.0_react@19.1.0__react@19.1.0","vendor-chunks/jose@5.10.0","vendor-chunks/sonner@2.0.7_react-dom@19.1.0_react@19.1.0__react@19.1.0","vendor-chunks/next-themes@0.4.6_react-dom@19.1.0_react@19.1.0__react@19.1.0","vendor-chunks/@swc+helpers@0.5.15"], () => (__webpack_exec__("(rsc)/../../node_modules/.pnpm/next@15.5.14_react-dom@19.1.0_react@19.1.0__react@19.1.0/node_modules/next/dist/build/webpack/loaders/next-app-loader/index.js?name=app%2Fpage&page=%2Fpage&appPaths=%2Fpage&pagePath=private-next-app-dir%2Fpage.tsx&appDir=%2Fhome%2Frunner%2Fworkspace%2Fartifacts%2Fbudget-app%2Fsrc%2Fapp&pageExtensions=tsx&pageExtensions=ts&pageExtensions=jsx&pageExtensions=js&rootDir=%2Fhome%2Frunner%2Fworkspace%2Fartifacts%2Fbudget-app&isDev=true&tsconfigPath=tsconfig.json&basePath=&assetPrefix=&nextConfigOutput=&preferredRegion=&middlewareConfig=e30%3D&isGlobalNotFoundEnabled=!")));
 module.exports = __webpack_exports__;
 
 })();
