@@ -1,0 +1,829 @@
+Build a self-hosted, AI-powered, receipt-driven budget app with the exact product concept, architecture, and constraints below.
+
+This app is NOT a bank-linked budget app. Users will NOT connect bank accounts, credit cards, Plaid, or other financial providers. The app must be built around paycheck-based budgeting, receipt capture, recurring expenses, AI categorization, AI analysis, and forward-looking cash flow guidance.
+
+The app must be portable, self-hostable, and designed to run outside Replit on a local TrueNAS SCALE server using Docker.
+
+==================================================
+CORE PRODUCT IDENTITY
+==================================================
+
+This is a budget app for individuals, couples, and families who want to manage their money without linking bank accounts.
+
+The app must build the budget from:
+- income schedules
+- manual income entries
+- recurring expenses
+- uploaded receipt photos
+- uploaded screenshots
+- optional forwarded email receipts
+- AI extraction and categorization
+- AI analysis and forecasting
+
+The app should feel modern, engaging, visually alive, and supportive rather than cold, boring, or overly corporate.
+
+==================================================
+REQUIRED STACK
+==================================================
+
+Use this exact stack unless there is a very strong technical reason not to:
+
+- Next.js
+- TypeScript
+- Tailwind CSS
+- shadcn/ui
+- Framer Motion
+- SQLite
+- Prisma ORM
+- Docker
+- Docker Compose
+- server-side API routes or server actions only for AI calls
+- responsive mobile-first UI
+
+The architecture must be clean, modular, and portable.
+
+==================================================
+TRUENAS / SELF-HOSTING REQUIREMENTS
+==================================================
+
+This app will be distributed through GitHub and self-hosted by users on TrueNAS SCALE.
+
+Requirements:
+- Must run cleanly in Docker on TrueNAS SCALE
+- Must not depend on Replit-only services, databases, or deployment features
+- Must support persistent mounted volumes for:
+  - SQLite database file
+  - uploaded receipt images
+  - optional email-related storage if needed
+- Must include:
+  - Dockerfile
+  - docker-compose.yml
+  - .env.example
+  - clear local dev instructions
+  - clear TrueNAS deployment instructions
+- Keep the app portable so code can be exported from Replit and run elsewhere with minimal changes
+
+Do NOT use:
+- Replit database
+- Replit auth
+- Replit hosting assumptions
+- vendor-locked services unless they are optional and clearly abstracted
+
+==================================================
+DATABASE AND STORAGE RULES
+==================================================
+
+Use SQLite as the primary database.
+
+Requirements:
+- Store the SQLite database in a persistent mounted volume
+- Use Prisma schema and migrations
+- Include seed data for development
+- Do NOT use JSON files, flat files, or in-memory objects as the primary database
+- Do NOT use localStorage as the primary source of truth
+- localStorage may only be used for temporary UI state if needed
+
+Store uploaded receipt images/screenshots on disk in a persistent mounted volume.
+
+==================================================
+AUTHENTICATION AND ACCOUNT MODEL
+==================================================
+
+Build secure local authentication.
+
+Requirements:
+- support account creation and login
+- support admin and regular users
+- user-specific access must be enforced by budget permissions
+
+Only the admin can create additional users.
+
+==================================================
+BUDGET OWNERSHIP MODEL
+==================================================
+
+The app must support two budget types:
+
+1. Shared Budget
+- Can only be created by an admin
+- Multiple users can belong to the same shared budget
+- All approved members can see and interact with the same shared budget data
+
+2. Solo Budget
+- Can be created by an admin for one user
+- Data is isolated even though it lives on the same server
+- Only the assigned user can see it by default
+
+A user may belong to multiple budgets.
+
+Examples:
+- a parent can belong to the household shared budget
+- that same parent can also be invited into a teen’s solo budget
+
+The UI must support switching between budgets the user has access to.
+
+==================================================
+SOLO BUDGET SHARING
+==================================================
+
+A solo budget owner must be able to invite another admin or another budget user to access their budget.
+
+Use simple sharing roles:
+- Viewer
+- Helper
+- Co-owner
+
+Suggested behavior:
+- Viewer: can view budget only
+- Helper: can help add expenses, review receipts, and assist with categorization
+- Co-owner: can fully manage that budget, including sharing permissions
+
+The solo budget owner must be able to remove access later.
+
+==================================================
+INCOME SYSTEM
+==================================================
+
+The app must support manual and recurring income.
+
+Users must be able to:
+- define a pay schedule:
+  - weekly
+  - biweekly
+  - twice monthly
+  - monthly
+  - custom
+- define pay amount
+- define next pay date
+- create additional recurring income sources
+- manually enter one-off income entries if they do not want to define a schedule
+
+==================================================
+PAYCHECK-BASED BUDGETING
+==================================================
+
+The default budgeting model must be paycheck-based, not monthly.
+
+The dashboard must focus on:
+- current pay period
+- next paycheck date
+- days until next paycheck
+- remaining money until next paycheck
+- projected leftover or deficit by next paycheck
+
+The app may support monthly views later, but paycheck-based view must be the default and primary experience.
+
+==================================================
+SAVINGS TARGET SYSTEM
+==================================================
+
+Add a savings target system that affects budgeting calculations.
+
+Users must be able to define a savings target:
+- per paycheck
+- or per month
+
+If monthly:
+- convert it into pay-period allocation automatically
+
+Savings must be treated as a reserved amount before spending calculations.
+
+Safe-to-spend and available balance must account for:
+- savings target
+- recurring expenses
+- known expenses
+- current pay period
+
+Display:
+- savings goal
+- progress toward goal
+- status such as on track / at risk / off track
+
+==================================================
+SAFE-TO-SPEND SYSTEM
+==================================================
+
+The dashboard must prominently show a live “Safe to spend today” number.
+
+This calculation should consider:
+- money remaining in current pay period
+- days until next paycheck
+- savings target
+- upcoming recurring expenses
+- current known spending
+
+This should be framed as helpful guidance, not a hard rule.
+
+Use supportive language such as:
+- “Safe to spend today”
+- “To stay on track”
+
+==================================================
+RECURRING EXPENSES
+==================================================
+
+Users must be able to create recurring expenses such as:
+- rent
+- Netflix
+- utilities
+- subscriptions
+- phone bills
+- insurance
+
+For each recurring expense, ask for:
+- name
+- amount
+- frequency
+- next due date
+
+AI should suggest the category automatically, but the user must be able to edit it.
+
+==================================================
+RECEIPT-DRIVEN EXPENSE CAPTURE
+==================================================
+
+Receipt capture is the core expense input method.
+
+When a user logs in, the first thing they should see is a modal prompting them to:
+- upload a receipt photo
+- take a photo of a receipt
+- upload a screenshot
+- manually add an expense instead
+- skip for now / remind later
+
+Do NOT trap the user in the modal. Let them skip.
+
+Once a receipt or screenshot is submitted:
+- AI should extract merchant, date, total, and line items when possible
+- AI should categorize expenses
+- the app should create a pending draft for review before final save
+
+==================================================
+SMART RECEIPT INBOX / PENDING IMPORT QUEUE
+==================================================
+
+All incoming receipts and receipt-like imports must go into a pending review queue before they affect the budget.
+
+Sources include:
+- photo uploads
+- screenshots
+- forwarded email receipts
+
+Each pending item should show:
+- merchant
+- total
+- date
+- category suggestion
+- confidence state
+
+User actions:
+- confirm and save
+- edit before save
+- discard
+- save for later
+
+Nothing should affect the budget until the user approves it.
+
+==================================================
+EMAIL RECEIPT IMPORT
+==================================================
+
+Support optional receipt forwarding by email.
+
+Important rules:
+- Do NOT require full Gmail or Outlook mailbox access
+- Do NOT scan a user’s inbox
+- Only process emails explicitly forwarded by the user
+
+Email forwarding is configured at the budget level by the admin only.
+
+Rules:
+- one forwarding address per budget
+- shared budgets get one forwarding address for the shared budget
+- solo budgets get one forwarding address if the admin enables it
+- if email forwarding is not enabled for a budget, users in that budget should not see email forwarding features
+
+Forwarding addresses belong to budgets, not users.
+
+Incoming forwarded emails should:
+- be mapped to the correct budget
+- parse email body and attachments
+- support PDF/image receipt attachments where practical
+- create pending draft imports in the Smart Receipt Inbox
+- never auto-finalize without review
+
+In admin settings, include:
+- enable/disable email receipt import per budget
+- forwarding address display
+- copy address button
+- test email receipt forwarding button/status
+
+If a solo budget is created by an admin and email forwarding is desired, the admin must enable and configure it for that solo budget.
+
+==================================================
+AI PROVIDER CONFIGURATION
+==================================================
+
+The app must support instance-level AI configuration.
+
+Use Option A:
+- one instance-level AI provider setup for the whole app
+- admin configures it in the UI
+
+Requirements:
+- default provider is OpenAI
+- include a provider dropdown so other providers can be added later
+- allow admin to select the model
+- allow admin to choose a faster model or more capable reasoning/thinking model
+- allow future provider expansion without rewriting the architecture
+- store API keys securely on the server only
+- encrypt at rest if practical
+- never expose API keys back to the frontend after save
+- never log API keys
+
+Include:
+- API key input
+- masked display after save
+- Test AI Connection button
+
+If no AI provider is configured:
+- AI features must be disabled gracefully
+- the rest of the app must still work
+
+If AI fails:
+- show a clear message such as:
+  “AI features are offline at the moment, please enter receipt manually.”
+
+==================================================
+AI FEATURE TOGGLES AND ADMIN CONTROLS
+==================================================
+
+The admin must be able to:
+- disable all AI globally
+- disable specific AI features globally
+- disable specific AI features for an individual user
+
+Separate toggles for:
+- AI receipt extraction
+- AI expense categorization
+- AI recurring expense categorization
+- AI spending insights
+- AI forecasting
+
+==================================================
+AI USAGE LIMITS
+==================================================
+
+Only the admin can create users.
+
+When creating or editing a user, the admin must be able to set AI usage limits using request limits, not token-cost limits.
+
+Support:
+- daily request limit
+- weekly request limit
+- monthly request limit
+
+When a user reaches their AI limit:
+- show a clear message:
+  “You’ve reached your AI limit. You can still add expenses manually. Contact your admin for AI features.”
+
+Do not break the rest of the app when this happens.
+
+==================================================
+ITEM-LEVEL AI CATEGORIZATION
+==================================================
+
+Do NOT categorize only at the merchant level.
+
+The app must categorize at the item level when possible.
+
+Example:
+A Walmart receipt might contain:
+- eggs
+- paper towels
+- a battery
+
+These must not all be assigned to one category just because the merchant is Walmart.
+
+Requirements:
+- extract line items when possible
+- assign categories per item
+- allow manual edits
+- aggregate categories into budget totals
+
+If item-level extraction fails:
+- fall back to receipt-level categorization
+- still allow manual split/edit
+
+==================================================
+AMBIGUITY-AWARE LEARNING
+==================================================
+
+Do not blindly memorize all categorization decisions.
+
+The app must distinguish between:
+1. stable patterns
+2. ambiguous patterns
+
+Stable patterns can be remembered and reused confidently.
+Examples:
+- Takis -> groceries
+- Tide -> household
+- Netflix -> subscriptions
+
+Ambiguous patterns must NOT become permanent fixed rules.
+Examples:
+- batteries
+- tools
+- parts
+- supplies
+- accessories
+
+For ambiguous items:
+- remember that the item is ambiguous
+- remember previous contexts as hints
+- do NOT auto-assign one category forever
+- ask the user again when needed
+
+Example:
+- EverStart battery could be for a car, a boat, lawn equipment, etc.
+- if the user says it is for their car, categorize appropriately for that receipt
+- if it appears later, ask again unless the receipt provides enough context
+
+Use previous answers as hints, not as automatic truth.
+
+==================================================
+PURPOSE-BASED CATEGORIZATION
+==================================================
+
+The app must support both:
+- what an item is
+- what the spending was for
+
+Support hierarchical categories with top-level categories and subcategories.
+
+Examples:
+- fishing gear + boat battery + fiberglass repair can roll up into Recreation > Fishing / Boating
+- a car battery can roll up into Transportation > Vehicle Maintenance
+
+This purpose-based roll-up must be used in:
+- analysis
+- insights
+- budget summaries
+- category totals
+- safe-to-spend guidance when relevant
+
+The app should be able to ask contextual clarification questions such as:
+- “What is this battery for?”
+- “Are these items for fishing / boating?”
+
+When multiple related items appear on one receipt, AI should infer shared purpose where reasonable, without being overly aggressive.
+
+==================================================
+MERCHANT / ITEM MEMORY
+==================================================
+
+The app should learn from user-confirmed categorization decisions.
+
+Requirements:
+- remember stable item/category mappings
+- normalize merchant names
+- identify multi-category merchants
+- allow user corrections to improve future suggestions
+- always allow manual override
+
+Do not reduce everything to merchant-only memory.
+
+==================================================
+CONFIDENCE + TRUST SYSTEM
+==================================================
+
+Add confidence states for AI outputs.
+
+Apply confidence to:
+- receipt extraction
+- item-level categorization
+- purpose classification
+
+Use simple states:
+- high
+- medium
+- low
+
+UI behavior:
+- show visual confidence indicators using green / yellow / red
+- label things like:
+  - based on your past behavior
+  - AI guess
+  - needs clarification
+
+Only interrupt the user when confidence is low or ambiguity exists.
+
+Users must always be able to:
+- confirm
+- edit
+- skip
+- revisit unresolved items later
+
+==================================================
+DUPLICATE DETECTION + SMART MERGE
+==================================================
+
+The app must detect duplicate receipt imports and possible duplicate expenses before final save.
+
+Use signals such as:
+- merchant
+- total
+- date/time proximity
+- item list similarity
+- image/file similarity
+- email metadata
+
+Support outcomes:
+- no duplicate
+- possible duplicate
+- high confidence duplicate
+
+User actions:
+- keep new
+- keep existing
+- merge
+- cancel
+
+Merge behavior:
+- preserve best data from both sources
+- keep images and metadata where useful
+- never silently overwrite or delete
+
+Do not flag recurring expenses as duplicates.
+
+==================================================
+ANALYSIS + INSIGHTS
+==================================================
+
+Include an AI analysis section that reviews:
+- income
+- savings target
+- recurring expenses
+- receipt-based expenses
+- purpose-based spending categories
+- spending pace
+- current pay period
+
+The analysis should:
+- identify which categories the user is overspending in
+- explain category trends in plain language
+- estimate whether the user is on track to spend more than they earn
+- estimate when they may begin taking out more money than they are putting in if their current pattern continues
+- generate practical, supportive recommendations
+
+Use purpose-based rollups so analysis can say things like:
+- “You spent $300 on recreational fishing and boating this pay period.”
+- “You have $50 left in your recreation budget.”
+- “You are currently over your recreation target and should slow down.”
+
+==================================================
+CASH FLOW TIMELINE + FUTURE PROJECTION
+==================================================
+
+Add a future-looking cash flow timeline view.
+
+Requirements:
+- show projected balance over time
+- show current date to next paycheck at minimum
+- include upcoming paychecks
+- include recurring expenses
+- include savings allocation
+- incorporate current spending behavior
+- highlight danger zones when balance approaches zero or becomes negative
+
+Use:
+- line graph
+- timeline markers for paychecks and recurring expenses
+- simple AI explanation of projection
+
+Keep the first version visually clear and not overloaded.
+
+==================================================
+EMAIL ALERTS + NUDGES
+==================================================
+
+Do NOT use browser/mobile push notifications for V1.
+
+Use email-based alerts and reminders instead.
+
+The app should support SMTP-based email notifications similar to typical homelab apps.
+
+Admin email settings must support:
+- SMTP host
+- SMTP port
+- SMTP username
+- SMTP password
+- sender email
+- sender name
+- encryption type
+- Test Email Settings button
+- Send Test Alert button
+
+Each user can:
+- confirm notification email address
+- enable or disable alerts
+- choose alert types
+- choose digest frequency if supported
+
+Alert types:
+- spending alerts
+- deficit risk alerts
+- savings goal risk alerts
+- receipt reminders
+- upcoming bill reminders
+- payday reminders
+- weekly summaries
+
+Keep notification email separate from receipt forwarding email.
+
+==================================================
+ONBOARDING AND UI-CONFIGURABLE SELF-HOSTED SETUP
+==================================================
+
+Because this app is distributed through GitHub and self-hosted, normal setup must be configurable through the UI as much as possible.
+
+Create a first-run setup wizard with skip-for-now options.
+
+Include setup for:
+- admin account creation
+- income and pay schedule
+- savings target
+- recurring expenses
+- AI provider setup
+- SMTP email settings
+- optional email receipt forwarding status/instructions
+- app preferences
+
+Separate:
+- app settings that can be configured in the UI
+from
+- server prerequisites that may still require infrastructure setup
+
+Do not assume users want to edit config files manually for normal app usage.
+
+==================================================
+UI / UX STYLE
+==================================================
+
+The UI must feel engaging, modern, responsive, and slightly playful.
+
+Do NOT make it look like a boring bank dashboard.
+
+Design goals:
+- soft gradients
+- rounded components
+- smooth transitions
+- subtle, satisfying animation
+- modern but not childish
+- supportive tone, not judgmental
+
+Use:
+- Tailwind CSS
+- shadcn/ui
+- Framer Motion
+
+Color system:
+- green = healthy / on track
+- yellow = caution
+- red = risk / overspending
+
+Apply dynamic color and subtle motion to:
+- safe-to-spend number
+- savings progress
+- budget graphs
+- warnings
+- timeline risk zones
+
+Animations should include:
+- smooth number changes
+- graph transitions
+- progress bar movement
+- subtle pay-period reset moments
+- subtle budget impact animations after adding expenses
+
+==================================================
+REQUIRED MAIN SCREENS
+==================================================
+
+Build these core screens/views:
+
+1. Onboarding / First-run setup
+2. Login / Authentication
+3. Dashboard
+4. Receipt upload modal
+5. Smart Receipt Inbox / Pending review queue
+6. Receipt review screen
+7. Expenses screen
+8. Income screen
+9. Recurring expenses screen
+10. Analysis screen
+11. Cash flow timeline / projection screen
+12. Budget sharing / access management screens
+13. Settings screen(s) for:
+   - AI provider
+   - Email receipt import
+   - Notification email / SMTP
+   - Budget preferences
+   - Appearance / behavior options if appropriate
+
+==================================================
+DATA MODEL GUIDANCE
+==================================================
+
+Design the database and Prisma schema around entities like:
+
+- User
+- Budget
+- BudgetMembership
+- IncomeSource
+- IncomeEntry
+- SavingsGoal
+- RecurringExpense
+- Expense
+- Receipt
+- ReceiptItem
+- Category
+- MerchantMemory
+- ItemMemory
+- ClarificationHistory
+- ForecastSnapshot
+- Insight
+- NotificationPreference
+- AIProviderConfig
+- EmailConfig
+- EmailForwardingConfig
+- PendingImport
+
+Adjust naming if needed, but keep the architecture aligned with these concepts.
+
+==================================================
+ENGINEERING REQUIREMENTS
+==================================================
+
+- use clean folder structure
+- type-safe code
+- input validation
+- clear error handling
+- secure secret handling
+- modular provider abstraction for AI
+- modular services for email notifications and receipt forwarding
+- graceful fallbacks when AI or email features are unavailable
+- no hardcoded secrets
+- no client-side AI key usage
+- no direct AI calls from client components
+
+==================================================
+OUTPUT REQUIREMENTS
+==================================================
+
+Generate:
+- the full project structure
+- all important source files
+- Prisma schema
+- migrations
+- seed data
+- Dockerfile
+- docker-compose.yml
+- .env.example
+- setup wizard
+- budget switching logic
+- permission system
+- representative UI screens
+- clear instructions for:
+  - running locally
+  - configuring AI provider
+  - configuring SMTP email
+  - enabling email receipt forwarding
+  - deploying on TrueNAS SCALE
+  - mounting persistent volumes for SQLite and uploads
+
+==================================================
+IMPORTANT CONSTRAINTS
+==================================================
+
+Do NOT use:
+- Plaid
+- bank linking
+- cloud-only assumptions
+- JSON files as the app database
+- localStorage as the main app database
+- Replit-specific hosting/database/auth
+- client-side secrets
+- forced mailbox sync
+- automatic final import without review
+
+The app must remain:
+- portable
+- self-hostable
+- admin-manageable
+- family-friendly
+- budget-centric
+- AI-assisted but not AI-dependent for basic function
+
+Build the app as a serious V1 with a clean foundation for future upgrades.
