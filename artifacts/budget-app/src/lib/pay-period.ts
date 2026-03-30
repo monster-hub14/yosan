@@ -16,6 +16,28 @@ function addDays(date: Date, days: number): Date {
   return d;
 }
 
+/**
+ * Add calendar months, clamping to the last day of the target month.
+ * e.g. Jan 31 + 1 month = Feb 28 (not Feb 31).
+ */
+function addMonths(date: Date, months: number): Date {
+  const d = new Date(date);
+  const targetMonth = d.getMonth() + months;
+  d.setMonth(targetMonth);
+  // If day overflowed (e.g. Jan 31 → Mar 2 when adding 1 month), clamp back
+  if (d.getMonth() !== ((targetMonth % 12) + 12) % 12) {
+    d.setDate(0); // last day of the previous month
+  }
+  return d;
+}
+
+/**
+ * Add calendar years.
+ */
+function addYears(date: Date, years: number): Date {
+  return addMonths(date, years * 12);
+}
+
 function startOfDay(date: Date): Date {
   const d = new Date(date);
   d.setHours(0, 0, 0, 0);
@@ -26,22 +48,78 @@ function daysBetween(a: Date, b: Date): number {
   return Math.round((startOfDay(b).getTime() - startOfDay(a).getTime()) / 86400000);
 }
 
-function nextSemiMonthlyDate(after: Date): Date {
-  const d = new Date(after);
-  const day = d.getDate();
+/**
+ * Advance a semimonthly anchor (1st or 15th) to the next pay date.
+ * Semimonthly pay dates are always the 1st and the 15th of each month.
+ */
+function nextSemiMonthlyAfter(from: Date): Date {
+  const year = from.getFullYear();
+  const month = from.getMonth();
+  const day = from.getDate();
+
   if (day < 15) {
-    return new Date(d.getFullYear(), d.getMonth(), 15);
+    return new Date(year, month, 15);
   }
-  const next = new Date(d.getFullYear(), d.getMonth() + 1, 1);
-  return next;
+  // day >= 15: next pay is 1st of next month
+  return new Date(year, month + 1, 1);
+}
+
+/**
+ * Previous semimonthly pay date before 'from'.
+ */
+function prevSemiMonthlyBefore(from: Date): Date {
+  const year = from.getFullYear();
+  const month = from.getMonth();
+  const day = from.getDate();
+
+  if (day > 15) {
+    return new Date(year, month, 15);
+  }
+  if (day > 1) {
+    return new Date(year, month, 1);
+  }
+  // day === 1: prev is 15th of previous month
+  return new Date(year, month - 1, 15);
+}
+
+/**
+ * Advance `anchor` by one pay interval (calendar-aware for monthly+).
+ */
+function advanceByFrequency(date: Date, frequency: PayFrequency, customDays?: number | null): Date {
+  switch (frequency) {
+    case "WEEKLY":      return addDays(date, 7);
+    case "BIWEEKLY":    return addDays(date, 14);
+    case "SEMIMONTHLY": return nextSemiMonthlyAfter(date);
+    case "MONTHLY":     return addMonths(date, 1);
+    case "QUARTERLY":   return addMonths(date, 3);
+    case "ANNUALLY":    return addYears(date, 1);
+    case "CUSTOM":      return addDays(date, customDays ?? 14);
+    default:            return addDays(date, 14);
+  }
+}
+
+/**
+ * Move `date` back by one pay interval (calendar-aware).
+ */
+function retreatByFrequency(date: Date, frequency: PayFrequency, customDays?: number | null): Date {
+  switch (frequency) {
+    case "WEEKLY":      return addDays(date, -7);
+    case "BIWEEKLY":    return addDays(date, -14);
+    case "SEMIMONTHLY": return prevSemiMonthlyBefore(date);
+    case "MONTHLY":     return addMonths(date, -1);
+    case "QUARTERLY":   return addMonths(date, -3);
+    case "ANNUALLY":    return addYears(date, -1);
+    case "CUSTOM":      return addDays(date, -(customDays ?? 14));
+    default:            return addDays(date, -14);
+  }
 }
 
 export function getIntervalDays(frequency: PayFrequency, customDays?: number | null): number {
   switch (frequency) {
     case "WEEKLY":       return 7;
     case "BIWEEKLY":     return 14;
-    case "SEMIMONTHLY":  return 15;
-    case "MONTHLY":      return 30;
+    case "SEMIMONTHLY":  return 15; // approximate; use calendar math for actual periods
+    case "MONTHLY":      return 30; // approximate for display/rough calculations
     case "QUARTERLY":    return 91;
     case "ANNUALLY":     return 365;
     case "CUSTOM":       return customDays ?? 14;
@@ -66,7 +144,11 @@ export function getPeriodsPerMonth(frequency: PayFrequency, customDays?: number 
   return getPeriodsPerYear(frequency, customDays) / 12;
 }
 
-function computeNextPayDateFromSeries(
+/**
+ * Find the next upcoming pay date on or after today, starting from `anchor`.
+ * Uses calendar-aware advancement.
+ */
+function computeNextPayDate(
   anchor: Date,
   frequency: PayFrequency,
   customDays?: number | null
@@ -74,22 +156,15 @@ function computeNextPayDateFromSeries(
   const today = startOfDay(new Date());
   let next = startOfDay(anchor);
 
-  if (next > today) return next;
+  if (next >= today) return next;
 
-  if (frequency === "SEMIMONTHLY") {
-    let candidate = startOfDay(anchor);
-    for (let i = 0; i < 730; i++) {
-      const n = nextSemiMonthlyDate(addDays(candidate, 1));
-      if (n >= today) return n;
-      candidate = n;
-    }
-    return nextSemiMonthlyDate(addDays(today, 1));
+  // Advance until we reach or pass today
+  for (let i = 0; i < 1000; i++) {
+    const candidate = advanceByFrequency(next, frequency, customDays);
+    if (candidate >= today) return candidate;
+    next = candidate;
   }
 
-  const interval = getIntervalDays(frequency, customDays);
-  while (next < today) {
-    next = addDays(next, interval);
-  }
   return next;
 }
 
@@ -102,41 +177,32 @@ export function computePayPeriod(
   const today = startOfDay(new Date());
 
   if (!nextPayDate) {
+    const approxDays = getIntervalDays(frequency, customDays);
     return {
       start: today,
       end: today,
       nextPayDate: today,
-      daysInPeriod: getIntervalDays(frequency, customDays),
+      daysInPeriod: approxDays,
       daysElapsed: 0,
       daysRemaining: 0,
       periodIncome: incomeAmount,
     };
   }
 
-  const next = computeNextPayDateFromSeries(new Date(nextPayDate), frequency, customDays);
-  const interval = getIntervalDays(frequency, customDays);
+  const next = computeNextPayDate(new Date(nextPayDate), frequency, customDays);
 
-  let periodStart: Date;
-  if (frequency === "SEMIMONTHLY") {
-    const day = next.getDate();
-    if (day === 15) {
-      periodStart = new Date(next.getFullYear(), next.getMonth(), 1);
-    } else {
-      periodStart = new Date(next.getFullYear(), next.getMonth(), 15);
-    }
-  } else {
-    periodStart = addDays(next, -interval);
-  }
+  // Period start = one interval before next pay date (calendar-aware)
+  const periodStart = retreatByFrequency(next, frequency, customDays);
 
-  const daysInPeriod = daysBetween(periodStart, next);
-  const daysElapsed = Math.max(0, daysBetween(periodStart, today));
+  const daysInPeriod = Math.max(1, daysBetween(periodStart, next));
+  const daysElapsed = Math.max(0, Math.min(daysInPeriod, daysBetween(periodStart, today)));
   const daysRemaining = Math.max(0, daysBetween(today, next));
 
   return {
     start: periodStart,
     end: next,
     nextPayDate: next,
-    daysInPeriod: Math.max(1, daysInPeriod),
+    daysInPeriod,
     daysElapsed,
     daysRemaining,
     periodIncome: incomeAmount,

@@ -52,8 +52,8 @@ const FREQ_LABELS: Record<string, string> = {
   CUSTOM: "Custom",
 };
 
-function formatCurrency(amount: number) {
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 0 }).format(amount);
+function formatCurrency(amount: number, currency = "USD") {
+  return new Intl.NumberFormat("en-US", { style: "currency", currency, minimumFractionDigits: 0 }).format(amount);
 }
 
 function formatDate(iso: string) {
@@ -193,7 +193,7 @@ export default function IncomePage({ budgetId, currency }: Props) {
           amount: parseFloat(entryForm.amount),
           date: entryForm.date,
           note: entryForm.note || null,
-          incomeSourceId: entryForm.incomeSourceId || null,
+          incomeSourceId: (entryForm.incomeSourceId && entryForm.incomeSourceId !== "__none__") ? entryForm.incomeSourceId : null,
         }),
       });
       toast.success("Income entry recorded");
@@ -286,7 +286,7 @@ export default function IncomePage({ budgetId, currency }: Props) {
                   </div>
                   <div className="flex items-center gap-3 ml-3 flex-shrink-0">
                     <p className="text-sm font-semibold text-emerald-400 tabular-nums">
-                      {formatCurrency(src.amount)}
+                      {formatCurrency(src.amount, currency)}
                     </p>
                     <div className="flex items-center gap-1">
                       <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEditSource(src)}>
@@ -332,7 +332,7 @@ export default function IncomePage({ budgetId, currency }: Props) {
                   </div>
                   <div className="flex items-center gap-2 ml-3 flex-shrink-0">
                     <p className="text-sm font-semibold text-emerald-400 tabular-nums">
-                      +{formatCurrency(e.amount)}
+                      +{formatCurrency(e.amount, currency)}
                     </p>
                     <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => handleDeleteEntry(e.id)}>
                       <Trash2 className="w-3.5 h-3.5" />
@@ -417,12 +417,12 @@ export default function IncomePage({ budgetId, currency }: Props) {
             {sources.length > 0 && (
               <div className="space-y-1.5">
                 <Label>Link to income source (optional)</Label>
-                <Select value={entryForm.incomeSourceId} onValueChange={(v) => setEntryForm({ ...entryForm, incomeSourceId: v })}>
+                <Select value={entryForm.incomeSourceId || "__none__"} onValueChange={(v) => setEntryForm({ ...entryForm, incomeSourceId: v === "__none__" ? "" : v })}>
                   <SelectTrigger>
                     <SelectValue placeholder="None" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">None</SelectItem>
+                    <SelectItem value="__none__">None</SelectItem>
                     {sources.map((s) => (
                       <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
                     ))}
