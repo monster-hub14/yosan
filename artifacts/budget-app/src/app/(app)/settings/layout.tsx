@@ -1,7 +1,6 @@
 import { Metadata } from "next";
 import Link from "next/link";
 import { getSession } from "@/lib/auth/session";
-import { db } from "@/lib/db";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = {
@@ -33,16 +32,7 @@ export default async function SettingsLayout({
   const session = await getSession();
   const isAdmin = session?.role === "ADMIN";
 
-  let isBudgetOwner = false;
-  if (session && !isAdmin) {
-    const ownedBudget = await db.budget.findFirst({
-      where: { ownerId: session.userId },
-      select: { id: true },
-    });
-    isBudgetOwner = ownedBudget !== null;
-  }
-
-  const showBudgetSection = isAdmin || isBudgetOwner;
+  const showBudgetSection = isAdmin;
 
   return (
     <div className="space-y-6">
