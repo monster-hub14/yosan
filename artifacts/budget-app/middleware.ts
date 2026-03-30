@@ -1,47 +1,72 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifySessionToken } from "@/lib/auth/session";
 
-const PUBLIC_PATHS = [
-  "/login",
-  "/setup",
-  "/api/auth",
-  "/api/setup",
-  "/_next",
-  "/favicon.ico",
-  "/public",
-];
+const SETUP_COOKIE = "budget_setup";
+const SESSION_COOKIE = "budget_session";
 
-function isPublicPath(pathname: string): boolean {
-  return PUBLIC_PATHS.some(
-    (p) => pathname === p || pathname.startsWith(p + "/")
-  );
+const STATIC_PREFIXES = ["/_next", "/favicon.ico"];
+const ALWAYS_PUBLIC_API = ["/api/auth/login", "/api/auth/logout", "/api/auth/register"];
+
+function isStatic(pathname: string): boolean {
+  return STATIC_PREFIXES.some((p) => pathname.startsWith(p));
+}
+
+function isSetupPath(pathname: string): boolean {
+  return pathname === "/setup" || pathname.startsWith("/setup/") ||
+    pathname === "/api/setup" || pathname.startsWith("/api/setup/");
+}
+
+function isAlwaysPublicApi(pathname: string): boolean {
+  return ALWAYS_PUBLIC_API.some((p) => pathname === p || pathname.startsWith(p + "/"));
 }
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  if (isPublicPath(pathname)) {
+  if (isStatic(pathname)) return NextResponse.next();
+
+  const setupDone = request.cookies.get(SETUP_COOKIE)?.value === "done";
+  const sessionToken = request.cookies.get(SESSION_COOKIE)?.value;
+  const session = sessionToken ? await verifySessionToken(sessionToken) : null;
+
+  // Always-public: auth login/logout/register
+  if (isAlwaysPublicApi(pathname)) return NextResponse.next();
+
+  // /setup paths
+  if (isSetupPath(pathname)) {
+    if (setupDone) {
+      // Post-setup: setup routes require admin auth
+      if (!session || session.role !== "ADMIN") {
+        return NextResponse.redirect(new URL("/login", request.url));
+      }
+    }
     return NextResponse.next();
   }
 
-  if (pathname === "/") {
+  // /login is always accessible; redirect already-authenticated users away
+  if (pathname === "/login") {
+    if (session && setupDone) {
+      return NextResponse.redirect(new URL("/dashboard", request.url));
+    }
     return NextResponse.next();
   }
 
-  const token = request.cookies.get("budget_session")?.value;
-  if (!token) {
-    const loginUrl = new URL("/login", request.url);
-    loginUrl.searchParams.set("from", pathname);
-    return NextResponse.redirect(loginUrl);
+  // All other routes require setup to be done
+  if (!setupDone) {
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json({ error: "Setup not complete" }, { status: 503 });
+    }
+    return NextResponse.redirect(new URL("/setup", request.url));
   }
 
-  const session = await verifySessionToken(token);
+  // Setup done but not authenticated
   if (!session) {
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     const loginUrl = new URL("/login", request.url);
-    loginUrl.searchParams.set("from", pathname);
-    const response = NextResponse.redirect(loginUrl);
-    response.cookies.delete("budget_session");
-    return response;
+    if (pathname !== "/") loginUrl.searchParams.set("from", pathname);
+    return NextResponse.redirect(loginUrl);
   }
 
   return NextResponse.next();

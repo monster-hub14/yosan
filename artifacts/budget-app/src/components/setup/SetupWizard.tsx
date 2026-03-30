@@ -14,6 +14,7 @@ import {
   ArrowRight,
   Loader2,
   ChevronRight,
+  RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,15 +48,25 @@ const steps: Step[] = [
   { id: "budget", label: "First Budget", icon: Wallet },
   { id: "income", label: "Income", icon: TrendingUp, optional: true },
   { id: "savings", label: "Savings Goal", icon: PiggyBank, optional: true },
+  { id: "recurring", label: "Recurring Bills", icon: RefreshCw, optional: true },
+  { id: "email", label: "Email / SMTP", icon: Mail, optional: true },
   { id: "ai", label: "AI Provider", icon: Bot, optional: true },
   { id: "done", label: "All Done", icon: CheckCircle2 },
 ];
 
 const CURRENCIES = ["USD", "EUR", "GBP", "CAD", "AUD", "JPY", "CHF", "SEK", "NOK", "DKK"];
-const FREQUENCIES = [
+const PAY_FREQUENCIES = [
   { value: "WEEKLY", label: "Weekly" },
   { value: "BIWEEKLY", label: "Every 2 weeks" },
   { value: "SEMIMONTHLY", label: "Twice a month" },
+  { value: "MONTHLY", label: "Monthly" },
+  { value: "QUARTERLY", label: "Quarterly" },
+  { value: "ANNUALLY", label: "Annually" },
+];
+const EXPENSE_FREQUENCIES = [
+  { value: "DAILY", label: "Daily" },
+  { value: "WEEKLY", label: "Weekly" },
+  { value: "BIWEEKLY", label: "Every 2 weeks" },
   { value: "MONTHLY", label: "Monthly" },
   { value: "QUARTERLY", label: "Quarterly" },
   { value: "ANNUALLY", label: "Annually" },
@@ -70,6 +81,8 @@ export default function SetupWizard() {
   const [budgetData, setBudgetData] = useState({ name: "My Budget", currency: "USD" });
   const [incomeData, setIncomeData] = useState({ name: "Primary Income", amount: "", frequency: "BIWEEKLY", nextPayDate: "" });
   const [savingsData, setSavingsData] = useState({ name: "", targetAmount: "" });
+  const [recurringData, setRecurringData] = useState({ name: "", amount: "", frequency: "MONTHLY" });
+  const [emailData, setEmailData] = useState({ smtpHost: "", smtpPort: "587", smtpUser: "", smtpPass: "", fromAddress: "", fromName: "Budget App" });
   const [aiData, setAiData] = useState({ provider: "OPENAI", model: "gpt-4o-mini", apiKey: "", baseUrl: "" });
 
   const step = steps[currentStep];
@@ -120,14 +133,44 @@ export default function SetupWizard() {
       }
 
       if (step.id === "savings" && savingsData.name && savingsData.targetAmount) {
-        const budget = await fetch("/api/setup/status").then((r) => r.json());
-        if (budget.progress?.firstBudgetCreated) {
-          await fetch("/api/savings", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ name: savingsData.name, targetAmount: parseFloat(savingsData.targetAmount) }),
-          });
-        }
+        const res = await fetch("/api/setup/savings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: savingsData.name, targetAmount: parseFloat(savingsData.targetAmount) }),
+        });
+        const data = await res.json();
+        if (!res.ok) { toast.error(data.error); return; }
+      }
+
+      if (step.id === "recurring" && recurringData.name && recurringData.amount) {
+        const res = await fetch("/api/setup/recurring", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: recurringData.name,
+            amount: parseFloat(recurringData.amount),
+            frequency: recurringData.frequency,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) { toast.error(data.error); return; }
+      }
+
+      if (step.id === "email" && emailData.smtpHost) {
+        const res = await fetch("/api/setup/email", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            smtpHost: emailData.smtpHost,
+            smtpPort: parseInt(emailData.smtpPort),
+            smtpUser: emailData.smtpUser,
+            smtpPass: emailData.smtpPass,
+            fromAddress: emailData.fromAddress,
+            fromName: emailData.fromName,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) { toast.error(data.error); return; }
       }
 
       if (step.id === "ai" && aiData.apiKey) {
@@ -240,7 +283,7 @@ export default function SetupWizard() {
                 <div>
                   <CardTitle>{step.label}</CardTitle>
                   {step.optional && (
-                    <CardDescription>Optional — you can set this up later</CardDescription>
+                    <CardDescription>Optional — you can set this up later in Settings</CardDescription>
                   )}
                 </div>
               </div>
@@ -357,7 +400,7 @@ export default function SetupWizard() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {FREQUENCIES.map((f) => (
+                        {PAY_FREQUENCIES.map((f) => (
                           <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>
                         ))}
                       </SelectContent>
@@ -400,10 +443,115 @@ export default function SetupWizard() {
                 </>
               )}
 
+              {step.id === "recurring" && (
+                <>
+                  <p className="text-sm text-muted-foreground">
+                    Add a recurring monthly bill (rent, subscriptions, etc.). You can add more in Settings.
+                  </p>
+                  <div className="space-y-2">
+                    <Label htmlFor="recurringName">Bill name</Label>
+                    <Input
+                      id="recurringName"
+                      value={recurringData.name}
+                      onChange={(e) => setRecurringData((d) => ({ ...d, name: e.target.value }))}
+                      placeholder="Rent / Mortgage"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="recurringAmount">Amount</Label>
+                    <Input
+                      id="recurringAmount"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={recurringData.amount}
+                      onChange={(e) => setRecurringData((d) => ({ ...d, amount: e.target.value }))}
+                      placeholder="1500"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Frequency</Label>
+                    <Select
+                      value={recurringData.frequency}
+                      onValueChange={(v) => setRecurringData((d) => ({ ...d, frequency: v }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {EXPENSE_FREQUENCIES.map((f) => (
+                          <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </>
+              )}
+
+              {step.id === "email" && (
+                <>
+                  <p className="text-sm text-muted-foreground">
+                    Configure SMTP to enable email notifications and receipt forwarding. You can set this up later in Settings &rsaquo; Email.
+                  </p>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2 col-span-2 sm:col-span-1">
+                      <Label htmlFor="smtpHost">SMTP host</Label>
+                      <Input
+                        id="smtpHost"
+                        value={emailData.smtpHost}
+                        onChange={(e) => setEmailData((d) => ({ ...d, smtpHost: e.target.value }))}
+                        placeholder="smtp.example.com"
+                      />
+                    </div>
+                    <div className="space-y-2 col-span-2 sm:col-span-1">
+                      <Label htmlFor="smtpPort">Port</Label>
+                      <Input
+                        id="smtpPort"
+                        type="number"
+                        value={emailData.smtpPort}
+                        onChange={(e) => setEmailData((d) => ({ ...d, smtpPort: e.target.value }))}
+                        placeholder="587"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="smtpUser">SMTP username</Label>
+                    <Input
+                      id="smtpUser"
+                      value={emailData.smtpUser}
+                      onChange={(e) => setEmailData((d) => ({ ...d, smtpUser: e.target.value }))}
+                      placeholder="user@example.com"
+                      autoComplete="username"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="smtpPass">SMTP password</Label>
+                    <Input
+                      id="smtpPass"
+                      type="password"
+                      value={emailData.smtpPass}
+                      onChange={(e) => setEmailData((d) => ({ ...d, smtpPass: e.target.value }))}
+                      placeholder="App password or SMTP password"
+                      autoComplete="current-password"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="fromAddress">From address</Label>
+                    <Input
+                      id="fromAddress"
+                      type="email"
+                      value={emailData.fromAddress}
+                      onChange={(e) => setEmailData((d) => ({ ...d, fromAddress: e.target.value }))}
+                      placeholder="budget@example.com"
+                    />
+                  </div>
+                </>
+              )}
+
               {step.id === "ai" && (
                 <>
                   <p className="text-sm text-muted-foreground">
-                    Configure an AI provider to enable receipt parsing and smart categorization. You can set this up later in Settings.
+                    Configure an AI provider to enable receipt parsing and smart categorization. You can set this up later in Settings &rsaquo; AI Provider.
                   </p>
                   <div className="space-y-2">
                     <Label>Provider</Label>
@@ -424,7 +572,16 @@ export default function SetupWizard() {
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="aiKey">API Key</Label>
+                    <Label htmlFor="aiModel">Model</Label>
+                    <Input
+                      id="aiModel"
+                      value={aiData.model}
+                      onChange={(e) => setAiData((d) => ({ ...d, model: e.target.value }))}
+                      placeholder="gpt-4o-mini"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="aiKey">API key</Label>
                     <Input
                       id="aiKey"
                       type="password"
