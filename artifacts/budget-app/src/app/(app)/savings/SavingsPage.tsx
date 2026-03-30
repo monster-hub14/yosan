@@ -104,21 +104,26 @@ export default function SavingsPage({ budgetId, currency }: Props) {
         notes: form.notes || null,
       };
 
+      let res: Response;
       if (editingGoal) {
-        await fetch(`/api/budgets/${budgetId}/savings-goals/${editingGoal.id}`, {
+        res = await fetch(`/api/budgets/${budgetId}/savings-goals/${editingGoal.id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
         });
-        toast.success("Goal updated");
       } else {
-        await fetch(`/api/budgets/${budgetId}/savings-goals`, {
+        res = await fetch(`/api/budgets/${budgetId}/savings-goals`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
         });
-        toast.success("Goal created");
       }
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.error ?? "Failed to save");
+        return;
+      }
+      toast.success(editingGoal ? "Goal updated" : "Goal created");
       setShowForm(false);
       load();
     } catch {
@@ -131,7 +136,12 @@ export default function SavingsPage({ budgetId, currency }: Props) {
   async function handleDelete(id: string) {
     if (!confirm("Delete this savings goal?")) return;
     try {
-      await fetch(`/api/budgets/${budgetId}/savings-goals/${id}`, { method: "DELETE" });
+      const res = await fetch(`/api/budgets/${budgetId}/savings-goals/${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.error ?? "Failed to delete");
+        return;
+      }
       toast.success("Deleted");
       load();
     } catch {

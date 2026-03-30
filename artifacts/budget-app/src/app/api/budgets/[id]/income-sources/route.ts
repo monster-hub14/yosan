@@ -45,6 +45,11 @@ export async function POST(
   if (!VALID_FREQUENCIES.includes(frequency)) {
     return NextResponse.json({ error: "Invalid frequency" }, { status: 400 });
   }
+  if (frequency === "CUSTOM") {
+    if (typeof customDays !== "number" || !Number.isInteger(customDays) || customDays < 1) {
+      return NextResponse.json({ error: "CUSTOM frequency requires customDays (positive integer)" }, { status: 400 });
+    }
+  }
 
   const source = await db.incomeSource.create({
     data: {

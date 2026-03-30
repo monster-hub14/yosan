@@ -144,21 +144,26 @@ export default function IncomePage({ budgetId, currency }: Props) {
         notes: form.notes || null,
       };
 
+      let res: Response;
       if (editingSource) {
-        await fetch(`/api/budgets/${budgetId}/income-sources/${editingSource.id}`, {
+        res = await fetch(`/api/budgets/${budgetId}/income-sources/${editingSource.id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
         });
-        toast.success("Income source updated");
       } else {
-        await fetch(`/api/budgets/${budgetId}/income-sources`, {
+        res = await fetch(`/api/budgets/${budgetId}/income-sources`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
         });
-        toast.success("Income source added");
       }
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.error ?? "Failed to save");
+        return;
+      }
+      toast.success(editingSource ? "Income source updated" : "Income source added");
       setShowSourceForm(false);
       load();
     } catch {
@@ -171,7 +176,12 @@ export default function IncomePage({ budgetId, currency }: Props) {
   async function handleDeleteSource(id: string) {
     if (!confirm("Delete this income source?")) return;
     try {
-      await fetch(`/api/budgets/${budgetId}/income-sources/${id}`, { method: "DELETE" });
+      const res = await fetch(`/api/budgets/${budgetId}/income-sources/${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.error ?? "Failed to delete");
+        return;
+      }
       toast.success("Deleted");
       load();
     } catch {
@@ -186,7 +196,7 @@ export default function IncomePage({ budgetId, currency }: Props) {
     }
     setSaving(true);
     try {
-      await fetch(`/api/budgets/${budgetId}/income-entries`, {
+      const res = await fetch(`/api/budgets/${budgetId}/income-entries`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -196,6 +206,11 @@ export default function IncomePage({ budgetId, currency }: Props) {
           incomeSourceId: (entryForm.incomeSourceId && entryForm.incomeSourceId !== "__none__") ? entryForm.incomeSourceId : null,
         }),
       });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.error ?? "Failed to save");
+        return;
+      }
       toast.success("Income entry recorded");
       setShowEntryForm(false);
       setEntryForm({ amount: "", date: new Date().toISOString().slice(0, 10), note: "", incomeSourceId: "" });
@@ -209,7 +224,12 @@ export default function IncomePage({ budgetId, currency }: Props) {
 
   async function handleDeleteEntry(id: string) {
     try {
-      await fetch(`/api/budgets/${budgetId}/income-entries/${id}`, { method: "DELETE" });
+      const res = await fetch(`/api/budgets/${budgetId}/income-entries/${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.error ?? "Failed to delete");
+        return;
+      }
       toast.success("Deleted");
       load();
     } catch {

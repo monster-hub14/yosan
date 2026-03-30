@@ -51,6 +51,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Budget name is required" }, { status: 400 });
   }
 
+  const isShared = budgetType === "SHARED";
+
+  if (!isShared && memberIds.length > 0) {
+    return NextResponse.json(
+      { error: "Cannot add members to a SOLO budget at creation. Use budget sharing instead." },
+      { status: 400 }
+    );
+  }
+
   const budget = await db.budget.create({
     data: {
       name: name.trim(),
@@ -58,11 +67,13 @@ export async function POST(request: NextRequest) {
       description: description?.trim() || null,
       budgetType,
       ownerId: session.userId,
-      memberships: {
-        create: memberIds
-          .filter((id: string) => id !== session.userId)
-          .map((userId: string) => ({ userId, role: "MEMBER" as const })),
-      },
+      memberships: isShared
+        ? {
+            create: memberIds
+              .filter((id: string) => id !== session.userId)
+              .map((userId: string) => ({ userId, role: "MEMBER" as const })),
+          }
+        : undefined,
     },
     include: {
       owner: { select: { id: true, name: true, email: true } },

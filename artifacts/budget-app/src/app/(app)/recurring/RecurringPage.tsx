@@ -126,21 +126,26 @@ export default function RecurringPage({ budgetId, currency }: Props) {
         notes: form.notes || null,
       };
 
+      let res: Response;
       if (editingItem) {
-        await fetch(`/api/budgets/${budgetId}/recurring/${editingItem.id}`, {
+        res = await fetch(`/api/budgets/${budgetId}/recurring/${editingItem.id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
         });
-        toast.success("Updated");
       } else {
-        await fetch(`/api/budgets/${budgetId}/recurring`, {
+        res = await fetch(`/api/budgets/${budgetId}/recurring`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
         });
-        toast.success("Added");
       }
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.error ?? "Failed to save");
+        return;
+      }
+      toast.success(editingItem ? "Updated" : "Added");
       setShowForm(false);
       load();
     } catch {
@@ -153,7 +158,12 @@ export default function RecurringPage({ budgetId, currency }: Props) {
   async function handleDelete(id: string) {
     if (!confirm("Delete this recurring expense?")) return;
     try {
-      await fetch(`/api/budgets/${budgetId}/recurring/${id}`, { method: "DELETE" });
+      const res = await fetch(`/api/budgets/${budgetId}/recurring/${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.error ?? "Failed to delete");
+        return;
+      }
       toast.success("Deleted");
       load();
     } catch {
