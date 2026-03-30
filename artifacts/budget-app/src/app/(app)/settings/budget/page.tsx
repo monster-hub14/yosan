@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
-import { requireBudgetAccess } from "@/lib/auth/permissions";
+import { requireBudgetRead } from "@/lib/auth/permissions";
 import {
   Card,
   CardContent,
@@ -53,7 +53,7 @@ export default async function BudgetSettingsPage() {
     );
   }
 
-  const access = await requireBudgetAccess(session, budget.id, "MEMBER");
+  const access = await requireBudgetRead(session, budget.id);
   if (access instanceof NextResponse) {
     redirect("/dashboard");
   }

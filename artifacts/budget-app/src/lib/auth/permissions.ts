@@ -37,50 +37,82 @@ export function requireRole(
   }
 }
 
-export type BudgetAccessRole = "MEMBER" | "ADMIN";
+/**
+ * Budget permission capability requested by a route.
+ *
+ * - READ:    any access (Viewer, Helper, Co-owner, Member, Admin, Owner)
+ * - WRITE:   can create/update/delete budget data (Helper+, Member+, Co-owner+, Admin, Owner)
+ * - MANAGE:  can invite/remove members, change budget settings (Co-owner, Admin, Owner)
+ *
+ * Role → capabilities:
+ *   Shared budget: ADMIN (owner/admin-role) → all; MEMBER → READ + WRITE
+ *   Solo budget:   CO_OWNER → all; HELPER → READ + WRITE; VIEWER → READ only
+ */
+export type BudgetCapability = "READ" | "WRITE" | "MANAGE";
+
+function soloRoleHasCapability(role: string, capability: BudgetCapability): boolean {
+  switch (role) {
+    case "CO_OWNER": return true;
+    case "HELPER": return capability === "READ" || capability === "WRITE";
+    case "VIEWER": return capability === "READ";
+    default: return false;
+  }
+}
+
+function sharedRoleHasCapability(role: string, capability: BudgetCapability): boolean {
+  switch (role) {
+    case "ADMIN": return true;
+    case "MEMBER": return capability === "READ" || capability === "WRITE";
+    default: return false;
+  }
+}
 
 /**
- * Map a BudgetSoloShare role string to a BudgetAccessRole tier.
- * CO_OWNER → "ADMIN", everything else (VIEWER, HELPER) → "MEMBER"
+ * Legacy tier type kept for backward compat with callers using minRole.
+ * Internally maps to capabilities.
  */
-function soloRoleToAccessTier(role: string): BudgetAccessRole {
-  return role === "CO_OWNER" ? "ADMIN" : "MEMBER";
+export type BudgetAccessRole = "MEMBER" | "ADMIN";
+
+function accessRoleToCapability(minRole: BudgetAccessRole): BudgetCapability {
+  return minRole === "ADMIN" ? "MANAGE" : "WRITE";
 }
 
 /**
  * Verify access to a budget.
  *
- * Access is granted if ANY of the following conditions are met:
- *   1. `user.role === "ADMIN"` — instance-level superuser override.
- *   2. `user.userId === budget.ownerId` — budget owner.
- *   3. The user has a `BudgetMembership` row with a role >= minRole.
- *   4. The user has an active, non-expired `BudgetSoloShare` (authenticated user sharing)
- *      with a solo role that maps to >= minRole.
- *   5. A valid `shareToken` is provided that matches an active `BudgetSoloShare`
- *      for this budget with a role >= minRole (anonymous/token-based access).
+ * Access is granted if the authenticated user has the required capability:
+ *   1. Instance ADMIN → always granted (superuser override).
+ *   2. Budget owner → always granted.
+ *   3. BudgetMembership (SHARED): ADMIN → MANAGE; MEMBER → READ + WRITE.
+ *   4. BudgetSoloShare (SOLO, authenticated by userId): CO_OWNER → MANAGE; HELPER → READ + WRITE; VIEWER → READ.
+ *   5. shareToken (anonymous link): same solo role capability rules.
  *
  * @param user        Authenticated session, or null for share-token-only access.
  * @param budgetId    The target budget.
- * @param minRole     Minimum required role (default: "MEMBER").
+ * @param minRole     Minimum required role tier (MEMBER = needs WRITE, ADMIN = needs MANAGE).
  * @param shareToken  Optional share token for BudgetSoloShare validation.
+ * @param capability  Override capability check (takes precedence over minRole if provided).
  */
 export async function requireBudgetAccess(
   user: SessionPayload | null,
   budgetId: string,
   minRole: BudgetAccessRole = "MEMBER",
-  shareToken?: string
+  shareToken?: string,
+  capability?: BudgetCapability
 ): Promise<{ membership: { role: string } } | NextResponse> {
+  const required = capability ?? accessRoleToCapability(minRole);
+  const now = new Date();
+
   if (user) {
     if (user.role === "ADMIN") {
       return { membership: { role: "ADMIN" } };
     }
 
-    const now = new Date();
-
     const budget = await db.budget.findUnique({
       where: { id: budgetId },
       select: {
         ownerId: true,
+        budgetType: true,
         memberships: {
           where: { userId: user.userId },
           take: 1,
@@ -108,17 +140,16 @@ export async function requireBudgetAccess(
 
     const membership = budget.memberships[0];
     if (membership) {
-      if (minRole === "ADMIN" && membership.role !== "ADMIN") {
-        return forbidden("Budget admin access required");
+      if (!sharedRoleHasCapability(membership.role, required)) {
+        return forbidden("Insufficient budget permissions");
       }
       return { membership };
     }
 
     const soloShare = budget.soloShares[0];
     if (soloShare) {
-      const tier = soloRoleToAccessTier(soloShare.role);
-      if (minRole === "ADMIN" && tier !== "ADMIN") {
-        return forbidden("Budget admin access required");
+      if (!soloRoleHasCapability(soloShare.role, required)) {
+        return forbidden("Insufficient budget permissions");
       }
       return { membership: { role: soloShare.role } };
     }
@@ -140,8 +171,7 @@ export async function requireBudgetAccess(
       return NextResponse.json({ error: "Share token does not match budget" }, { status: 403 });
     }
 
-    const shareRoleIsAdmin = share.role === "CO_OWNER";
-    if (minRole === "ADMIN" && !shareRoleIsAdmin) {
+    if (!soloRoleHasCapability(share.role, required)) {
       return forbidden("Insufficient share permissions");
     }
 
@@ -156,15 +186,49 @@ export async function requireBudgetAccess(
 }
 
 /**
+ * Require at least READ capability (viewers and above).
+ * Use this for GET-only endpoints that should be accessible to all roles.
+ */
+export async function requireBudgetRead(
+  user: SessionPayload | null,
+  budgetId: string,
+  shareToken?: string
+) {
+  return requireBudgetAccess(user, budgetId, "MEMBER", shareToken, "READ");
+}
+
+/**
+ * Require WRITE capability (helpers and above; no viewers).
+ * Use this for mutating endpoints (POST/PUT/DELETE on budget data).
+ */
+export async function requireBudgetWrite(
+  user: SessionPayload | null,
+  budgetId: string,
+  shareToken?: string
+) {
+  return requireBudgetAccess(user, budgetId, "MEMBER", shareToken, "WRITE");
+}
+
+/**
+ * Require MANAGE capability (owner / admin / co-owner only).
+ * Use this for membership management, budget settings changes.
+ */
+export async function requireBudgetManage(
+  user: SessionPayload | null,
+  budgetId: string,
+  shareToken?: string
+) {
+  return requireBudgetAccess(user, budgetId, "ADMIN", shareToken, "MANAGE");
+}
+
+/**
  * Verify a BudgetSoloShare token grants access to the specified budget.
- * This is a convenience wrapper — prefer requireBudgetAccess with shareToken for
- * combined membership+share checks.
  */
 export async function requireBudgetShareAccess(
   shareToken: string,
   budgetId: string
 ): Promise<{ share: { role: string; budgetId: string } } | NextResponse> {
-  const result = await requireBudgetAccess(null, budgetId, "MEMBER", shareToken);
+  const result = await requireBudgetAccess(null, budgetId, "MEMBER", shareToken, "READ");
   if (result instanceof NextResponse) return result;
   return { share: { role: result.membership.role, budgetId } };
 }

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuth, requireBudgetAccess, isSessionPayload } from "@/lib/auth/permissions";
+import { requireAuth, requireBudgetWrite, isSessionPayload } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import { monthlyToPerPeriod } from "@/lib/pay-period";
 
@@ -11,7 +11,7 @@ export async function PUT(
   const session = await requireAuth(request);
   if (!isSessionPayload(session)) return session;
 
-  const access = await requireBudgetAccess(session, id);
+  const access = await requireBudgetWrite(session, id);
   if (access instanceof NextResponse) return access;
 
   const {
@@ -62,7 +62,7 @@ export async function DELETE(
   const session = await requireAuth(request);
   if (!isSessionPayload(session)) return session;
 
-  const access = await requireBudgetAccess(session, id);
+  const access = await requireBudgetWrite(session, id);
   if (access instanceof NextResponse) return access;
 
   await db.savingsGoal.delete({ where: { id: goalId, budgetId: id } });

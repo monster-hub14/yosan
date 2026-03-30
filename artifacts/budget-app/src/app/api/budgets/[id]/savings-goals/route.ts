@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuth, requireBudgetAccess, isSessionPayload } from "@/lib/auth/permissions";
+import { requireAuth, requireBudgetRead, requireBudgetWrite, isSessionPayload } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import { monthlyToPerPeriod } from "@/lib/pay-period";
 
@@ -11,7 +11,7 @@ export async function GET(
   const session = await requireAuth(request);
   if (!isSessionPayload(session)) return session;
 
-  const access = await requireBudgetAccess(session, id);
+  const access = await requireBudgetRead(session, id);
   if (access instanceof NextResponse) return access;
 
   const goals = await db.savingsGoal.findMany({
@@ -30,7 +30,7 @@ export async function POST(
   const session = await requireAuth(request);
   if (!isSessionPayload(session)) return session;
 
-  const access = await requireBudgetAccess(session, id);
+  const access = await requireBudgetWrite(session, id);
   if (access instanceof NextResponse) return access;
 
   const {

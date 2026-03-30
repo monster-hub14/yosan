@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuth, requireBudgetAccess, isSessionPayload } from "@/lib/auth/permissions";
+import { requireAuth, requireBudgetRead, requireBudgetManage, isSessionPayload } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 
 export async function GET(
@@ -10,7 +10,7 @@ export async function GET(
   const session = await requireAuth(request);
   if (!isSessionPayload(session)) return session;
 
-  const access = await requireBudgetAccess(session, id);
+  const access = await requireBudgetRead(session, id);
   if (access instanceof NextResponse) return access;
 
   const budget = await db.budget.findUnique({
@@ -40,7 +40,7 @@ export async function PUT(
   const session = await requireAuth(request);
   if (!isSessionPayload(session)) return session;
 
-  const access = await requireBudgetAccess(session, id, "ADMIN");
+  const access = await requireBudgetManage(session, id);
   if (access instanceof NextResponse) return access;
 
   const { name, currency, description } = await request.json();
@@ -65,7 +65,7 @@ export async function DELETE(
   const session = await requireAuth(request);
   if (!isSessionPayload(session)) return session;
 
-  const access = await requireBudgetAccess(session, id, "ADMIN");
+  const access = await requireBudgetManage(session, id);
   if (access instanceof NextResponse) return access;
 
   await db.budget.delete({ where: { id } });

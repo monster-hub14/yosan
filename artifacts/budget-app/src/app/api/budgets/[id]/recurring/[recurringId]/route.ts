@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuth, requireBudgetAccess, isSessionPayload } from "@/lib/auth/permissions";
+import { requireAuth, requireBudgetWrite, isSessionPayload } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import type { ExpenseFrequency } from "@prisma/client";
 
@@ -13,7 +13,7 @@ export async function PUT(
   const session = await requireAuth(request);
   if (!isSessionPayload(session)) return session;
 
-  const access = await requireBudgetAccess(session, id);
+  const access = await requireBudgetWrite(session, id);
   if (access instanceof NextResponse) return access;
 
   const { name, amount, frequency, nextDueDate, categoryId, notes, isActive } =
@@ -48,7 +48,7 @@ export async function DELETE(
   const session = await requireAuth(request);
   if (!isSessionPayload(session)) return session;
 
-  const access = await requireBudgetAccess(session, id);
+  const access = await requireBudgetWrite(session, id);
   if (access instanceof NextResponse) return access;
 
   await db.recurringExpense.delete({ where: { id: recurringId, budgetId: id } });
