@@ -67,11 +67,16 @@ export async function POST(request: NextRequest) {
 
   // Manual entry path — skip file storage
   if (manualData && !file) {
-    const manual = JSON.parse(manualData);
+    let manual: { merchant?: string; date?: string; total?: string | number };
+    try {
+      manual = JSON.parse(manualData) as typeof manual;
+    } catch {
+      return NextResponse.json({ error: "Invalid manual entry data" }, { status: 400 });
+    }
     const pendingData = {
       merchant: manual.merchant || null,
       date: manual.date || new Date().toISOString().slice(0, 10),
-      total: manual.total ? parseFloat(manual.total) : null,
+      total: manual.total ? parseFloat(String(manual.total)) : null,
       items: [],
       confidence: "high" as const,
       isManual: true,

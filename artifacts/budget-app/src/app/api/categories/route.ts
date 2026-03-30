@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuth, isSessionPayload } from "@/lib/auth/permissions";
+import { requireAuth, isSessionPayload, requireBudgetRead } from "@/lib/auth/permissions";
 import { getActiveBudgetId } from "@/lib/active-budget";
 import { db } from "@/lib/db";
 
@@ -10,6 +10,11 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   let budgetId = searchParams.get("budgetId");
   if (!budgetId) budgetId = await getActiveBudgetId(session.userId);
+
+  if (budgetId) {
+    const access = await requireBudgetRead(session, budgetId);
+    if (access instanceof NextResponse) return access;
+  }
 
   const categories = await db.category.findMany({
     where: {
