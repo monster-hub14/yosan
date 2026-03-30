@@ -2260,6 +2260,9 @@
   .paused {
     animation-play-state: paused;
   }
+  .running {
+    animation-play-state: running;
+  }
   .group-focus-within\/menu-item\:opacity-100 {
     &:is(:where(.group\/menu-item):focus-within *) {
       opacity: 100%;

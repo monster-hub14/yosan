@@ -173,14 +173,7 @@ Write a 2–3 sentence plain-language summary of this cash flow outlook. Be dire
 
       aiSummary = response.content.trim();
       generatedByAI = true;
-
-      await db.aIUsageLog.createMany({
-        data: [
-          { userId, feature: "forecasting", windowDate: new Date().toISOString().slice(0, 10) },
-          { userId, feature: "forecasting", windowDate: `W-${getWeekStart()}` },
-          { userId, feature: "forecasting", windowDate: `M-${new Date().toISOString().slice(0, 7)}` },
-        ],
-      });
+      // Usage is recorded by the calling route via recordUsage() after this function returns.
     }
   } catch (err) {
     console.warn("[forecast] AI summary failed, using fallback:", err);

@@ -204,15 +204,7 @@ Provide JSON with:
       if (parsed.narrative) narrative = parsed.narrative;
       if (parsed.recommendations?.length) recommendations = parsed.recommendations.slice(0, 5);
       generatedByAI = true;
-
-      // Log usage
-      await db.aIUsageLog.createMany({
-        data: [
-          { userId, feature: "insights", windowDate: new Date().toISOString().slice(0, 10) },
-          { userId, feature: "insights", windowDate: `W-${getWeekStart()}` },
-          { userId, feature: "insights", windowDate: `M-${new Date().toISOString().slice(0, 7)}` },
-        ],
-      });
+      // Usage is recorded by the calling route via recordUsage() after this function returns.
     }
   } catch (err) {
     console.warn("[insights] AI generation failed, using fallback:", err);
