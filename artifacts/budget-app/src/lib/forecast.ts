@@ -44,9 +44,6 @@ export async function buildForecast(budgetId: string, userId: string, daysAhead 
 
   if (!budget) throw new Error("Budget not found");
 
-  const primarySource = budget.incomeSources[0] ?? null;
-  const periodIncome = budget.incomeSources.reduce((s, i) => s + i.amount, 0);
-
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
@@ -55,33 +52,58 @@ export async function buildForecast(budgetId: string, userId: string, daysAhead 
   const totalRecent = recentExpenses.reduce((s, e) => s + e.amount, 0);
   const dailySpendingRate = totalRecent / 30;
 
-  // Compute pay period for starting balance estimation
+  // Build per-income-source paydate schedules
+  // payIncomeByDate: dateKey → total income credited on that day
+  const payIncomeByDate = new Map<string, number>();
   let startingBalance = 0;
-  const paydates: Date[] = [];
 
-  if (primarySource?.nextPayDate) {
+  // Use the largest income source for starting-balance estimation (period elapsed estimate)
+  const primarySource = budget.incomeSources.sort((a, b) => b.amount - a.amount)[0] ?? null;
+
+  for (const source of budget.incomeSources) {
+    if (!source.nextPayDate) continue;
+
     const payPeriod = computePayPeriod(
-      primarySource.frequency,
-      primarySource.nextPayDate,
-      periodIncome,
-      primarySource.customDays ?? undefined
+      source.frequency,
+      source.nextPayDate,
+      source.amount,
+      source.customDays ?? undefined
     );
 
-    // Estimate current balance: income received this period minus what's been spent
-    const daysElapsed = Math.max(0, Math.round((today.getTime() - payPeriod.start.getTime()) / 86400000));
-    const estimatedSpent = daysElapsed * dailySpendingRate;
-    startingBalance = Math.max(0, periodIncome - estimatedSpent);
+    // Starting balance contribution: income received this period minus proportional spend
+    if (source === primarySource) {
+      const daysElapsed = Math.max(0, Math.round((today.getTime() - payPeriod.start.getTime()) / 86400000));
+      const estimatedSpent = daysElapsed * dailySpendingRate;
+      startingBalance = Math.max(0, source.amount - estimatedSpent);
+    } else {
+      // Secondary sources: add their amount if their last pay was within this period
+      const daysElapsed = Math.max(0, Math.round((today.getTime() - payPeriod.start.getTime()) / 86400000));
+      const periodDays = Math.max(1, Math.round((payPeriod.end.getTime() - payPeriod.start.getTime()) / 86400000));
+      if (daysElapsed <= periodDays) {
+        startingBalance += source.amount * Math.max(0, 1 - daysElapsed / periodDays);
+      }
+    }
 
-    // Build upcoming paydates
+    // Build upcoming paydates for this source
     let nextPay = new Date(payPeriod.nextPayDate);
     while (nextPay <= new Date(today.getTime() + daysAhead * 86400000)) {
-      paydates.push(new Date(nextPay));
-      nextPay = advanceByFrequency(nextPay, primarySource.frequency, primarySource.customDays ?? undefined);
+      const key = nextPay.toISOString().slice(0, 10);
+      payIncomeByDate.set(key, (payIncomeByDate.get(key) ?? 0) + source.amount);
+      nextPay = advanceByFrequency(nextPay, source.frequency, source.customDays ?? undefined);
     }
-  } else {
-    // No income source — project with zero balance
+  }
+
+  if (budget.incomeSources.length === 0) {
     startingBalance = 0;
   }
+
+  // Collect all unique paydates for chart markers (from the merged map)
+  const paydates = Array.from(payIncomeByDate.keys())
+    .map((k) => new Date(k))
+    .sort((a, b) => a.getTime() - b.getTime());
+
+  // Total period income (used for fallback summary)
+  const periodIncome = budget.incomeSources.reduce((s, i) => s + i.amount, 0);
 
   // Build map of recurring bills by date
   const billsByDate = new Map<string, { name: string; amount: number }[]>();
@@ -108,9 +130,10 @@ export async function buildForecast(budgetId: string, userId: string, daysAhead 
     const date = new Date(today.getTime() + d * 86400000);
     const dateKey = date.toISOString().slice(0, 10);
 
-    // Check for payday
-    const isPayday = paydates.some((p) => p.toISOString().slice(0, 10) === dateKey);
-    if (isPayday) balance += periodIncome;
+    // Credit income from all sources that pay on this date (accurate per-source amounts)
+    const incomeToday = payIncomeByDate.get(dateKey) ?? 0;
+    const isPayday = incomeToday > 0;
+    if (isPayday) balance += incomeToday;
 
     // Subtract recurring bills
     const bills = billsByDate.get(dateKey) ?? [];
@@ -125,7 +148,7 @@ export async function buildForecast(budgetId: string, userId: string, daysAhead 
       date: dateKey,
       balance: Math.round(balance * 100) / 100,
       isPayday,
-      paydayAmount: isPayday ? periodIncome : undefined,
+      paydayAmount: isPayday ? incomeToday : undefined,
       bills,
       // Danger zone: negative balance OR within 3 days of average daily spend (approaching zero)
       isDangerZone: balance < Math.max(0, dailySpendingRate * 3),

@@ -175,16 +175,18 @@ export function AnalysisDashboard() {
   const [aiStatus, setAiStatus] = useState<"ok" | "rate_limited" | "disabled" | "unconfigured" | null>(null);
   const [aiStatusMsg, setAiStatusMsg] = useState<string | null>(null);
 
-  const loadStoredInsights = useCallback(async () => {
+  const loadStoredInsights = useCallback(async (): Promise<StoredInsight[]> => {
     const res = await fetch("/api/analysis/insights");
     if (res.ok) {
       const data = await res.json() as { insights: StoredInsight[] };
       setStoredInsights(data.insights);
+      return data.insights;
     }
+    return [];
   }, []);
 
-  const refresh = useCallback(async (showLoading = false) => {
-    if (showLoading) setRefreshing(true);
+  const refresh = useCallback(async () => {
+    setRefreshing(true);
     try {
       const res = await fetch("/api/analysis/refresh", {
         method: "POST",
@@ -226,13 +228,27 @@ export function AnalysisDashboard() {
     }
   }, [loadStoredInsights]);
 
+  // On mount: load persisted insights only — do NOT auto-generate new AI analysis.
+  // The user must click "Refresh" to trigger generation. Auto-generate only on first run
+  // (no stored insights yet) so there is always something to show.
   useEffect(() => {
     setLoading(true);
-    Promise.all([
-      refresh(),
-      loadStoredInsights(),
-    ]).finally(() => setLoading(false));
-  }, [refresh, loadStoredInsights]);
+    loadStoredInsights()
+      .then(async (insights) => {
+        if (insights.length > 0) {
+          // Show the latest persisted insight's analysis without consuming AI usage
+          try {
+            const latestMeta = JSON.parse(insights[0].metadata) as AnalysisResult;
+            setAnalysis(latestMeta);
+            setAiStatus(latestMeta.generatedByAI ? "ok" : "unconfigured");
+          } catch {
+            // Metadata unparseable — show empty state; user can click Refresh
+          }
+        }
+        // If no insights exist (first run), leave analysis null — show empty state
+      })
+      .finally(() => setLoading(false));
+  }, [loadStoredInsights]);
 
   async function markRead(insightId: string) {
     await fetch("/api/analysis/insights", {
@@ -247,7 +263,7 @@ export function AnalysisDashboard() {
     return (
       <div className="flex items-center justify-center gap-3 py-24 text-muted-foreground">
         <Loader2 className="w-5 h-5 animate-spin" />
-        <span className="text-sm">Analyzing your spending…</span>
+        <span className="text-sm">Loading analysis…</span>
       </div>
     );
   }
@@ -304,7 +320,7 @@ export function AnalysisDashboard() {
             variant="outline"
             size="sm"
             disabled={refreshing}
-            onClick={() => refresh(true)}
+            onClick={() => refresh()}
             className="gap-1.5"
           >
             {refreshing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
