@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin, isSessionPayload } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
+import { encrypt, decrypt } from "@/lib/encryption";
 
 export async function GET(request: NextRequest) {
   const session = await requireAdmin(request);
@@ -71,16 +72,19 @@ export async function PUT(request: NextRequest) {
     monthlyLimitPerUser: limitOrNull(monthlyLimitPerUser),
   };
 
+  // Encrypt API key before storing
+  const encryptedKey = apiKey && apiKey !== "••••••••" ? encrypt(apiKey) : undefined;
+
   const config = await db.aIProviderConfig.upsert({
     where: { id: "singleton" },
     create: {
       id: "singleton",
       ...sharedFields,
-      apiKey: apiKey || null,
+      apiKey: encryptedKey ?? null,
     },
     update: {
       ...sharedFields,
-      ...(apiKey && apiKey !== "••••••••" ? { apiKey } : {}),
+      ...(encryptedKey ? { apiKey: encryptedKey } : {}),
     },
   });
 

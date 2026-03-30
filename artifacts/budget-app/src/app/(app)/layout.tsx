@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth/session";
 import { getActiveBudgetId } from "@/lib/active-budget";
 import AppSidebar from "@/components/layout/AppSidebar";
 import AppHeader from "@/components/layout/AppHeader";
+import { UploadFAB } from "@/components/receipts/upload-fab";
 
 export default async function AppLayout({
   children,
@@ -24,6 +25,7 @@ export default async function AppLayout({
         <AppHeader user={session} activeBudgetId={activeBudgetId} />
         <main className="flex-1 overflow-y-auto p-6">{children}</main>
       </div>
+      <UploadFAB />
     </div>
   );
 }

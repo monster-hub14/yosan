@@ -5,6 +5,7 @@
  */
 
 import { db } from "@/lib/db";
+import { decrypt } from "@/lib/encryption";
 
 export interface AIMessage {
   role: "system" | "user" | "assistant";
@@ -28,10 +29,14 @@ export interface AIConfig {
 export async function getAIConfig(): Promise<AIConfig | null> {
   const config = await db.aIProviderConfig.findUnique({ where: { id: "singleton" } });
   if (!config || !config.isEnabled) return null;
+
+  // Decrypt API key at retrieval time — never store or return plaintext
+  const decryptedKey = config.apiKey ? decrypt(config.apiKey) : null;
+
   return {
     provider: config.provider,
     model: config.model,
-    apiKey: config.apiKey,
+    apiKey: decryptedKey,
     baseUrl: config.baseUrl,
     isEnabled: config.isEnabled,
   };

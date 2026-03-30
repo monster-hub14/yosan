@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuth, isSessionPayload } from "@/lib/auth/permissions";
 import { chatCompletion } from "@/lib/ai/client";
 import type { AIConfig } from "@/lib/ai/client";
+import { db } from "@/lib/db";
+import { decrypt } from "@/lib/encryption";
 
 /**
  * POST /api/settings/ai/test
@@ -17,17 +19,25 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json();
+
+  // If apiKey is masked ("••••••••") or absent, fall back to stored encrypted key
+  let resolvedApiKey: string | null = body.apiKey ?? null;
+  if (!resolvedApiKey || resolvedApiKey === "••••••••") {
+    const stored = await db.aIProviderConfig.findUnique({ where: { id: "singleton" } });
+    resolvedApiKey = stored?.apiKey ? (decrypt(stored.apiKey) ?? null) : null;
+  }
+
   const config: AIConfig = {
     provider: body.provider ?? "OPENAI",
     model: body.model ?? "gpt-4o-mini",
-    apiKey: body.apiKey ?? null,
+    apiKey: resolvedApiKey,
     baseUrl: body.baseUrl ?? null,
     isEnabled: true,
   };
 
   if (!config.apiKey && config.provider !== "OLLAMA") {
     return NextResponse.json(
-      { success: false, error: "API key is required for this provider" },
+      { success: false, error: "API key is required for this provider. Save your settings first." },
       { status: 400 }
     );
   }

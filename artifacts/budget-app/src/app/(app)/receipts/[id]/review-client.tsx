@@ -87,6 +87,7 @@ export function ReviewClient({ id }: ReviewClientProps) {
     confidence: string;
     matchedExpenseId: string;
     reason: string;
+    resolutionOptions: Array<{ value: string; label: string }>;
   } | null>(null);
 
   const load = useCallback(async () => {
@@ -121,8 +122,9 @@ export function ReviewClient({ id }: ReviewClientProps) {
     return () => clearTimeout(t);
   }, [imp, load]);
 
-  async function handleConfirm(force = false) {
+  async function handleConfirm(duplicateResolution?: string) {
     setConfirming(true);
+    setDuplicateWarning(null);
     try {
       const res = await fetch(`/api/receipts/${id}/confirm`, {
         method: "POST",
@@ -139,7 +141,7 @@ export function ReviewClient({ id }: ReviewClientProps) {
             quantity: item.quantity,
             categoryId: item.categorySuggestion?.categoryId || null,
           })),
-          forceConfirm: force,
+          duplicateResolution: duplicateResolution ?? null,
         }),
       });
 
@@ -150,6 +152,7 @@ export function ReviewClient({ id }: ReviewClientProps) {
           confidence: data.confidence,
           matchedExpenseId: data.matchedExpenseId,
           reason: data.reason,
+          resolutionOptions: data.resolutionOptions ?? [],
         });
         setConfirming(false);
         return;
@@ -161,7 +164,11 @@ export function ReviewClient({ id }: ReviewClientProps) {
         return;
       }
 
-      toast.success("Receipt confirmed and added to your budget");
+      if (data.action === "discarded") {
+        toast.info("Receipt discarded — existing expense kept");
+      } else {
+        toast.success("Receipt confirmed and added to your budget");
+      }
       router.push("/receipts/inbox");
     } catch {
       toast.error("Something went wrong");
@@ -273,20 +280,35 @@ export function ReviewClient({ id }: ReviewClientProps) {
 
       {/* Duplicate warning */}
       {duplicateWarning && (
-        <Alert variant="destructive">
-          <AlertTriangle className="w-4 h-4" />
-          <AlertDescription className="flex items-center justify-between gap-4">
-            <span>
-              Possible duplicate: {duplicateWarning.reason}
-            </span>
-            <Button
-              size="sm"
-              variant="destructive"
-              onClick={() => handleConfirm(true)}
-              disabled={confirming}
-            >
-              Confirm anyway
-            </Button>
+        <Alert className="border-amber-500/40 bg-amber-500/5">
+          <AlertTriangle className="w-4 h-4 text-amber-500" />
+          <AlertDescription>
+            <p className="font-medium text-amber-600 dark:text-amber-400 mb-1">
+              {duplicateWarning.confidence === "high" ? "Likely duplicate" : "Possible duplicate"}
+            </p>
+            <p className="text-sm mb-3">{duplicateWarning.reason}</p>
+            <div className="flex flex-wrap gap-2">
+              {duplicateWarning.resolutionOptions.map((opt) => (
+                <Button
+                  key={opt.value}
+                  size="sm"
+                  variant={opt.value === "keep_new" ? "default" : "outline"}
+                  onClick={() => handleConfirm(opt.value)}
+                  disabled={confirming}
+                >
+                  {confirming && <Loader2 className="w-3 h-3 mr-1.5 animate-spin" />}
+                  {opt.label}
+                </Button>
+              ))}
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setDuplicateWarning(null)}
+                disabled={confirming}
+              >
+                Cancel
+              </Button>
+            </div>
           </AlertDescription>
         </Alert>
       )}
@@ -448,7 +470,7 @@ export function ReviewClient({ id }: ReviewClientProps) {
         <div className="flex items-center gap-3 pt-2">
           <Button
             className="flex-1"
-            onClick={() => handleConfirm(false)}
+            onClick={() => handleConfirm()}
             disabled={confirming || discarding}
           >
             {confirming ? (

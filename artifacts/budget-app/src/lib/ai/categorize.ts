@@ -6,6 +6,7 @@
 
 import { db } from "@/lib/db";
 import { getAIConfig, chatCompletion } from "./client";
+import { checkAndRecordUsage } from "./usage";
 
 export interface CategorySuggestion {
   categoryId: string | null;
@@ -80,6 +81,24 @@ export async function categorizeItem(
       clarificationQuestion: `What category does "${itemDescription}" belong to?`,
       suggestedOptions: ["Food & Dining", "Shopping", "Transportation", "Utilities", "Other"],
     };
+  }
+
+  // Enforce per-call rate limits using the userId from the budget owner (fallback)
+  // In the upload flow, userId is passed in req. Here we use budgetId as proxy key.
+  const budget = await db.budget.findUnique({ where: { id: budgetId }, select: { ownerId: true } });
+  if (budget?.ownerId) {
+    const usageCheck = await checkAndRecordUsage(budget.ownerId, "categorization");
+    if (!usageCheck.allowed) {
+      return {
+        categoryId: null,
+        categoryName: null,
+        confidence: "low",
+        fromMemory: false,
+        isAmbiguous: true,
+        clarificationQuestion: `What category does "${itemDescription}" belong to? (${usageCheck.reason})`,
+        suggestedOptions: ["Food & Dining", "Shopping", "Transportation", "Utilities", "Other"],
+      };
+    }
   }
 
   // Get budget categories for context

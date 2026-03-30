@@ -334,12 +334,13 @@ model ItemMemory {
 
 model ClarificationHistory {
   id        String   @id @default(cuid())
-  receiptId String
+  receiptId String?
   question  String
   answer    String
+  context   String?
   createdAt DateTime @default(now())
 
-  receipt Receipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  receipt Receipt? @relation(fields: [receiptId], references: [id], onDelete: Cascade)
 }
 
 model ForecastSnapshot {
