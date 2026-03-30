@@ -60,9 +60,13 @@ export async function middleware(request: NextRequest) {
   // --- Setup not yet complete -----------------------------------------------
   // Covers: brand-new instance (no cookie, no session) and mid-setup
   // (session from step-1 account creation, but wizard not finished).
+  // NOTE: /login is always allowed so the DB-authoritative login page can handle
+  // edge cases (e.g. cookies cleared after setup completed — without this the
+  // middleware would redirect /login → /setup → /login in a redirect loop).
   if (!setupDone) {
-    // Allow /setup/* so the wizard itself is reachable
+    // Always allow setup paths and login through
     if (isSetupPath(pathname)) return NextResponse.next();
+    if (pathname === "/login") return NextResponse.next();
 
     // Redirect everything else (including authenticated users) to /setup
     if (pathname.startsWith("/api/")) {
