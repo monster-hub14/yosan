@@ -17,13 +17,19 @@ export async function GET(request: NextRequest) {
 
   const days = Math.min(parseInt(searchParams.get("days") ?? "42"), 90);
 
-  // Check forecasting usage limit before running AI (non-blocking if AI not configured)
+  // Check forecasting limit — only block on limitExceeded (quota hit), not unconfigured AI
   const limitCheck = await checkUsageLimit(session.userId, "forecasting");
+  if (limitCheck.limitExceeded) {
+    return NextResponse.json(
+      { error: limitCheck.reason ?? "AI usage limit reached", usageLimitReached: true },
+      { status: 429 }
+    );
+  }
 
   try {
     const forecast = await buildForecast(budgetId, session.userId, days);
-    // Record usage only if AI actually ran and we were within limits
-    if (forecast.generatedByAI && limitCheck.allowed) {
+    // Record usage only if AI actually ran
+    if (forecast.generatedByAI) {
       await recordUsage(session.userId, "forecasting");
     }
     return NextResponse.json({ forecast });

@@ -20,9 +20,9 @@ export async function POST(request: NextRequest) {
   const access = await requireBudgetRead(session, budgetId);
   if (access instanceof NextResponse) return access;
 
-  // Check limits only (no recording yet)
+  // Check limits only — limitExceeded=true means actual quota hit (not just unconfigured AI)
   const limitCheck = await checkUsageLimit(session.userId, "insights");
-  if (!limitCheck.allowed) {
+  if (limitCheck.limitExceeded) {
     return NextResponse.json(
       {
         error: limitCheck.reason ?? "AI usage limit reached",

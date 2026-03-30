@@ -34,6 +34,8 @@ function monthlyWindow(date = new Date()): string {
 
 export interface UsageCheckResult {
   allowed: boolean;
+  /** True only when a rate limit is actually exhausted (not when AI is merely unconfigured/disabled). */
+  limitExceeded: boolean;
   reason?: string;
   dailyCount: number;
   weeklyCount: number;
@@ -51,7 +53,7 @@ export async function checkAndRecordUsage(
 
   // Hard disable for user
   if (userControl && !userControl.aiEnabled) {
-    return { allowed: false, reason: "AI is disabled for your account.", dailyCount: 0, weeklyCount: 0, monthlyCount: 0 };
+    return { allowed: false, limitExceeded: false, reason: "AI is disabled for your account.", dailyCount: 0, weeklyCount: 0, monthlyCount: 0 };
   }
 
   // Per-feature disable for user
@@ -64,7 +66,7 @@ export async function checkAndRecordUsage(
       forecasting: userControl.forecastingEnabled,
     };
     if (featureMap[feature] === false) {
-      return { allowed: false, reason: `AI ${feature.replace(/_/g, " ")} is disabled for your account.`, dailyCount: 0, weeklyCount: 0, monthlyCount: 0 };
+      return { allowed: false, limitExceeded: false, reason: `AI ${feature.replace(/_/g, " ")} is disabled for your account.`, dailyCount: 0, weeklyCount: 0, monthlyCount: 0 };
     }
   }
 
@@ -91,6 +93,7 @@ export async function checkAndRecordUsage(
   if (effectiveDailyLimit != null && dayCount >= effectiveDailyLimit) {
     return {
       allowed: false,
+      limitExceeded: true,
       reason: `Daily AI limit reached (${effectiveDailyLimit}/day). Resets tomorrow.`,
       dailyCount: dayCount, weeklyCount: weekCount, monthlyCount: monthCount,
     };
@@ -98,6 +101,7 @@ export async function checkAndRecordUsage(
   if (effectiveWeeklyLimit != null && weekCount >= effectiveWeeklyLimit) {
     return {
       allowed: false,
+      limitExceeded: true,
       reason: `Weekly AI limit reached (${effectiveWeeklyLimit}/week). Resets next week.`,
       dailyCount: dayCount, weeklyCount: weekCount, monthlyCount: monthCount,
     };
@@ -105,6 +109,7 @@ export async function checkAndRecordUsage(
   if (effectiveMonthlyLimit != null && monthCount >= effectiveMonthlyLimit) {
     return {
       allowed: false,
+      limitExceeded: true,
       reason: `Monthly AI limit reached (${effectiveMonthlyLimit}/month). Resets next month.`,
       dailyCount: dayCount, weeklyCount: weekCount, monthlyCount: monthCount,
     };
@@ -120,6 +125,7 @@ export async function checkAndRecordUsage(
 
   return {
     allowed: true,
+    limitExceeded: false,
     dailyCount: dayCount + 1,
     weeklyCount: weekCount + 1,
     monthlyCount: monthCount + 1,
@@ -140,7 +146,7 @@ export async function checkUsageLimit(
   ]);
 
   if (userControl && !userControl.aiEnabled) {
-    return { allowed: false, reason: "AI is disabled for your account.", dailyCount: 0, weeklyCount: 0, monthlyCount: 0 };
+    return { allowed: false, limitExceeded: false, reason: "AI is disabled for your account.", dailyCount: 0, weeklyCount: 0, monthlyCount: 0 };
   }
   if (userControl) {
     const featureMap: Partial<Record<AIFeatureKey, boolean>> = {
@@ -151,11 +157,12 @@ export async function checkUsageLimit(
       forecasting: userControl.forecastingEnabled,
     };
     if (featureMap[feature] === false) {
-      return { allowed: false, reason: `AI ${feature.replace(/_/g, " ")} is disabled for your account.`, dailyCount: 0, weeklyCount: 0, monthlyCount: 0 };
+      return { allowed: false, limitExceeded: false, reason: `AI ${feature.replace(/_/g, " ")} is disabled for your account.`, dailyCount: 0, weeklyCount: 0, monthlyCount: 0 };
     }
   }
   if (!config || !config.isEnabled) {
-    return { allowed: false, reason: "AI provider is not configured.", dailyCount: 0, weeklyCount: 0, monthlyCount: 0 };
+    // AI not configured — not a limit error; callers degrade gracefully
+    return { allowed: false, limitExceeded: false, reason: "AI provider is not configured.", dailyCount: 0, weeklyCount: 0, monthlyCount: 0 };
   }
 
   const now = new Date();
@@ -177,16 +184,16 @@ export async function checkUsageLimit(
   const effectiveMonthlyLimit = minLimit(userControl?.monthlyLimit, config?.monthlyLimitPerUser);
 
   if (effectiveDailyLimit != null && dayCount >= effectiveDailyLimit) {
-    return { allowed: false, reason: `Daily AI limit reached (${effectiveDailyLimit}/day). Resets tomorrow.`, dailyCount: dayCount, weeklyCount: weekCount, monthlyCount: monthCount };
+    return { allowed: false, limitExceeded: true, reason: `Daily AI limit reached (${effectiveDailyLimit}/day). Resets tomorrow.`, dailyCount: dayCount, weeklyCount: weekCount, monthlyCount: monthCount };
   }
   if (effectiveWeeklyLimit != null && weekCount >= effectiveWeeklyLimit) {
-    return { allowed: false, reason: `Weekly AI limit reached (${effectiveWeeklyLimit}/week). Resets next week.`, dailyCount: dayCount, weeklyCount: weekCount, monthlyCount: monthCount };
+    return { allowed: false, limitExceeded: true, reason: `Weekly AI limit reached (${effectiveWeeklyLimit}/week). Resets next week.`, dailyCount: dayCount, weeklyCount: weekCount, monthlyCount: monthCount };
   }
   if (effectiveMonthlyLimit != null && monthCount >= effectiveMonthlyLimit) {
-    return { allowed: false, reason: `Monthly AI limit reached (${effectiveMonthlyLimit}/month). Resets next month.`, dailyCount: dayCount, weeklyCount: weekCount, monthlyCount: monthCount };
+    return { allowed: false, limitExceeded: true, reason: `Monthly AI limit reached (${effectiveMonthlyLimit}/month). Resets next month.`, dailyCount: dayCount, weeklyCount: weekCount, monthlyCount: monthCount };
   }
 
-  return { allowed: true, dailyCount: dayCount, weeklyCount: weekCount, monthlyCount: monthCount };
+  return { allowed: true, limitExceeded: false, dailyCount: dayCount, weeklyCount: weekCount, monthlyCount: monthCount };
 }
 
 /**

@@ -243,7 +243,8 @@ export async function POST(request: NextRequest) {
     if (alertType === "all" || alertType === "deficit_risk") {
       try {
         const forecast = await buildForecast(budget.id, budget.owner.id, 14);
-        const dangerPoints = forecast.points.filter((p) => p.balance < 0);
+        // Use isDangerZone which includes "approaching zero" threshold
+        const dangerPoints = forecast.points.filter((p) => p.isDangerZone);
 
         if (dangerPoints.length > 0) {
           const worstBalance = Math.min(...dangerPoints.map((p) => p.balance));

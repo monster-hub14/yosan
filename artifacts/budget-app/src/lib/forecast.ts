@@ -127,7 +127,8 @@ export async function buildForecast(budgetId: string, userId: string, daysAhead 
       isPayday,
       paydayAmount: isPayday ? periodIncome : undefined,
       bills,
-      isDangerZone: balance < 0,
+      // Danger zone: negative balance OR within 3 days of average daily spend (approaching zero)
+      isDangerZone: balance < Math.max(0, dailySpendingRate * 3),
     });
   }
 
