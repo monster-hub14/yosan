@@ -110,10 +110,13 @@ function verifySignature(req: NextRequest): boolean {
 }
 
 export async function POST(req: NextRequest) {
-  if (!WEBHOOK_SECRET && process.env.NODE_ENV === "production") {
-    console.warn("[email-webhook] WEBHOOK_EMAIL_SECRET is not set — inbound endpoint is unauthenticated");
-  }
-  if (!verifySignature(req)) {
+  if (!WEBHOOK_SECRET) {
+    if (process.env.NODE_ENV === "production") {
+      console.error("[email-webhook] WEBHOOK_EMAIL_SECRET is not set — rejecting unauthenticated inbound request in production");
+      return NextResponse.json({ error: "Webhook authentication required" }, { status: 401 });
+    }
+    console.warn("[email-webhook] WEBHOOK_EMAIL_SECRET is not set — accepting request in development mode");
+  } else if (!verifySignature(req)) {
     return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
   }
 

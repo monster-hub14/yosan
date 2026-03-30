@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { extractReceiptFromImage } from "@/lib/ai/extract";
 import { categorizeItem } from "@/lib/ai/categorize";
 import { checkAndRecordUsage, isFeatureEnabled } from "@/lib/ai/usage";
+import { extractPdfText } from "@/lib/ai/pdf-extract";
 import fs from "fs";
 import path from "path";
 import { randomUUID } from "crypto";
@@ -186,14 +187,18 @@ async function runAIExtraction(
       return;
     }
 
-    // Encode image as base64 data URL
-    const base64 = fileBuffer.toString("base64");
-    const imageUrl = `data:${mimeType};base64,${base64}`;
+    const isPdf = mimeType === "application/pdf";
+    let imageUrl: string | null = null;
+    let pdfText: string | null = null;
 
-    const extracted = await extractReceiptFromImage(
-      mimeType.startsWith("application/pdf") ? null : imageUrl,
-      mimeType.startsWith("application/pdf") ? "[PDF file — text extraction not available]" : null
-    );
+    if (isPdf) {
+      pdfText = await extractPdfText(fileBuffer);
+      if (!pdfText) pdfText = "[PDF — no text content could be extracted]";
+    } else {
+      imageUrl = `data:${mimeType};base64,${fileBuffer.toString("base64")}`;
+    }
+
+    const extracted = await extractReceiptFromImage(imageUrl, pdfText);
 
     // Categorize items if enabled (pass userId for per-user override check)
     const categorizationEnabled = await isFeatureEnabled("categorization", userId);

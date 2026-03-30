@@ -8,6 +8,7 @@ import { db } from "@/lib/db";
 import { extractReceiptFromImage } from "./extract";
 import { categorizeItem } from "./categorize";
 import { isFeatureEnabled, checkAndRecordUsage } from "./usage";
+import { extractPdfText } from "./pdf-extract";
 import fs from "fs";
 
 export async function processReceipt(
@@ -50,13 +51,18 @@ export async function processReceipt(
     }
 
     const fileBuffer = fs.readFileSync(filePath);
-    const base64 = fileBuffer.toString("base64");
-    const imageUrl = `data:${mimeType};base64,${base64}`;
+    const isPdf = mimeType === "application/pdf";
+    let imageUrl: string | null = null;
+    let pdfText: string | null = null;
 
-    const extracted = await extractReceiptFromImage(
-      mimeType.startsWith("application/pdf") ? null : imageUrl,
-      mimeType.startsWith("application/pdf") ? "[PDF — text extraction not available]" : null
-    );
+    if (isPdf) {
+      pdfText = await extractPdfText(fileBuffer);
+      if (!pdfText) pdfText = "[PDF — no text content could be extracted]";
+    } else {
+      imageUrl = `data:${mimeType};base64,${fileBuffer.toString("base64")}`;
+    }
+
+    const extracted = await extractReceiptFromImage(imageUrl, pdfText);
 
     const categorizationEnabled = await isFeatureEnabled("categorization", userId);
     const categorizedItems = [];
