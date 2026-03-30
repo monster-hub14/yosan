@@ -18,17 +18,10 @@ COPY --from=deps /workspace/node_modules ./node_modules
 COPY --from=deps /workspace/artifacts/budget-app/node_modules ./artifacts/budget-app/node_modules
 COPY . .
 WORKDIR /workspace/artifacts/budget-app
-RUN npx prisma generate
+RUN ./node_modules/.bin/prisma generate
 WORKDIR /workspace
 ENV NODE_ENV=production
 RUN pnpm --filter @workspace/budget-app run build
-
-# Prune devDependencies so the runtime image only contains production packages
-FROM base AS pruner
-WORKDIR /workspace
-COPY --from=builder /workspace .
-WORKDIR /workspace/artifacts/budget-app
-RUN pnpm prune --prod
 
 # Minimal runtime image
 FROM node:22-slim AS runner
@@ -40,8 +33,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     openssl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy only what's needed to run the app
-COPY --from=pruner /workspace/artifacts/budget-app/node_modules ./node_modules
+# Copy runtime dependencies (includes prisma CLI — a production dependency)
+COPY --from=deps /workspace/artifacts/budget-app/node_modules ./node_modules
 COPY --from=builder /workspace/artifacts/budget-app/.next ./.next
 COPY --from=builder /workspace/artifacts/budget-app/public ./public
 COPY --from=builder /workspace/artifacts/budget-app/prisma ./prisma
@@ -51,6 +44,13 @@ COPY --from=builder /workspace/artifacts/budget-app/next.config.ts ./next.config
 RUN mkdir -p /data /uploads
 VOLUME ["/data", "/uploads"]
 
+# Non-root user for security
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 nextjs && \
+    chown -R nextjs:nodejs /app /data /uploads
+USER nextjs
+
 EXPOSE 3000
 
-CMD sh -c "node node_modules/.bin/prisma migrate deploy && node node_modules/.bin/next start -p $PORT"
+# node_modules/.bin/* are shell wrapper scripts — execute via sh, not node
+CMD ["sh", "-c", "./node_modules/.bin/prisma migrate deploy && ./node_modules/.bin/next start -p ${PORT:-3000}"]
