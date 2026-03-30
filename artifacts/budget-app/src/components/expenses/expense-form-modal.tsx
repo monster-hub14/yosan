@@ -103,7 +103,18 @@ export function ExpenseFormModal({ open, onClose, budgetId, editExpense, onSaved
       .catch(console.error);
   }, [open, budgetId, editExpense?.categoryId]);
 
+  const isLeaf = (cat: Category) => !cat.children || cat.children.length === 0;
+
   const handleSelectCategory = (cat: Category) => {
+    if (!isLeaf(cat)) {
+      // Toggle expand instead of selecting parent
+      setExpandedParents((p) => {
+        const next = new Set(p);
+        next.has(cat.id) ? next.delete(cat.id) : next.add(cat.id);
+        return next;
+      });
+      return;
+    }
     setCategoryId(cat.id);
     setCategoryName(cat.name);
     setCategoryColor(cat.color ?? null);
@@ -268,10 +279,13 @@ export function ExpenseFormModal({ open, onClose, budgetId, editExpense, onSaved
                 </div>
                 <ScrollArea className="h-56">
                   <div className="space-y-0.5">
-                    {filtered.map((parent) => (
+                    {filtered.map((parent) => {
+                      const hasChildren = (parent.children?.length ?? 0) > 0;
+                      const isExpanded = expandedParents.has(parent.id) || !!catSearch;
+                      return (
                       <div key={parent.id}>
                         <div className="flex items-center gap-1">
-                          {(parent.children?.length ?? 0) > 0 && !catSearch ? (
+                          {hasChildren && !catSearch ? (
                             <button
                               className="p-0.5 rounded hover:bg-muted"
                               onClick={() => setExpandedParents((p) => {
@@ -280,21 +294,27 @@ export function ExpenseFormModal({ open, onClose, budgetId, editExpense, onSaved
                                 return next;
                               })}
                             >
-                              {expandedParents.has(parent.id) ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                              {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
                             </button>
                           ) : (
                             <div className="w-5" />
                           )}
                           <button
-                            className="flex-1 flex items-center gap-2 px-2 py-1.5 rounded text-sm hover:bg-muted text-left"
+                            className={`flex-1 flex items-center gap-2 px-2 py-1.5 rounded text-sm text-left ${
+                              hasChildren
+                                ? "text-muted-foreground cursor-default hover:bg-muted/50"
+                                : "hover:bg-muted"
+                            }`}
                             onClick={() => handleSelectCategory(parent)}
+                            title={hasChildren ? "Select a sub-category" : undefined}
                           >
                             <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: parent.color ?? "#6b7280" }} />
-                            <span className="font-medium">{parent.name}</span>
-                            {categoryId === parent.id && <Check className="h-3.5 w-3.5 ml-auto text-primary" />}
+                            <span className={hasChildren ? "font-semibold text-xs uppercase tracking-wide" : "font-medium"}>{parent.name}</span>
+                            {!hasChildren && categoryId === parent.id && <Check className="h-3.5 w-3.5 ml-auto text-primary" />}
+                            {hasChildren && <ChevronRight className="h-3 w-3 ml-auto opacity-40" />}
                           </button>
                         </div>
-                        {(expandedParents.has(parent.id) || !!catSearch) && (parent.children ?? []).map((child) => (
+                        {isExpanded && (parent.children ?? []).map((child) => (
                           <button
                             key={child.id}
                             className="w-full flex items-center gap-2 pl-9 pr-2 py-1.5 rounded text-sm hover:bg-muted text-left"
@@ -306,7 +326,8 @@ export function ExpenseFormModal({ open, onClose, budgetId, editExpense, onSaved
                           </button>
                         ))}
                       </div>
-                    ))}
+                      );
+                    })}
                     {filtered.length === 0 && (
                       <p className="text-sm text-muted-foreground px-2 py-3 text-center">No categories found</p>
                     )}

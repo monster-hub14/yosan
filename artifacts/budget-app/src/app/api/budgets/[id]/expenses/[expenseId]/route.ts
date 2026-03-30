@@ -6,7 +6,7 @@ import { computePayPeriod, getPeriodsPerMonth } from "@/lib/pay-period";
 
 interface Params { params: Promise<{ id: string; expenseId: string }> }
 
-async function calcSafeToSpend(budgetId: string, referenceDate: Date) {
+async function calcSafeToSpend(budgetId: string) {
   const budget = await db.budget.findUnique({
     where: { id: budgetId },
     include: {
@@ -24,11 +24,9 @@ async function calcSafeToSpend(budgetId: string, referenceDate: Date) {
 
   if (!payPeriod) return null;
 
-  const periodStart = new Date(referenceDate.getFullYear(), referenceDate.getMonth(), 1);
-  const periodEnd = new Date(referenceDate.getFullYear(), referenceDate.getMonth() + 1, 0, 23, 59, 59);
-
+  // Always use the actual pay period window (not calendar month) for accurate safe-to-spend
   const expenses = await db.expense.aggregate({
-    where: { budgetId, date: { gte: periodStart, lte: periodEnd } },
+    where: { budgetId, date: { gte: payPeriod.start, lte: payPeriod.end } },
     _sum: { amount: true },
   });
 
@@ -105,8 +103,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     include: { category: { select: { id: true, name: true, color: true, icon: true } } },
   });
 
-  const refDate = body.date ? new Date(body.date) : existing.date;
-  const safeToSpend = await calcSafeToSpend(budgetId, refDate);
+  const safeToSpend = await calcSafeToSpend(budgetId);
 
   return NextResponse.json({ expense, safeToSpend });
 }
@@ -126,6 +123,6 @@ export async function DELETE(request: NextRequest, { params }: Params) {
 
   await db.expense.delete({ where: { id: expenseId } });
 
-  const safeToSpend = await calcSafeToSpend(budgetId, existing.date);
+  const safeToSpend = await calcSafeToSpend(budgetId);
   return NextResponse.json({ ok: true, safeToSpend });
 }

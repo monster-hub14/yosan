@@ -85,6 +85,8 @@ export function ExpensesClient({ budgetId, initialCategories }: ExpensesClientPr
     if (categoryFilter) params.set("categoryId", categoryFilter);
     if (dateFrom) params.set("dateFrom", dateFrom);
     if (dateTo) params.set("dateTo", dateTo);
+    // When user explicitly sets date filters, opt into full history; otherwise default to active period
+    if (dateFrom || dateTo) params.set("all", "true");
 
     fetch(`/api/budgets/${budgetId}/expenses?${params}`)
       .then((r) => r.json())

@@ -16,10 +16,15 @@
       "static/chunks/main-app.js",
       "static/chunks/app/(auth)/setup/page.js"
     ],
-    "/(auth)/login/page": [
+    "/api/budgets/[id]/expenses/route": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/(auth)/login/page.js"
+      "static/chunks/app/api/budgets/[id]/expenses/route.js"
+    ],
+    "/api/budgets/[id]/category-targets/route": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/api/budgets/[id]/category-targets/route.js"
     ]
   }
 }

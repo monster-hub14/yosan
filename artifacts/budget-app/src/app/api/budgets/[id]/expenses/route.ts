@@ -6,7 +6,7 @@ import { computePayPeriod, getPeriodsPerMonth } from "@/lib/pay-period";
 
 interface Params { params: Promise<{ id: string }> }
 
-async function calcSafeToSpend(budgetId: string, periodStart: Date, periodEnd: Date) {
+async function calcSafeToSpend(budgetId: string) {
   const budget = await db.budget.findUnique({
     where: { id: budgetId },
     include: {
@@ -24,12 +24,11 @@ async function calcSafeToSpend(budgetId: string, periodStart: Date, periodEnd: D
 
   if (!payPeriod) return null;
 
-  const [expenses] = await Promise.all([
-    db.expense.aggregate({
-      where: { budgetId, date: { gte: periodStart, lte: periodEnd } },
-      _sum: { amount: true },
-    }),
-  ]);
+  // Always use the actual pay period window (not calendar month) for accurate safe-to-spend
+  const expenses = await db.expense.aggregate({
+    where: { budgetId, date: { gte: payPeriod.start, lte: payPeriod.end } },
+    _sum: { amount: true },
+  });
 
   let savingsReserve = 0;
   for (const goal of budget.savingsGoals) {
@@ -53,6 +52,29 @@ async function calcSafeToSpend(budgetId: string, periodStart: Date, periodEnd: D
   });
 }
 
+async function getActivePeriodBounds(budgetId: string): Promise<{ start: Date; end: Date }> {
+  const budget = await db.budget.findUnique({
+    where: { id: budgetId },
+    include: { incomeSources: { where: { isActive: true } } },
+  });
+  const primarySource = budget?.incomeSources[0] ?? null;
+  if (primarySource) {
+    const payPeriod = computePayPeriod(
+      primarySource.frequency,
+      primarySource.nextPayDate,
+      primarySource.amount,
+      primarySource.customDays
+    );
+    return { start: payPeriod.start, end: payPeriod.end };
+  }
+  // Fallback to calendar month
+  const now = new Date();
+  return {
+    start: new Date(now.getFullYear(), now.getMonth(), 1),
+    end: new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59),
+  };
+}
+
 export async function GET(request: NextRequest, { params }: Params) {
   const session = await requireAuth(request);
   if (!isSessionPayload(session)) return session;
@@ -66,16 +88,28 @@ export async function GET(request: NextRequest, { params }: Params) {
   const search = searchParams.get("search");
   const dateFrom = searchParams.get("dateFrom");
   const dateTo = searchParams.get("dateTo");
+  const all = searchParams.get("all") === "true"; // explicit opt-in to full history
   const page = Math.max(1, parseInt(searchParams.get("page") ?? "1"));
   const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") ?? "50")));
   const skip = (page - 1) * limit;
+
+  // Default to active pay period when no date filters are supplied and not requesting all
+  let periodStart: Date | undefined;
+  let periodEnd: Date | undefined;
+  if (!dateFrom && !dateTo && !all) {
+    const bounds = await getActivePeriodBounds(budgetId);
+    periodStart = bounds.start;
+    periodEnd = bounds.end;
+  }
 
   const where = {
     budgetId,
     ...(categoryId ? { categoryId } : {}),
     ...(dateFrom || dateTo
       ? { date: { ...(dateFrom ? { gte: new Date(dateFrom) } : {}), ...(dateTo ? { lte: new Date(dateTo + "T23:59:59") } : {}) } }
-      : {}),
+      : periodStart && periodEnd
+        ? { date: { gte: periodStart, lte: periodEnd } }
+        : {}),
     ...(search
       ? { OR: [{ merchant: { contains: search } }, { description: { contains: search } }, { notes: { contains: search } }] }
       : {}),
@@ -92,7 +126,15 @@ export async function GET(request: NextRequest, { params }: Params) {
     db.expense.count({ where }),
   ]);
 
-  return NextResponse.json({ expenses, total, page, limit, pages: Math.ceil(total / limit) });
+  return NextResponse.json({
+    expenses,
+    total,
+    page,
+    limit,
+    pages: Math.ceil(total / limit),
+    periodStart: periodStart?.toISOString() ?? dateFrom ?? null,
+    periodEnd: periodEnd?.toISOString() ?? dateTo ?? null,
+  });
 }
 
 export async function POST(request: NextRequest, { params }: Params) {
@@ -147,10 +189,7 @@ export async function POST(request: NextRequest, { params }: Params) {
     include: { category: { select: { id: true, name: true, color: true, icon: true } } },
   });
 
-  const expDate = new Date(body.date);
-  const periodStart = new Date(expDate.getFullYear(), expDate.getMonth(), 1);
-  const periodEnd = new Date(expDate.getFullYear(), expDate.getMonth() + 1, 0, 23, 59, 59);
-  const safeToSpend = await calcSafeToSpend(budgetId, periodStart, periodEnd);
+  const safeToSpend = await calcSafeToSpend(budgetId);
 
   return NextResponse.json({ expense, safeToSpend }, { status: 201 });
 }

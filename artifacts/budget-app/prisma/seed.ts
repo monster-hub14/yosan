@@ -13,6 +13,23 @@ async function main() {
   console.log("🌱 Seeding development database...");
 
   await db.setupProgress.deleteMany();
+  // Clear data in dependency order to avoid FK violations
+  await db.categoryTarget.deleteMany();
+  await db.expense.deleteMany();
+  await db.pendingImport.deleteMany();
+  await db.receipt.deleteMany();
+  await db.category.deleteMany();
+  await db.incomeEntry.deleteMany();
+  await db.incomeSource.deleteMany();
+  await db.savingsGoal.deleteMany();
+  await db.recurringExpense.deleteMany();
+  await db.budgetMembership.deleteMany();
+  await db.budget.deleteMany();
+  await db.userAIControl.deleteMany();
+  await db.aIUsageLog.deleteMany();
+  await db.aIProviderConfig.deleteMany();
+  await db.emailConfig.deleteMany();
+  await db.emailForwardingConfig.deleteMany();
   await db.user.deleteMany();
 
   const adminHash = await bcrypt.hash("admin1234", 12);

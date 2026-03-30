@@ -1,4 +1,5 @@
 {
-  "/(auth)/setup/page": "app/(auth)/setup/page.js",
-  "/(auth)/login/page": "app/(auth)/login/page.js"
+  "/api/budgets/[id]/expenses/route": "app/api/budgets/[id]/expenses/route.js",
+  "/api/budgets/[id]/category-targets/route": "app/api/budgets/[id]/category-targets/route.js",
+  "/(auth)/setup/page": "app/(auth)/setup/page.js"
 }
