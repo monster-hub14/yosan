@@ -183,11 +183,18 @@ export function AnalysisDashboard() {
   const refresh = useCallback(async (showLoading = false) => {
     if (showLoading) setRefreshing(true);
     try {
-      const res = await fetch("/api/analysis/insights", {
+      const res = await fetch("/api/analysis/refresh", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({}),
       });
+      if (res.status === 429) {
+        const data = await res.json() as { error: string };
+        console.warn("[analysis] rate limited:", data.error);
+        // Still load stored insights even when rate-limited
+        await loadStoredInsights();
+        return;
+      }
       if (res.ok) {
         const data = await res.json() as { analysis: AnalysisResult };
         setAnalysis(data.analysis);

@@ -60,7 +60,7 @@ export function NotificationsForm() {
   useEffect(() => {
     Promise.all([
       fetch("/api/notifications").then((r) => r.json()),
-      fetch("/api/settings/email").then((r) => r.json()),
+      fetch("/api/settings/email-status").then((r) => r.json()),
     ]).then(([notifData, emailData]) => {
       const map = new Map<PrefKey, boolean>();
       // Set defaults (all in-app enabled, no email by default)
@@ -73,7 +73,7 @@ export function NotificationsForm() {
         map.set(buildKey(pref.channel, pref.event), pref.isEnabled);
       }
       setPrefs(map);
-      setEmailEnabled(emailData.config?.isEnabled ?? false);
+      setEmailEnabled(emailData.isEnabled ?? false);
     }).finally(() => setLoading(false));
   }, []);
 

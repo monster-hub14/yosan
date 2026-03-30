@@ -17,8 +17,6 @@ import {
   paydayReminderEmail,
 } from "@/lib/email";
 import { generateInsights } from "@/lib/ai/insights";
-import { getActiveBudgetId } from "@/lib/active-budget";
-import { getActivePeriodBounds } from "@/lib/active-period";
 
 function isCronAuthorized(request: NextRequest): boolean {
   const secret = process.env.CRON_SECRET;
@@ -28,14 +26,9 @@ function isCronAuthorized(request: NextRequest): boolean {
 }
 
 export async function POST(request: NextRequest) {
-  // Authorization: cron secret or must be internal call from admin
-  const authorized = isCronAuthorized(request);
-  if (!authorized) {
-    // Allow internal calls with no-origin header (same-server)
-    const origin = request.headers.get("x-cron-internal");
-    if (origin !== "budget-app") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+  // Authorization: require CRON_SECRET bearer token
+  if (!isCronAuthorized(request)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const body = await request.json().catch(() => ({})) as { type?: string };

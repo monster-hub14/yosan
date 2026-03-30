@@ -20,6 +20,7 @@ import {
   Tooltip,
   ResponsiveContainer,
   ReferenceLine,
+  ReferenceArea,
 } from "recharts";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -122,8 +123,34 @@ export function ForecastDashboard() {
     date: shortDate(p.date),
     balance: p.balance,
     isPayday: p.isPayday,
+    hasBills: p.bills.length > 0,
     isDangerZone: p.isDangerZone,
   }));
+
+  // Build danger zone ReferenceArea spans
+  const dangerRanges: { start: string; end: string }[] = [];
+  let rangeStart: string | null = null;
+  for (const point of chartData) {
+    if (point.isDangerZone && !rangeStart) {
+      rangeStart = point.date;
+    } else if (!point.isDangerZone && rangeStart) {
+      dangerRanges.push({ start: rangeStart, end: point.date });
+      rangeStart = null;
+    }
+  }
+  if (rangeStart) {
+    dangerRanges.push({ start: rangeStart, end: chartData[chartData.length - 1]?.date ?? rangeStart });
+  }
+
+  // Payday dates for vertical reference lines (limit to visible)
+  const paydayDates = chartData
+    .filter((p) => p.isPayday)
+    .map((p) => p.date);
+
+  // Bill dates for vertical reference lines
+  const billDates = chartData
+    .filter((p) => p.hasBills)
+    .map((p) => p.date);
 
   const hasDanger = forecast.dangerDays > 0;
 
@@ -228,12 +255,8 @@ export function ForecastDashboard() {
               <AreaChart data={chartData} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
                 <defs>
                   <linearGradient id="balanceGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
+                    <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.25} />
                     <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
-                  </linearGradient>
-                  <linearGradient id="dangerGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
@@ -250,7 +273,40 @@ export function ForecastDashboard() {
                   tickFormatter={(v: number) => `$${v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v.toFixed(0)}`}
                 />
                 <Tooltip content={<CustomTooltip />} />
+                {/* Danger zone shaded regions */}
+                {dangerRanges.map((range, i) => (
+                  <ReferenceArea
+                    key={`danger-${i}`}
+                    x1={range.start}
+                    x2={range.end}
+                    fill="#ef4444"
+                    fillOpacity={0.12}
+                    strokeOpacity={0}
+                  />
+                ))}
+                {/* Zero line */}
                 <ReferenceLine y={0} stroke="#ef4444" strokeDasharray="4 4" strokeWidth={1.5} />
+                {/* Payday vertical markers */}
+                {paydayDates.map((d) => (
+                  <ReferenceLine
+                    key={`pay-${d}`}
+                    x={d}
+                    stroke="#22c55e"
+                    strokeDasharray="3 3"
+                    strokeWidth={1.5}
+                    label={{ value: "Pay", position: "top", fontSize: 9, fill: "#22c55e" }}
+                  />
+                ))}
+                {/* Bill vertical markers */}
+                {billDates.map((d) => (
+                  <ReferenceLine
+                    key={`bill-${d}`}
+                    x={d}
+                    stroke="#f59e0b"
+                    strokeDasharray="2 3"
+                    strokeWidth={1}
+                  />
+                ))}
                 <Area
                   type="monotone"
                   dataKey="balance"
@@ -265,7 +321,7 @@ export function ForecastDashboard() {
                         cx={props.cx}
                         cy={props.cy}
                         r={4}
-                        fill="hsl(var(--primary))"
+                        fill="#22c55e"
                         stroke="hsl(var(--background))"
                         strokeWidth={2}
                       />
@@ -280,8 +336,17 @@ export function ForecastDashboard() {
               <span className="w-2 h-2 rounded-full bg-primary" /> Balance
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-primary border-2 border-background ring-1 ring-primary" /> Payday
+              <span className="w-3 h-px border-t-2 border-dashed border-green-500" />
+              <span className="w-2 h-2 rounded-full bg-green-500" /> Payday
             </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-3 h-px border-t border-dashed border-amber-500" /> Bill due
+            </span>
+            {hasDanger && (
+              <span className="flex items-center gap-1.5">
+                <span className="w-4 h-3 rounded-sm bg-red-500/20 border border-red-300/50" /> Low balance
+              </span>
+            )}
             <span className="flex items-center gap-1.5">
               <span className="w-4 h-px border-t-2 border-dashed border-red-500" /> Zero
             </span>

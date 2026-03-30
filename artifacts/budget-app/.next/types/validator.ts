@@ -308,6 +308,15 @@ type RouteHandlerConfig<Route extends AppRouteHandlerRoutes = AppRouteHandlerRou
   type __Unused = __Check
 }
 
+// Validate ../../src/app/api/analysis/refresh/route.ts
+{
+  type __IsExpected<Specific extends RouteHandlerConfig<"/api/analysis/refresh">> = Specific
+  const handler = {} as typeof import("../../src/app/api/analysis/refresh/route.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
 // Validate ../../src/app/api/auth/login/route.ts
 {
   type __IsExpected<Specific extends RouteHandlerConfig<"/api/auth/login">> = Specific
@@ -618,6 +627,15 @@ type RouteHandlerConfig<Route extends AppRouteHandlerRoutes = AppRouteHandlerRou
 {
   type __IsExpected<Specific extends RouteHandlerConfig<"/api/settings/ai/test">> = Specific
   const handler = {} as typeof import("../../src/app/api/settings/ai/test/route.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../src/app/api/settings/email-status/route.ts
+{
+  type __IsExpected<Specific extends RouteHandlerConfig<"/api/settings/email-status">> = Specific
+  const handler = {} as typeof import("../../src/app/api/settings/email-status/route.js")
   type __Check = __IsExpected<typeof handler>
   // @ts-ignore
   type __Unused = __Check

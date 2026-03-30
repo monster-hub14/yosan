@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuth, isSessionPayload } from "@/lib/auth/permissions";
-import { requireBudgetRead } from "@/lib/auth/permissions";
+import { requireAuth, isSessionPayload, requireBudgetRead } from "@/lib/auth/permissions";
 import { getActiveBudgetId } from "@/lib/active-budget";
 import { db } from "@/lib/db";
 import { generateInsights, persistInsight } from "@/lib/ai/insights";
+import { isFeatureEnabled } from "@/lib/ai/usage";
 
 export async function GET(request: NextRequest) {
   const session = await requireAuth(request);
@@ -16,22 +16,8 @@ export async function GET(request: NextRequest) {
   const access = await requireBudgetRead(session, budgetId);
   if (access instanceof NextResponse) return access;
 
-  const refresh = searchParams.get("refresh") === "1";
   const limit = Math.min(parseInt(searchParams.get("limit") ?? "20"), 50);
 
-  if (refresh) {
-    // Generate fresh analysis
-    try {
-      const result = await generateInsights(budgetId, session.userId);
-      await persistInsight(budgetId, result);
-      return NextResponse.json({ analysis: result, refreshed: true });
-    } catch (err) {
-      console.error("[analysis] generateInsights failed:", err);
-      return NextResponse.json({ error: "Analysis generation failed" }, { status: 500 });
-    }
-  }
-
-  // Return stored insights
   const insights = await db.insight.findMany({
     where: { budgetId },
     orderBy: { createdAt: "desc" },
@@ -52,10 +38,13 @@ export async function POST(request: NextRequest) {
   const access = await requireBudgetRead(session, budgetId);
   if (access instanceof NextResponse) return access;
 
+  // Check if AI insights feature is enabled (respects global + per-user controls)
+  const aiEnabled = await isFeatureEnabled("insights", session.userId);
+
   try {
     const result = await generateInsights(budgetId, session.userId);
     const insightId = await persistInsight(budgetId, result);
-    return NextResponse.json({ analysis: result, insightId }, { status: 201 });
+    return NextResponse.json({ analysis: result, insightId, aiEnabled }, { status: 201 });
   } catch (err) {
     console.error("[analysis] generateInsights failed:", err);
     return NextResponse.json({ error: "Analysis generation failed" }, { status: 500 });
