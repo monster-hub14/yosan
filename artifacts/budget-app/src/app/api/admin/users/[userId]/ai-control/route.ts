@@ -50,18 +50,27 @@ export async function PUT(request: NextRequest, { params }: Params) {
     aiEnabled?: boolean;
     extractionEnabled?: boolean;
     categorizationEnabled?: boolean;
+    recurringCategorizationEnabled?: boolean;
+    insightsEnabled?: boolean;
+    forecastingEnabled?: boolean;
     dailyLimit?: number | null;
     weeklyLimit?: number | null;
     monthlyLimit?: number | null;
   };
 
+  const boolField = (key: keyof typeof body, def: boolean) =>
+    body[key] !== undefined ? (body[key] as boolean) : def;
+
   const control = await db.userAIControl.upsert({
     where: { userId },
     create: {
       userId,
-      aiEnabled: body.aiEnabled ?? true,
-      extractionEnabled: body.extractionEnabled ?? true,
-      categorizationEnabled: body.categorizationEnabled ?? true,
+      aiEnabled: boolField("aiEnabled", true),
+      extractionEnabled: boolField("extractionEnabled", true),
+      categorizationEnabled: boolField("categorizationEnabled", true),
+      recurringCategorizationEnabled: boolField("recurringCategorizationEnabled", true),
+      insightsEnabled: boolField("insightsEnabled", true),
+      forecastingEnabled: boolField("forecastingEnabled", true),
       dailyLimit: body.dailyLimit ?? null,
       weeklyLimit: body.weeklyLimit ?? null,
       monthlyLimit: body.monthlyLimit ?? null,
@@ -70,6 +79,9 @@ export async function PUT(request: NextRequest, { params }: Params) {
       ...(body.aiEnabled !== undefined && { aiEnabled: body.aiEnabled }),
       ...(body.extractionEnabled !== undefined && { extractionEnabled: body.extractionEnabled }),
       ...(body.categorizationEnabled !== undefined && { categorizationEnabled: body.categorizationEnabled }),
+      ...(body.recurringCategorizationEnabled !== undefined && { recurringCategorizationEnabled: body.recurringCategorizationEnabled }),
+      ...(body.insightsEnabled !== undefined && { insightsEnabled: body.insightsEnabled }),
+      ...(body.forecastingEnabled !== undefined && { forecastingEnabled: body.forecastingEnabled }),
       ...(Object.prototype.hasOwnProperty.call(body, "dailyLimit") && { dailyLimit: body.dailyLimit }),
       ...(Object.prototype.hasOwnProperty.call(body, "weeklyLimit") && { weeklyLimit: body.weeklyLimit }),
       ...(Object.prototype.hasOwnProperty.call(body, "monthlyLimit") && { monthlyLimit: body.monthlyLimit }),

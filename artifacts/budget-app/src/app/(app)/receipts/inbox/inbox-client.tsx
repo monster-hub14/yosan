@@ -178,7 +178,7 @@ export function InboxClient() {
   }
 
   async function handleCardQuickConfirm(id: string) {
-    router.push(`/receipts/${id}`);
+    router.push(`/receipts/${id}/review`);
   }
 
   function getParsedData(imp: PendingImport) {
@@ -364,7 +364,7 @@ export function InboxClient() {
                       )}
                     </div>
                     {clickable && (
-                      <Link href={`/receipts/${imp.id}`}>
+                      <Link href={`/receipts/${imp.id}/review`}>
                         <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
                       </Link>
                     )}

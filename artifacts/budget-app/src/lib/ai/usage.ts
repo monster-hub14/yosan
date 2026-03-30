@@ -56,11 +56,15 @@ export async function checkAndRecordUsage(
 
   // Per-feature disable for user
   if (userControl) {
-    if (feature === "extraction" && !userControl.extractionEnabled) {
-      return { allowed: false, reason: "AI receipt extraction is disabled for your account.", dailyCount: 0, weeklyCount: 0, monthlyCount: 0 };
-    }
-    if (feature === "categorization" && !userControl.categorizationEnabled) {
-      return { allowed: false, reason: "AI categorization is disabled for your account.", dailyCount: 0, weeklyCount: 0, monthlyCount: 0 };
+    const featureMap: Partial<Record<AIFeatureKey, boolean>> = {
+      extraction: userControl.extractionEnabled,
+      categorization: userControl.categorizationEnabled,
+      recurring_categorization: userControl.recurringCategorizationEnabled,
+      insights: userControl.insightsEnabled,
+      forecasting: userControl.forecastingEnabled,
+    };
+    if (featureMap[feature] === false) {
+      return { allowed: false, reason: `AI ${feature.replace(/_/g, " ")} is disabled for your account.`, dailyCount: 0, weeklyCount: 0, monthlyCount: 0 };
     }
   }
 
@@ -126,8 +130,14 @@ export async function isFeatureEnabled(feature: AIFeatureKey, userId?: string): 
     const userControl = await db.userAIControl.findUnique({ where: { userId } });
     if (userControl) {
       if (!userControl.aiEnabled) return false;
-      if (feature === "extraction" && !userControl.extractionEnabled) return false;
-      if (feature === "categorization" && !userControl.categorizationEnabled) return false;
+      const featureMap: Partial<Record<AIFeatureKey, boolean>> = {
+        extraction: userControl.extractionEnabled,
+        categorization: userControl.categorizationEnabled,
+        recurring_categorization: userControl.recurringCategorizationEnabled,
+        insights: userControl.insightsEnabled,
+        forecasting: userControl.forecastingEnabled,
+      };
+      if (featureMap[feature] === false) return false;
     }
   }
 

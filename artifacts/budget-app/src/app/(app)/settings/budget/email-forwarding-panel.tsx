@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Inbox, Copy, RefreshCw, Loader2, CheckCircle2 } from "lucide-react";
+import { Inbox, Copy, RefreshCw, Loader2, CheckCircle2, Send } from "lucide-react";
 import { toast } from "sonner";
 
 interface EmailForwardingPanelProps {
@@ -26,6 +26,7 @@ export function EmailForwardingPanel({ budgetId }: EmailForwardingPanelProps) {
   const [toggling, setToggling] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [testing, setTesting] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -79,6 +80,23 @@ export function EmailForwardingPanel({ budgetId }: EmailForwardingPanelProps) {
       }
     } finally {
       setToggling(false);
+    }
+  }
+
+  async function handleTestForwarding() {
+    setTesting(true);
+    try {
+      const res = await fetch(`/api/budgets/${budgetId}/email-forwarding/test`, { method: "POST" });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success(data.message ?? "Test receipt created — check your inbox");
+      } else {
+        toast.error(data.error ?? "Test failed");
+      }
+    } catch {
+      toast.error("Could not send test");
+    } finally {
+      setTesting(false);
     }
   }
 
@@ -151,7 +169,7 @@ export function EmailForwardingPanel({ budgetId }: EmailForwardingPanelProps) {
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between flex-wrap gap-2">
                   <div className="flex items-center gap-2">
                     <Switch
                       id="forwarding-enabled"
@@ -164,20 +182,38 @@ export function EmailForwardingPanel({ budgetId }: EmailForwardingPanelProps) {
                     </Label>
                     {toggling && <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />}
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleGenerateAddress}
-                    disabled={generating}
-                    className="text-muted-foreground text-xs"
-                  >
-                    {generating ? (
-                      <Loader2 className="w-3 h-3 mr-1.5 animate-spin" />
-                    ) : (
-                      <RefreshCw className="w-3 h-3 mr-1.5" />
+                  <div className="flex items-center gap-2">
+                    {config.enabled && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleTestForwarding}
+                        disabled={testing}
+                        className="text-xs"
+                      >
+                        {testing ? (
+                          <Loader2 className="w-3 h-3 mr-1.5 animate-spin" />
+                        ) : (
+                          <Send className="w-3 h-3 mr-1.5" />
+                        )}
+                        Test forwarding
+                      </Button>
                     )}
-                    Regenerate address
-                  </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleGenerateAddress}
+                      disabled={generating}
+                      className="text-muted-foreground text-xs"
+                    >
+                      {generating ? (
+                        <Loader2 className="w-3 h-3 mr-1.5 animate-spin" />
+                      ) : (
+                        <RefreshCw className="w-3 h-3 mr-1.5" />
+                      )}
+                      Regenerate
+                    </Button>
+                  </div>
                 </div>
 
                 <p className="text-xs text-muted-foreground">

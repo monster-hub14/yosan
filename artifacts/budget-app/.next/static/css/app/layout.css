@@ -608,6 +608,9 @@
   .max-h-\[--radix-select-content-available-height\] {
     max-height: --radix-select-content-available-height;
   }
+  .max-h-\[90vh\] {
+    max-height: 90vh;
+  }
   .max-h-\[300px\] {
     max-height: 300px;
   }

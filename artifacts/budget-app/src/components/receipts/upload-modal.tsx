@@ -59,7 +59,6 @@ export function UploadReceiptModal({ open, onClose, budgetId }: UploadModalProps
 
   function handleSkip() {
     handleClose();
-    router.push("/receipts/inbox");
   }
 
   function handleFileSelect(file: File) {
