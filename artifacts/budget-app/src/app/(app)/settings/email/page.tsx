@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader2, Save, Mail, Eye, EyeOff } from "lucide-react";
+import { Loader2, Save, Mail, Eye, EyeOff, Inbox } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,6 +13,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 
 export default function EmailSettingsPage() {
@@ -70,6 +71,7 @@ export default function EmailSettingsPage() {
 
   return (
     <div className="space-y-6 max-w-xl">
+      {/* Outbound SMTP */}
       <Card className="border-border">
         <CardHeader>
           <div className="flex items-center gap-3">
@@ -111,7 +113,9 @@ export default function EmailSettingsPage() {
                   id="smtpPort"
                   type="number"
                   value={config.smtpPort}
-                  onChange={(e) => setConfig((c) => ({ ...c, smtpPort: parseInt(e.target.value) }))}
+                  onChange={(e) =>
+                    setConfig((c) => ({ ...c, smtpPort: parseInt(e.target.value) }))
+                  }
                   placeholder="587"
                 />
               </div>
@@ -182,6 +186,46 @@ export default function EmailSettingsPage() {
               Save settings
             </Button>
           </form>
+        </CardContent>
+      </Card>
+
+      {/* Receipt Forwarding (instance-level) */}
+      <Card className="border-border">
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-muted">
+              <Inbox className="w-5 h-5 text-muted-foreground" />
+            </div>
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <CardTitle>Receipt Ingestion</CardTitle>
+                <Badge variant="secondary" className="text-xs">Coming soon</Badge>
+              </div>
+              <CardDescription>
+                Forward email receipts to your instance for automatic AI parsing
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            When receipt ingestion is enabled, the app listens on an inbound email
+            address (e.g. via a mail relay or catch-all rule). Forwarded receipts
+            are parsed by the configured AI provider and added as pending expenses
+            for review.
+          </p>
+          <div className="space-y-1">
+            <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">
+              Inbound address format
+            </p>
+            <code className="text-xs bg-muted px-2 py-1 rounded font-mono">
+              receipts+&#123;budgetId&#125;@&#123;your-domain&#125;
+            </code>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Each budget also has its own forwarding address shown in Budget Settings.
+            Configure your mail server or IMAP polling in a future release.
+          </p>
         </CardContent>
       </Card>
     </div>

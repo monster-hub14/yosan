@@ -6,11 +6,6 @@
       "static/css/app/layout.css",
       "static/chunks/app/layout.js"
     ],
-    "/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/page.js"
-    ],
     "/(auth)/layout": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
@@ -21,35 +16,20 @@
       "static/chunks/main-app.js",
       "static/chunks/app/(auth)/login/page.js"
     ],
-    "/api/setup/budget/route": [
+    "/(app)/layout": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/api/setup/budget/route.js"
+      "static/chunks/app/(app)/layout.js"
     ],
-    "/api/setup/income/route": [
+    "/(app)/dashboard/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/api/setup/income/route.js"
-    ],
-    "/api/setup/ai/route": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/api/setup/ai/route.js"
-    ],
-    "/api/setup/email/route": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/api/setup/email/route.js"
+      "static/chunks/app/(app)/dashboard/page.js"
     ],
     "/api/auth/login/route": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/api/auth/login/route.js"
-    ],
-    "/(app)/layout": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/(app)/layout.js"
     ],
     "/(app)/settings/layout": [
       "static/chunks/webpack.js",
@@ -61,10 +41,10 @@
       "static/chunks/main-app.js",
       "static/chunks/app/(app)/settings/budget/page.js"
     ],
-    "/(app)/settings/budget/categories/page": [
+    "/(app)/settings/email/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/(app)/settings/budget/categories/page.js"
+      "static/chunks/app/(app)/settings/email/page.js"
     ],
     "/(app)/settings/budget/members/page": [
       "static/chunks/webpack.js",

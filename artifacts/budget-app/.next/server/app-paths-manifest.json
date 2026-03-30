@@ -1,12 +1,8 @@
 {
-  "/api/setup/budget/route": "app/api/setup/budget/route.js",
-  "/api/setup/income/route": "app/api/setup/income/route.js",
-  "/api/setup/ai/route": "app/api/setup/ai/route.js",
   "/api/auth/login/route": "app/api/auth/login/route.js",
-  "/api/setup/email/route": "app/api/setup/email/route.js",
-  "/page": "app/page.js",
   "/(auth)/login/page": "app/(auth)/login/page.js",
+  "/(app)/dashboard/page": "app/(app)/dashboard/page.js",
   "/(app)/settings/budget/page": "app/(app)/settings/budget/page.js",
-  "/(app)/settings/budget/categories/page": "app/(app)/settings/budget/categories/page.js",
+  "/(app)/settings/email/page": "app/(app)/settings/email/page.js",
   "/(app)/settings/budget/members/page": "app/(app)/settings/budget/members/page.js"
 }

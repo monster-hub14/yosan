@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifySessionToken } from "@/lib/auth/session";
 
-const SETUP_COOKIE = "budget_setup";
 const SESSION_COOKIE = "budget_session";
 
 const STATIC_PREFIXES = ["/_next", "/favicon.ico"];
@@ -28,46 +27,26 @@ export async function middleware(request: NextRequest) {
 
   if (isStatic(pathname)) return NextResponse.next();
 
+  // Auth API routes are always public
+  if (isAuthApiPath(pathname)) return NextResponse.next();
+
+  // /setup/* paths — page and route handlers do their own DB-authoritative guard
+  // (SetupPage redirects to /login if completedAt is set; guardSetupRoute() does
+  //  the same for API mutations). No session check needed here.
+  if (isSetupPath(pathname)) return NextResponse.next();
+
   const sessionToken = request.cookies.get(SESSION_COOKIE)?.value;
   const session = sessionToken ? await verifySessionToken(sessionToken) : null;
 
-  // All /api/auth/* routes are always accessible
-  if (isAuthApiPath(pathname)) return NextResponse.next();
-
-  // Determine setup state from cookie OR from a valid session.
-  // A valid budget_session JWT can only exist after setup account creation,
-  // so its presence is authoritative proof that setup has been done.
-  const cookieSetupDone = request.cookies.get(SETUP_COOKIE)?.value === "done";
-  const setupDone = cookieSetupDone || session !== null;
-
-  // /setup paths
-  if (isSetupPath(pathname)) {
-    if (setupDone) {
-      // Post-setup: setup routes require admin auth
-      if (!session || session.role !== "ADMIN") {
-        return NextResponse.redirect(new URL("/login", request.url));
-      }
-    }
-    return NextResponse.next();
-  }
-
-  // /login is always accessible; redirect already-authenticated users away
+  // /login — redirect already-authenticated users to the dashboard
   if (pathname === "/login") {
-    if (session && setupDone) {
-      return NextResponse.redirect(new URL("/dashboard", request.url));
-    }
+    if (session) return NextResponse.redirect(new URL("/dashboard", request.url));
     return NextResponse.next();
   }
 
-  // All other routes require setup to be done first
-  if (!setupDone) {
-    if (pathname.startsWith("/api/")) {
-      return NextResponse.json({ error: "Setup not complete" }, { status: 503 });
-    }
-    return NextResponse.redirect(new URL("/setup", request.url));
-  }
-
-  // Setup done but not authenticated
+  // All other routes require an authenticated session.
+  // Unauthenticated users are sent to /login, which performs a DB-authoritative
+  // setup check and redirects to /setup if the instance has not been configured.
   if (!session) {
     if (pathname.startsWith("/api/")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
