@@ -165,13 +165,14 @@ export async function POST(req: NextRequest) {
       // Derive extension strictly from MIME type — never from untrusted filename
       const ext = ALLOWED_EXTENSIONS[att.contentType.toLowerCase()] ?? "bin";
       const storedFilename = `${Date.now()}-${crypto.randomUUID()}.${ext}`;
-      const filePath = path.join(budgetDir, storedFilename);
-      // Guard: resolved path must stay under budget upload directory
-      if (!filePath.startsWith(path.resolve(budgetDir))) {
-        console.error("[email-webhook] path traversal blocked:", filePath);
+      const resolvedBudgetDir = path.resolve(budgetDir);
+      const resolvedFilePath = path.resolve(resolvedBudgetDir, storedFilename);
+      // Guard: resolved path must stay within the budget upload directory
+      if (!resolvedFilePath.startsWith(resolvedBudgetDir + path.sep)) {
+        console.error("[email-webhook] path traversal blocked:", resolvedFilePath);
         continue;
       }
-      await writeFile(filePath, att.data);
+      await writeFile(resolvedFilePath, att.data);
 
       const receipt = await db.receipt.create({
         data: {
@@ -200,8 +201,7 @@ export async function POST(req: NextRequest) {
         },
       });
 
-      // Trigger AI extraction (non-blocking)
-      processReceipt(pending.id, receipt.id, budgetId, budget.ownerId, filePath, att.contentType)
+      processReceipt(pending.id, receipt.id, budgetId, budget.ownerId, resolvedFilePath, att.contentType)
         .catch((err) => console.error("[email-webhook] AI processing error:", err));
 
       results.push({ pendingId: pending.id, filename: att.filename });
