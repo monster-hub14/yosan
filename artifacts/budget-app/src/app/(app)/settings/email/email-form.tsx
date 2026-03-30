@@ -23,6 +23,7 @@ export function EmailSettingsForm() {
   const [config, setConfig] = useState({
     smtpHost: "",
     smtpPort: 587,
+    smtpEncryption: "STARTTLS",
     smtpUser: "",
     smtpPass: "",
     fromAddress: "",
@@ -97,8 +98,8 @@ export function EmailSettingsForm() {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2 col-span-2 sm:col-span-1">
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-2 col-span-3 sm:col-span-1">
                 <Label htmlFor="smtpHost">SMTP Host</Label>
                 <Input
                   id="smtpHost"
@@ -107,7 +108,7 @@ export function EmailSettingsForm() {
                   placeholder="smtp.example.com"
                 />
               </div>
-              <div className="space-y-2 col-span-2 sm:col-span-1">
+              <div className="space-y-2 col-span-3 sm:col-span-1">
                 <Label htmlFor="smtpPort">Port</Label>
                 <Input
                   id="smtpPort"
@@ -118,6 +119,19 @@ export function EmailSettingsForm() {
                   }
                   placeholder="587"
                 />
+              </div>
+              <div className="space-y-2 col-span-3 sm:col-span-1">
+                <Label htmlFor="smtpEncryption">Encryption</Label>
+                <select
+                  id="smtpEncryption"
+                  className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  value={config.smtpEncryption}
+                  onChange={(e) => setConfig((c) => ({ ...c, smtpEncryption: e.target.value }))}
+                >
+                  <option value="STARTTLS">STARTTLS (587)</option>
+                  <option value="TLS">TLS/SSL (465)</option>
+                  <option value="NONE">None (plain)</option>
+                </select>
               </div>
             </div>
 

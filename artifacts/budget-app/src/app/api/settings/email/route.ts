@@ -14,6 +14,7 @@ export async function GET(request: NextRequest) {
       ? {
           smtpHost: config.smtpHost,
           smtpPort: config.smtpPort,
+          smtpEncryption: (config as { smtpEncryption?: string }).smtpEncryption ?? "STARTTLS",
           smtpUser: config.smtpUser,
           smtpPass: config.smtpPass ? "••••••••" : "",
           fromAddress: config.fromAddress,
@@ -31,6 +32,7 @@ export async function PUT(request: NextRequest) {
   const body = await request.json() as {
     smtpHost?: string;
     smtpPort?: number;
+    smtpEncryption?: string;
     smtpUser?: string;
     smtpPass?: string;
     fromAddress?: string;
@@ -38,7 +40,7 @@ export async function PUT(request: NextRequest) {
     isEnabled?: boolean;
   };
 
-  const { smtpHost, smtpPort, smtpUser, smtpPass, fromAddress, fromName, isEnabled } = body;
+  const { smtpHost, smtpPort, smtpEncryption, smtpUser, smtpPass, fromAddress, fromName, isEnabled } = body;
 
   // Resolve the password: if masked (unchanged), keep existing
   let resolvedEncryptedPass: string | null | undefined = undefined;
@@ -55,6 +57,7 @@ export async function PUT(request: NextRequest) {
       id: "singleton",
       smtpHost: smtpHost || null,
       smtpPort: smtpPort || 587,
+      smtpEncryption: smtpEncryption || "STARTTLS",
       smtpUser: smtpUser || null,
       smtpPass: resolvedEncryptedPass ?? null,
       fromAddress: fromAddress || null,
@@ -64,6 +67,7 @@ export async function PUT(request: NextRequest) {
     update: {
       smtpHost: smtpHost || null,
       smtpPort: smtpPort || 587,
+      smtpEncryption: smtpEncryption || "STARTTLS",
       smtpUser: smtpUser || null,
       fromAddress: fromAddress || null,
       fromName: fromName || "Budget App",

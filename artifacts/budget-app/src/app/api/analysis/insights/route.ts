@@ -3,7 +3,7 @@ import { requireAuth, isSessionPayload, requireBudgetRead } from "@/lib/auth/per
 import { getActiveBudgetId } from "@/lib/active-budget";
 import { db } from "@/lib/db";
 import { generateInsights, persistInsight } from "@/lib/ai/insights";
-import { isFeatureEnabled } from "@/lib/ai/usage";
+import { checkAndRecordUsage } from "@/lib/ai/usage";
 
 export async function GET(request: NextRequest) {
   const session = await requireAuth(request);
@@ -38,13 +38,25 @@ export async function POST(request: NextRequest) {
   const access = await requireBudgetRead(session, budgetId);
   if (access instanceof NextResponse) return access;
 
-  // Check if AI insights feature is enabled (respects global + per-user controls)
-  const aiEnabled = await isFeatureEnabled("insights", session.userId);
+  // Enforce AI usage limits for insights feature
+  const usageCheck = await checkAndRecordUsage(session.userId, "insights");
+  if (!usageCheck.allowed) {
+    return NextResponse.json(
+      {
+        error: usageCheck.reason ?? "AI usage limit reached",
+        usageLimitReached: true,
+        dailyCount: usageCheck.dailyCount,
+        weeklyCount: usageCheck.weeklyCount,
+        monthlyCount: usageCheck.monthlyCount,
+      },
+      { status: 429 }
+    );
+  }
 
   try {
     const result = await generateInsights(budgetId, session.userId);
     const insightId = await persistInsight(budgetId, result);
-    return NextResponse.json({ analysis: result, insightId, aiEnabled }, { status: 201 });
+    return NextResponse.json({ analysis: result, insightId }, { status: 201 });
   } catch (err) {
     console.error("[analysis] generateInsights failed:", err);
     return NextResponse.json({ error: "Analysis generation failed" }, { status: 500 });

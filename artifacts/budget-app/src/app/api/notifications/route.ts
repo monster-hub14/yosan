@@ -9,6 +9,9 @@ const VALID_EVENTS = [
   "upcoming_bill",
   "payday_reminder",
   "new_insight",
+  "deficit_risk",
+  "savings_goal_risk",
+  "receipt_upload_reminder",
 ];
 
 const VALID_CHANNELS = ["EMAIL", "IN_APP"] as const;

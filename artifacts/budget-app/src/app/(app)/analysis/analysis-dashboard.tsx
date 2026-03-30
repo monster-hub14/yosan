@@ -13,6 +13,7 @@ import {
   Circle,
   Info,
   Clock,
+  BrainCircuit,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -171,6 +172,8 @@ export function AnalysisDashboard() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [view, setView] = useState<"live" | "history">("live");
+  const [aiStatus, setAiStatus] = useState<"ok" | "rate_limited" | "disabled" | "unconfigured" | null>(null);
+  const [aiStatusMsg, setAiStatusMsg] = useState<string | null>(null);
 
   const loadStoredInsights = useCallback(async () => {
     const res = await fetch("/api/analysis/insights");
@@ -189,14 +192,23 @@ export function AnalysisDashboard() {
         body: JSON.stringify({}),
       });
       if (res.status === 429) {
-        const data = await res.json() as { error: string };
-        console.warn("[analysis] rate limited:", data.error);
-        // Still load stored insights even when rate-limited
+        const data = await res.json() as { error: string; usageLimitReached?: boolean };
+        const isDisabled = data.error?.toLowerCase().includes("disabled");
+        setAiStatus(isDisabled ? "disabled" : "rate_limited");
+        setAiStatusMsg(data.error);
+        await loadStoredInsights();
+        return;
+      }
+      if (res.status === 503 || res.status === 424) {
+        setAiStatus("unconfigured");
+        setAiStatusMsg("AI provider is not configured. Visit Instance Settings to enable AI.");
         await loadStoredInsights();
         return;
       }
       if (res.ok) {
         const data = await res.json() as { analysis: AnalysisResult };
+        setAiStatus("ok");
+        setAiStatusMsg(null);
         setAnalysis(data.analysis);
         await loadStoredInsights();
       }
@@ -235,6 +247,31 @@ export function AnalysisDashboard() {
 
   return (
     <div className="space-y-6 pb-8">
+      {/* AI status banners */}
+      {aiStatus === "unconfigured" && (
+        <div className="flex items-center gap-3 p-3 bg-muted border border-border rounded-lg text-sm">
+          <BrainCircuit className="w-4 h-4 flex-shrink-0 text-muted-foreground" />
+          <span className="text-muted-foreground">
+            AI is not configured — showing rule-based analysis only. Visit{" "}
+            <a href="/settings/ai" className="underline font-medium text-foreground">Instance Settings</a>{" "}
+            to enable AI-powered insights.
+          </span>
+        </div>
+      )}
+      {aiStatus === "disabled" && (
+        <div className="flex items-center gap-3 p-3 bg-muted border border-border rounded-lg text-sm">
+          <BrainCircuit className="w-4 h-4 flex-shrink-0 text-amber-500" />
+          <span className="text-muted-foreground">
+            AI insights are disabled for your account. Contact your admin to re-enable.
+          </span>
+        </div>
+      )}
+      {aiStatus === "rate_limited" && aiStatusMsg && (
+        <div className="flex items-center gap-3 p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg text-sm text-amber-800 dark:text-amber-200">
+          <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+          <span>{aiStatusMsg} Showing last saved analysis.</span>
+        </div>
+      )}
       {/* Header */}
       <div className="flex items-center justify-between gap-4">
         <div>

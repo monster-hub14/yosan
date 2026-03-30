@@ -14,6 +14,7 @@ interface EmailConfig {
   fromAddress: string;
   fromName: string;
   secure: boolean;
+  requireTls?: boolean;
 }
 
 async function getEmailConfig(): Promise<EmailConfig | null> {
@@ -22,6 +23,7 @@ async function getEmailConfig(): Promise<EmailConfig | null> {
 
   const decryptedPass = config.smtpPass ? (() => { try { return decrypt(config.smtpPass!); } catch { return null; } })() : null;
 
+  const enc = (config as { smtpEncryption?: string }).smtpEncryption ?? "STARTTLS";
   return {
     host: config.smtpHost,
     port: config.smtpPort,
@@ -29,7 +31,8 @@ async function getEmailConfig(): Promise<EmailConfig | null> {
     pass: decryptedPass,
     fromAddress: config.fromAddress,
     fromName: config.fromName || "Budget App",
-    secure: config.smtpPort === 465,
+    secure: enc === "TLS",
+    requireTls: enc === "STARTTLS",
   };
 }
 
@@ -53,6 +56,7 @@ export async function sendMail(options: SendMailOptions): Promise<{ ok: boolean;
       host: config.host,
       port: config.port,
       secure: config.secure,
+      requireTLS: config.requireTls,
       auth: config.user && config.pass ? { user: config.user, pass: config.pass } : undefined,
     });
 
@@ -220,6 +224,69 @@ export function paydayReminderEmail(params: {
       <p>Hi ${params.userName},</p>
       <p>Your paycheck of <strong>${fmt(params.payAmount)}</strong> is expected tomorrow (${params.payDate}) in <em>${params.budgetName}</em>.</p>
       <p>Great time to review your budget and plan your spending for the next pay period.</p>
+    `),
+  };
+}
+
+export function deficitRiskEmail(params: {
+  userName: string;
+  budgetName: string;
+  projectedDeficit: number;
+  withinDays: number;
+  currency: string;
+}): { subject: string; html: string } {
+  const fmt = (n: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: params.currency }).format(n);
+  return {
+    subject: `🔴 Cash flow alert: projected shortfall in ${params.withinDays} days — ${params.budgetName}`,
+    html: baseTemplate("Cash Flow Deficit Risk", `
+      <p>Hi ${params.userName},</p>
+      <p>Your cash flow forecast for <em>${params.budgetName}</em> shows a projected deficit within the next <strong>${params.withinDays} days</strong>.</p>
+      <table style="margin:16px 0;background:#fff4f4;border-radius:6px;padding:16px;width:100%">
+        <tr><td style="color:#888;font-size:13px">Projected shortfall</td><td style="font-weight:700;font-size:18px;color:#dc2626">${fmt(Math.abs(params.projectedDeficit))}</td></tr>
+        <tr><td style="color:#888;font-size:13px">Within</td><td style="font-weight:600">${params.withinDays} days</td></tr>
+      </table>
+      <p>Review your upcoming bills and consider adjusting discretionary spending to avoid a negative balance.</p>
+    `),
+  };
+}
+
+export function savingsGoalRiskEmail(params: {
+  userName: string;
+  budgetName: string;
+  goalName: string;
+  targetAmount: number;
+  currentAmount: number;
+  currency: string;
+}): { subject: string; html: string } {
+  const fmt = (n: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: params.currency }).format(n);
+  const pct = params.targetAmount > 0 ? Math.round((params.currentAmount / params.targetAmount) * 100) : 0;
+  return {
+    subject: `⚠️ Savings goal at risk: ${params.goalName} — ${params.budgetName}`,
+    html: baseTemplate("Savings Goal At Risk", `
+      <p>Hi ${params.userName},</p>
+      <p>Your savings goal <strong>${params.goalName}</strong> in <em>${params.budgetName}</em> is at risk of not being met based on current spending.</p>
+      <table style="margin:16px 0;background:#fffbf4;border-radius:6px;padding:16px;width:100%">
+        <tr><td style="color:#888;font-size:13px">Goal</td><td style="font-weight:700;font-size:18px">${fmt(params.targetAmount)}</td></tr>
+        <tr><td style="color:#888;font-size:13px">Progress</td><td style="font-weight:600">${fmt(params.currentAmount)} (${pct}%)</td></tr>
+        <tr><td style="color:#888;font-size:13px">Still needed</td><td style="color:#d97706;font-weight:600">${fmt(params.targetAmount - params.currentAmount)}</td></tr>
+      </table>
+      <p>Consider reducing discretionary spending or increasing your per-paycheck savings contribution.</p>
+    `),
+  };
+}
+
+export function receiptReminderEmail(params: {
+  userName: string;
+  budgetName: string;
+  daysSinceLastUpload: number;
+}): { subject: string; html: string } {
+  return {
+    subject: `📎 Don't forget your receipts — ${params.budgetName}`,
+    html: baseTemplate("Receipt Upload Reminder", `
+      <p>Hi ${params.userName},</p>
+      <p>It's been <strong>${params.daysSinceLastUpload} day${params.daysSinceLastUpload !== 1 ? "s" : ""}</strong> since your last receipt upload in <em>${params.budgetName}</em>.</p>
+      <p>Keeping your receipts up to date helps Budget App give you accurate spending insights and cash flow forecasts.</p>
+      <p style="margin-top:24px"><a href="#" style="background:#2563eb;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:600">Upload Receipts Now</a></p>
     `),
   };
 }

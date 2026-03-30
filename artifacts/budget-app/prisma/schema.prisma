@@ -99,6 +99,7 @@ model User {
   soloShares            BudgetSoloShare[]
   aiUsageLogs           AIUsageLog[]
   aiControl             UserAIControl?
+  notificationConfig    UserNotificationConfig?
   addedExpenses         Expense[]       @relation("AddedExpenses")
 }
 
@@ -467,15 +468,27 @@ model UserAIControl {
 }
 
 model EmailConfig {
-  id          String   @id @default("singleton")
-  smtpHost    String?
-  smtpPort    Int      @default(587)
-  smtpUser    String?
-  smtpPass    String?
-  fromAddress String?
-  fromName    String   @default("Budget App")
-  isEnabled   Boolean  @default(false)
-  updatedAt   DateTime @updatedAt
+  id             String   @id @default("singleton")
+  smtpHost       String?
+  smtpPort       Int      @default(587)
+  smtpEncryption String   @default("STARTTLS")
+  smtpUser       String?
+  smtpPass       String?
+  fromAddress    String?
+  fromName       String   @default("Budget App")
+  isEnabled      Boolean  @default(false)
+  updatedAt      DateTime @updatedAt
+}
+
+model UserNotificationConfig {
+  id               String   @id @default(cuid())
+  userId           String   @unique
+  notificationEmail String?
+  digestFrequency  String   @default("WEEKLY")
+  billReminderDays Int      @default(3)
+  updatedAt        DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model EmailForwardingConfig {
