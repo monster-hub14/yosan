@@ -3,7 +3,7 @@ import { requireAuth, isSessionPayload, requireBudgetRead } from "@/lib/auth/per
 import { getActiveBudgetId } from "@/lib/active-budget";
 import { db } from "@/lib/db";
 import { generateInsights, persistInsight } from "@/lib/ai/insights";
-import { checkAndRecordUsage } from "@/lib/ai/usage";
+import { checkUsageLimit, recordUsage } from "@/lib/ai/usage";
 
 export async function GET(request: NextRequest) {
   const session = await requireAuth(request);
@@ -38,16 +38,16 @@ export async function POST(request: NextRequest) {
   const access = await requireBudgetRead(session, budgetId);
   if (access instanceof NextResponse) return access;
 
-  // Enforce AI usage limits for insights feature
-  const usageCheck = await checkAndRecordUsage(session.userId, "insights");
-  if (!usageCheck.allowed) {
+  // Check limits first (no recording yet)
+  const limitCheck = await checkUsageLimit(session.userId, "insights");
+  if (!limitCheck.allowed) {
     return NextResponse.json(
       {
-        error: usageCheck.reason ?? "AI usage limit reached",
+        error: limitCheck.reason ?? "AI usage limit reached",
         usageLimitReached: true,
-        dailyCount: usageCheck.dailyCount,
-        weeklyCount: usageCheck.weeklyCount,
-        monthlyCount: usageCheck.monthlyCount,
+        dailyCount: limitCheck.dailyCount,
+        weeklyCount: limitCheck.weeklyCount,
+        monthlyCount: limitCheck.monthlyCount,
       },
       { status: 429 }
     );
@@ -56,6 +56,10 @@ export async function POST(request: NextRequest) {
   try {
     const result = await generateInsights(budgetId, session.userId);
     const insightId = await persistInsight(budgetId, result);
+    // Record usage only after successful AI response
+    if (result.generatedByAI) {
+      await recordUsage(session.userId, "insights");
+    }
     return NextResponse.json({ analysis: result, insightId }, { status: 201 });
   } catch (err) {
     console.error("[analysis] generateInsights failed:", err);

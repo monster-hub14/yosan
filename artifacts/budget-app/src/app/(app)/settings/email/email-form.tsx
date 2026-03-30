@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader2, Save, Mail, Eye, EyeOff, Inbox } from "lucide-react";
+import { Loader2, Save, Mail, Eye, EyeOff, Inbox, Send, CheckCircle, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,6 +19,9 @@ import { toast } from "sonner";
 export function EmailSettingsForm() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testEmail, setTestEmail] = useState("");
+  const [testResult, setTestResult] = useState<{ ok: boolean; error?: string } | null>(null);
   const [showPass, setShowPass] = useState(false);
   const [config, setConfig] = useState({
     smtpHost: "",
@@ -39,6 +42,32 @@ export function EmailSettingsForm() {
       })
       .finally(() => setLoading(false));
   }, []);
+
+  async function handleTestEmail(e: React.FormEvent) {
+    e.preventDefault();
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const res = await fetch("/api/settings/email/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ toAddress: testEmail }),
+      });
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        setTestResult({ ok: true });
+        toast.success("Test email sent successfully");
+      } else {
+        setTestResult({ ok: false, error: data.error ?? "Send failed" });
+        toast.error(data.error ?? "Test email failed");
+      }
+    } catch {
+      setTestResult({ ok: false, error: "Network error" });
+      toast.error("Network error sending test email");
+    } finally {
+      setTesting(false);
+    }
+  }
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
@@ -200,6 +229,53 @@ export function EmailSettingsForm() {
               Save settings
             </Button>
           </form>
+        </CardContent>
+      </Card>
+
+      {/* Test email */}
+      <Card className="border-border">
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-muted">
+              <Send className="w-5 h-5 text-muted-foreground" />
+            </div>
+            <div>
+              <CardTitle>Test Email</CardTitle>
+              <CardDescription>Send a test message using the saved SMTP configuration</CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleTestEmail} className="flex gap-2 items-end flex-wrap">
+            <div className="space-y-2 flex-1 min-w-[200px]">
+              <Label htmlFor="testEmailAddr">Send test to</Label>
+              <Input
+                id="testEmailAddr"
+                type="email"
+                value={testEmail}
+                onChange={(e) => { setTestEmail(e.target.value); setTestResult(null); }}
+                placeholder="you@example.com"
+              />
+            </div>
+            <Button type="submit" disabled={testing || !testEmail} size="sm" variant="outline">
+              {testing ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Send className="w-4 h-4 mr-2" />
+              )}
+              Send test
+            </Button>
+          </form>
+          {testResult && (
+            <p className={`mt-3 text-sm flex items-center gap-1.5 ${testResult.ok ? "text-green-600" : "text-destructive"}`}>
+              {testResult.ok ? (
+                <CheckCircle className="w-4 h-4 shrink-0" />
+              ) : (
+                <XCircle className="w-4 h-4 shrink-0" />
+              )}
+              {testResult.ok ? "Test email delivered" : testResult.error}
+            </p>
+          )}
         </CardContent>
       </Card>
 

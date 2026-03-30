@@ -126,6 +126,83 @@ export async function checkAndRecordUsage(
   };
 }
 
+/**
+ * Check usage limits without recording usage.
+ * Use this before an AI call; pair with recordUsage() after success.
+ */
+export async function checkUsageLimit(
+  userId: string,
+  feature: AIFeatureKey
+): Promise<UsageCheckResult> {
+  const [config, userControl] = await Promise.all([
+    db.aIProviderConfig.findUnique({ where: { id: "singleton" } }),
+    db.userAIControl.findUnique({ where: { userId } }),
+  ]);
+
+  if (userControl && !userControl.aiEnabled) {
+    return { allowed: false, reason: "AI is disabled for your account.", dailyCount: 0, weeklyCount: 0, monthlyCount: 0 };
+  }
+  if (userControl) {
+    const featureMap: Partial<Record<AIFeatureKey, boolean>> = {
+      extraction: userControl.extractionEnabled,
+      categorization: userControl.categorizationEnabled,
+      recurring_categorization: userControl.recurringCategorizationEnabled,
+      insights: userControl.insightsEnabled,
+      forecasting: userControl.forecastingEnabled,
+    };
+    if (featureMap[feature] === false) {
+      return { allowed: false, reason: `AI ${feature.replace(/_/g, " ")} is disabled for your account.`, dailyCount: 0, weeklyCount: 0, monthlyCount: 0 };
+    }
+  }
+  if (!config || !config.isEnabled) {
+    return { allowed: false, reason: "AI provider is not configured.", dailyCount: 0, weeklyCount: 0, monthlyCount: 0 };
+  }
+
+  const now = new Date();
+  const dayKey = dailyWindow(now);
+  const weekKey = weeklyWindow(now);
+  const monthKey = monthlyWindow(now);
+  const [dayCount, weekCount, monthCount] = await Promise.all([
+    db.aIUsageLog.count({ where: { userId, feature, windowDate: dayKey } }),
+    db.aIUsageLog.count({ where: { userId, feature, windowDate: weekKey } }),
+    db.aIUsageLog.count({ where: { userId, feature, windowDate: monthKey } }),
+  ]);
+
+  const minLimit = (a: number | null | undefined, b: number | null | undefined): number | null => {
+    if (a != null && b != null) return Math.min(a, b);
+    return (a ?? b ?? null) as number | null;
+  };
+  const effectiveDailyLimit = minLimit(userControl?.dailyLimit, config?.dailyLimitPerUser);
+  const effectiveWeeklyLimit = minLimit(userControl?.weeklyLimit, config?.weeklyLimitPerUser);
+  const effectiveMonthlyLimit = minLimit(userControl?.monthlyLimit, config?.monthlyLimitPerUser);
+
+  if (effectiveDailyLimit != null && dayCount >= effectiveDailyLimit) {
+    return { allowed: false, reason: `Daily AI limit reached (${effectiveDailyLimit}/day). Resets tomorrow.`, dailyCount: dayCount, weeklyCount: weekCount, monthlyCount: monthCount };
+  }
+  if (effectiveWeeklyLimit != null && weekCount >= effectiveWeeklyLimit) {
+    return { allowed: false, reason: `Weekly AI limit reached (${effectiveWeeklyLimit}/week). Resets next week.`, dailyCount: dayCount, weeklyCount: weekCount, monthlyCount: monthCount };
+  }
+  if (effectiveMonthlyLimit != null && monthCount >= effectiveMonthlyLimit) {
+    return { allowed: false, reason: `Monthly AI limit reached (${effectiveMonthlyLimit}/month). Resets next month.`, dailyCount: dayCount, weeklyCount: weekCount, monthlyCount: monthCount };
+  }
+
+  return { allowed: true, dailyCount: dayCount, weeklyCount: weekCount, monthlyCount: monthCount };
+}
+
+/**
+ * Record a single AI usage event. Call this only after a successful AI response.
+ */
+export async function recordUsage(userId: string, feature: AIFeatureKey): Promise<void> {
+  const now = new Date();
+  await db.aIUsageLog.createMany({
+    data: [
+      { userId, feature, windowDate: dailyWindow(now) },
+      { userId, feature, windowDate: weeklyWindow(now) },
+      { userId, feature, windowDate: monthlyWindow(now) },
+    ],
+  });
+}
+
 export async function isFeatureEnabled(feature: AIFeatureKey, userId?: string): Promise<boolean> {
   const config = await db.aIProviderConfig.findUnique({ where: { id: "singleton" } });
   if (!config || !config.isEnabled) return false;

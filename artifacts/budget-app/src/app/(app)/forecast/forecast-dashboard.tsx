@@ -123,6 +123,8 @@ export function ForecastDashboard() {
     date: shortDate(p.date),
     balance: p.balance,
     isPayday: p.isPayday,
+    paydayAmount: p.paydayAmount,
+    bills: p.bills,
     hasBills: p.bills.length > 0,
     isDangerZone: p.isDangerZone,
   }));
@@ -142,15 +144,18 @@ export function ForecastDashboard() {
     dangerRanges.push({ start: rangeStart, end: chartData[chartData.length - 1]?.date ?? rangeStart });
   }
 
-  // Payday dates for vertical reference lines (limit to visible)
+  // Payday dates for vertical reference lines
   const paydayDates = chartData
     .filter((p) => p.isPayday)
     .map((p) => p.date);
 
-  // Bill dates for vertical reference lines
-  const billDates = chartData
+  // Bill dates with labels for vertical reference lines
+  const billMarkers = chartData
     .filter((p) => p.hasBills)
-    .map((p) => p.date);
+    .map((p) => ({
+      date: p.date,
+      label: p.bills.length === 1 ? p.bills[0].name : `${p.bills.length} bills`,
+    }));
 
   const hasDanger = forecast.dangerDays > 0;
 
@@ -297,14 +302,15 @@ export function ForecastDashboard() {
                     label={{ value: "Pay", position: "top", fontSize: 9, fill: "#22c55e" }}
                   />
                 ))}
-                {/* Bill vertical markers */}
-                {billDates.map((d) => (
+                {/* Bill vertical markers with name labels */}
+                {billMarkers.map((m) => (
                   <ReferenceLine
-                    key={`bill-${d}`}
-                    x={d}
+                    key={`bill-${m.date}`}
+                    x={m.date}
                     stroke="#f59e0b"
                     strokeDasharray="2 3"
                     strokeWidth={1}
+                    label={{ value: m.label, position: "insideTopRight", fontSize: 9, fill: "#f59e0b", angle: -45 }}
                   />
                 ))}
                 <Area

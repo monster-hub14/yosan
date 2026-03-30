@@ -121,16 +121,14 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Weekly summary — send on Sundays (or forced via type=weekly)
-    const isSunday = today.getDay() === 0;
-    if ((alertType === "all" && isSunday) || alertType === "weekly") {
+    // Digest summary — frequency per user (DAILY / WEEKLY on Sunday / MONTHLY on 1st)
+    if (alertType === "all" || alertType === "weekly") {
       try {
-        const analysis = await generateInsights(budget.id, budget.owner.id);
-        const topCats = analysis.insights
-          .filter((i) => i.actual > 0)
-          .sort((a, b) => b.actual - a.actual)
-          .slice(0, 5)
-          .map((i) => ({ name: i.categoryName, amount: i.actual }));
+        const isSunday = today.getDay() === 0;
+        const isFirstOfMonth = today.getDate() === 1;
+
+        // Only generate analysis if at least one user qualifies
+        let analysis: Awaited<ReturnType<typeof generateInsights>> | null = null;
 
         for (const user of allUsers) {
           const pref = await db.notificationPreference.findFirst({
@@ -138,7 +136,29 @@ export async function POST(request: NextRequest) {
           });
           if (!pref) continue;
 
-          const toEmail = getNotifyEmail(user.email, notifConfigByUserId.get(user.id) ?? null);
+          const notifConfig = notifConfigByUserId.get(user.id) ?? null;
+          const freq = notifConfig?.digestFrequency ?? "WEEKLY";
+
+          // Determine whether today qualifies for this user's frequency
+          const shouldSend =
+            alertType === "weekly" || // forced run always sends
+            freq === "DAILY" ||
+            (freq === "WEEKLY" && isSunday) ||
+            (freq === "MONTHLY" && isFirstOfMonth);
+          if (!shouldSend) continue;
+
+          // Lazy-load analysis once
+          if (!analysis) {
+            analysis = await generateInsights(budget.id, budget.owner.id);
+          }
+
+          const topCats = analysis.insights
+            .filter((i) => i.actual > 0)
+            .sort((a, b) => b.actual - a.actual)
+            .slice(0, 5)
+            .map((i) => ({ name: i.categoryName, amount: i.actual }));
+
+          const toEmail = getNotifyEmail(user.email, notifConfig);
           const { subject, html } = weeklySummaryEmail({
             userName: user.name,
             budgetName: budget.name,
@@ -152,7 +172,7 @@ export async function POST(request: NextRequest) {
           sentCount.weekly++;
         }
       } catch (err) {
-        console.error(`[cron/alerts] weekly summary failed for budget ${budget.id}:`, err);
+        console.error(`[cron/alerts] digest summary failed for budget ${budget.id}:`, err);
       }
     }
 
