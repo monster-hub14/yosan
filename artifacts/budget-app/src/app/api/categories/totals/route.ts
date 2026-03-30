@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth, isSessionPayload, requireBudgetRead } from "@/lib/auth/permissions";
 import { getActiveBudgetId } from "@/lib/active-budget";
+import { getActivePeriodBounds } from "@/lib/active-period";
 import { db } from "@/lib/db";
 
 export async function GET(request: NextRequest) {
@@ -15,12 +16,14 @@ export async function GET(request: NextRequest) {
   const access = await requireBudgetRead(session, budgetId);
   if (access instanceof NextResponse) return access;
 
+  // Default to active pay period; only fall back to calendar month if no income source configured
+  const activeBounds = await getActivePeriodBounds(budgetId);
   const periodStart = searchParams.get("periodStart")
     ? new Date(searchParams.get("periodStart")!)
-    : new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+    : activeBounds.start;
   const periodEnd = searchParams.get("periodEnd")
     ? new Date(searchParams.get("periodEnd")!)
-    : new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0, 23, 59, 59);
+    : activeBounds.end;
 
   // Get all categories for the budget (budget-specific + global defaults only)
   const categories = await db.category.findMany({
