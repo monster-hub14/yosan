@@ -1,3 +1,16 @@
+/**
+ * @workspace/db — API Server database client (Drizzle ORM + PostgreSQL).
+ *
+ * THIS PACKAGE IS FOR artifacts/api-server ONLY.
+ * It is NOT used by artifacts/budget-app.
+ *
+ * The budget app has its own self-contained database layer:
+ *   artifacts/budget-app/src/lib/db.ts  (Prisma + SQLite)
+ *   artifacts/budget-app/prisma/schema.prisma
+ *
+ * Do NOT import @workspace/db from the budget app.
+ * See lib/db/README.md for the full isolation boundary documentation.
+ */
 import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
 import * as schema from "./schema";

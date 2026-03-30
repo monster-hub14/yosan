@@ -1,6 +1,7 @@
 {
   "name": "@workspace/db",
   "version": "0.0.0",
+  "description": "Drizzle ORM + PostgreSQL database client for artifacts/api-server ONLY. NOT used by artifacts/budget-app (which has its own Prisma + SQLite layer at artifacts/budget-app/src/lib/db.ts).",
   "private": true,
   "type": "module",
   "exports": {
