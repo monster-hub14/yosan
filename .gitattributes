@@ -1,0 +1,2 @@
+artifacts/budget-app/.next/cache/webpack/client-production/0.pack filter=lfs diff=lfs merge=lfs -text
+artifacts/budget-app/.next/cache/webpack/server-production/0.pack filter=lfs diff=lfs merge=lfs -text

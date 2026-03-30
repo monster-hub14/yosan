@@ -11,7 +11,6 @@ import {
   PiggyBank,
   Bot,
   Mail,
-  ArrowRight,
   Loader2,
   ChevronRight,
   RefreshCw,
@@ -45,16 +44,14 @@ type Step = {
 
 const steps: Step[] = [
   { id: "account", label: "Admin Account", icon: UserRound },
-  { id: "budget", label: "First Budget", icon: Wallet },
   { id: "income", label: "Income", icon: TrendingUp },
   { id: "savings", label: "Savings Goal", icon: PiggyBank, optional: true },
   { id: "recurring", label: "Recurring Bills", icon: RefreshCw, optional: true },
-  { id: "email", label: "Email / SMTP", icon: Mail, optional: true },
   { id: "ai", label: "AI Provider", icon: Bot, optional: true },
+  { id: "email", label: "Email / SMTP", icon: Mail, optional: true },
   { id: "done", label: "All Done", icon: CheckCircle2 },
 ];
 
-const CURRENCIES = ["USD", "EUR", "GBP", "CAD", "AUD", "JPY", "CHF", "SEK", "NOK", "DKK"];
 const PAY_FREQUENCIES = [
   { value: "WEEKLY", label: "Weekly" },
   { value: "BIWEEKLY", label: "Every 2 weeks" },
@@ -77,13 +74,40 @@ export default function SetupWizard() {
   const [currentStep, setCurrentStep] = useState(0);
   const [loading, setLoading] = useState(false);
 
-  const [accountData, setAccountData] = useState({ email: "", name: "", password: "", confirmPassword: "" });
-  const [budgetData, setBudgetData] = useState({ name: "My Budget", currency: "USD" });
-  const [incomeData, setIncomeData] = useState({ name: "Primary Income", amount: "", frequency: "BIWEEKLY", nextPayDate: "" });
+  const [accountData, setAccountData] = useState({
+    email: "",
+    name: "",
+    password: "",
+    confirmPassword: "",
+    budgetName: "",
+    currency: "USD",
+  });
+  const [incomeData, setIncomeData] = useState({
+    name: "Primary Income",
+    amount: "",
+    frequency: "BIWEEKLY",
+    nextPayDate: "",
+  });
   const [savingsData, setSavingsData] = useState({ name: "", targetAmount: "" });
-  const [recurringData, setRecurringData] = useState({ name: "", amount: "", frequency: "MONTHLY" });
-  const [emailData, setEmailData] = useState({ smtpHost: "", smtpPort: "587", smtpUser: "", smtpPass: "", fromAddress: "", fromName: "Budget App" });
-  const [aiData, setAiData] = useState({ provider: "OPENAI", model: "gpt-4o-mini", apiKey: "", baseUrl: "" });
+  const [recurringData, setRecurringData] = useState({
+    name: "",
+    amount: "",
+    frequency: "MONTHLY",
+  });
+  const [aiData, setAiData] = useState({
+    provider: "OPENAI",
+    model: "gpt-4o-mini",
+    apiKey: "",
+    baseUrl: "",
+  });
+  const [emailData, setEmailData] = useState({
+    smtpHost: "",
+    smtpPort: "587",
+    smtpUser: "",
+    smtpPass: "",
+    fromAddress: "",
+    fromName: "Budget App",
+  });
 
   const step = steps[currentStep];
 
@@ -91,6 +115,10 @@ export default function SetupWizard() {
     setLoading(true);
     try {
       if (step.id === "account") {
+        if (!accountData.email || !accountData.name) {
+          toast.error("Name and email are required");
+          return;
+        }
         if (accountData.password !== accountData.confirmPassword) {
           toast.error("Passwords don't match");
           return;
@@ -106,24 +134,16 @@ export default function SetupWizard() {
             email: accountData.email,
             name: accountData.name,
             password: accountData.password,
+            budgetName: accountData.budgetName || undefined,
+            currency: accountData.currency,
           }),
         });
         const data = await res.json();
         if (!res.ok) { toast.error(data.error); return; }
       }
 
-      if (step.id === "budget") {
-        const res = await fetch("/api/setup/budget", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(budgetData),
-        });
-        const data = await res.json();
-        if (!res.ok) { toast.error(data.error); return; }
-      }
-
       if (step.id === "income") {
-        if (!incomeData.amount || !incomeData.name) {
+        if (!incomeData.name || !incomeData.amount) {
           toast.error("Income source name and amount are required");
           return;
         }
@@ -140,7 +160,10 @@ export default function SetupWizard() {
         const res = await fetch("/api/setup/savings", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: savingsData.name, targetAmount: parseFloat(savingsData.targetAmount) }),
+          body: JSON.stringify({
+            name: savingsData.name,
+            targetAmount: parseFloat(savingsData.targetAmount),
+          }),
         });
         const data = await res.json();
         if (!res.ok) { toast.error(data.error); return; }
@@ -160,6 +183,16 @@ export default function SetupWizard() {
         if (!res.ok) { toast.error(data.error); return; }
       }
 
+      if (step.id === "ai" && aiData.apiKey) {
+        const res = await fetch("/api/setup/ai", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(aiData),
+        });
+        const data = await res.json();
+        if (!res.ok) { toast.error(data.error); return; }
+      }
+
       if (step.id === "email" && emailData.smtpHost) {
         const res = await fetch("/api/setup/email", {
           method: "POST",
@@ -172,16 +205,6 @@ export default function SetupWizard() {
             fromAddress: emailData.fromAddress,
             fromName: emailData.fromName,
           }),
-        });
-        const data = await res.json();
-        if (!res.ok) { toast.error(data.error); return; }
-      }
-
-      if (step.id === "ai" && aiData.apiKey) {
-        const res = await fetch("/api/setup/ai", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(aiData),
         });
         const data = await res.json();
         if (!res.ok) { toast.error(data.error); return; }
@@ -250,7 +273,11 @@ export default function SetupWizard() {
               <span
                 className={cn(
                   "text-xs font-medium hidden sm:block",
-                  active ? "text-foreground" : done ? "text-primary" : "text-muted-foreground/40"
+                  active
+                    ? "text-foreground"
+                    : done
+                    ? "text-primary"
+                    : "text-muted-foreground/40"
                 )}
               >
                 {s.label}
@@ -289,7 +316,9 @@ export default function SetupWizard() {
                 <div>
                   <CardTitle>{step.label}</CardTitle>
                   {step.optional && (
-                    <CardDescription>Optional — you can set this up later in Settings</CardDescription>
+                    <CardDescription>
+                      Optional — you can set this up later in Settings
+                    </CardDescription>
                   )}
                 </div>
               </div>
@@ -302,7 +331,9 @@ export default function SetupWizard() {
                     <Input
                       id="adminName"
                       value={accountData.name}
-                      onChange={(e) => setAccountData((d) => ({ ...d, name: e.target.value }))}
+                      onChange={(e) =>
+                        setAccountData((d) => ({ ...d, name: e.target.value }))
+                      }
                       placeholder="Jane Smith"
                       autoComplete="name"
                     />
@@ -313,7 +344,9 @@ export default function SetupWizard() {
                       id="adminEmail"
                       type="email"
                       value={accountData.email}
-                      onChange={(e) => setAccountData((d) => ({ ...d, email: e.target.value }))}
+                      onChange={(e) =>
+                        setAccountData((d) => ({ ...d, email: e.target.value }))
+                      }
                       placeholder="admin@example.com"
                       autoComplete="email"
                     />
@@ -324,7 +357,9 @@ export default function SetupWizard() {
                       id="adminPassword"
                       type="password"
                       value={accountData.password}
-                      onChange={(e) => setAccountData((d) => ({ ...d, password: e.target.value }))}
+                      onChange={(e) =>
+                        setAccountData((d) => ({ ...d, password: e.target.value }))
+                      }
                       placeholder="Minimum 8 characters"
                       autoComplete="new-password"
                     />
@@ -335,40 +370,65 @@ export default function SetupWizard() {
                       id="adminConfirm"
                       type="password"
                       value={accountData.confirmPassword}
-                      onChange={(e) => setAccountData((d) => ({ ...d, confirmPassword: e.target.value }))}
+                      onChange={(e) =>
+                        setAccountData((d) => ({
+                          ...d,
+                          confirmPassword: e.target.value,
+                        }))
+                      }
                       placeholder="Re-enter your password"
                       autoComplete="new-password"
                     />
                   </div>
-                </>
-              )}
-
-              {step.id === "budget" && (
-                <>
-                  <div className="space-y-2">
-                    <Label htmlFor="budgetName">Budget name</Label>
-                    <Input
-                      id="budgetName"
-                      value={budgetData.name}
-                      onChange={(e) => setBudgetData((d) => ({ ...d, name: e.target.value }))}
-                      placeholder="My Budget"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Currency</Label>
-                    <Select
-                      value={budgetData.currency}
-                      onValueChange={(v) => setBudgetData((d) => ({ ...d, currency: v }))}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {CURRENCIES.map((c) => (
-                          <SelectItem key={c} value={c}>{c}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                  <div className="border-t border-border pt-4 mt-2 space-y-4">
+                    <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">
+                      Budget (optional)
+                    </p>
+                    <div className="space-y-2">
+                      <Label htmlFor="budgetName">Budget name</Label>
+                      <Input
+                        id="budgetName"
+                        value={accountData.budgetName}
+                        onChange={(e) =>
+                          setAccountData((d) => ({
+                            ...d,
+                            budgetName: e.target.value,
+                          }))
+                        }
+                        placeholder="My Budget"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Currency</Label>
+                      <Select
+                        value={accountData.currency}
+                        onValueChange={(v) =>
+                          setAccountData((d) => ({ ...d, currency: v }))
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {[
+                            "USD",
+                            "EUR",
+                            "GBP",
+                            "CAD",
+                            "AUD",
+                            "JPY",
+                            "CHF",
+                            "SEK",
+                            "NOK",
+                            "DKK",
+                          ].map((c) => (
+                            <SelectItem key={c} value={c}>
+                              {c}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                 </>
               )}
@@ -380,7 +440,9 @@ export default function SetupWizard() {
                     <Input
                       id="incomeName"
                       value={incomeData.name}
-                      onChange={(e) => setIncomeData((d) => ({ ...d, name: e.target.value }))}
+                      onChange={(e) =>
+                        setIncomeData((d) => ({ ...d, name: e.target.value }))
+                      }
                       placeholder="Primary Job"
                     />
                   </div>
@@ -392,7 +454,9 @@ export default function SetupWizard() {
                       min="0"
                       step="0.01"
                       value={incomeData.amount}
-                      onChange={(e) => setIncomeData((d) => ({ ...d, amount: e.target.value }))}
+                      onChange={(e) =>
+                        setIncomeData((d) => ({ ...d, amount: e.target.value }))
+                      }
                       placeholder="3000"
                     />
                   </div>
@@ -400,14 +464,18 @@ export default function SetupWizard() {
                     <Label>Pay frequency</Label>
                     <Select
                       value={incomeData.frequency}
-                      onValueChange={(v) => setIncomeData((d) => ({ ...d, frequency: v }))}
+                      onValueChange={(v) =>
+                        setIncomeData((d) => ({ ...d, frequency: v }))
+                      }
                     >
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
                         {PAY_FREQUENCIES.map((f) => (
-                          <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>
+                          <SelectItem key={f.value} value={f.value}>
+                            {f.label}
+                          </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -418,7 +486,12 @@ export default function SetupWizard() {
                       id="nextPayDate"
                       type="date"
                       value={incomeData.nextPayDate}
-                      onChange={(e) => setIncomeData((d) => ({ ...d, nextPayDate: e.target.value }))}
+                      onChange={(e) =>
+                        setIncomeData((d) => ({
+                          ...d,
+                          nextPayDate: e.target.value,
+                        }))
+                      }
                     />
                   </div>
                 </>
@@ -431,7 +504,9 @@ export default function SetupWizard() {
                     <Input
                       id="savingsName"
                       value={savingsData.name}
-                      onChange={(e) => setSavingsData((d) => ({ ...d, name: e.target.value }))}
+                      onChange={(e) =>
+                        setSavingsData((d) => ({ ...d, name: e.target.value }))
+                      }
                       placeholder="Emergency Fund"
                     />
                   </div>
@@ -442,7 +517,12 @@ export default function SetupWizard() {
                       type="number"
                       min="0"
                       value={savingsData.targetAmount}
-                      onChange={(e) => setSavingsData((d) => ({ ...d, targetAmount: e.target.value }))}
+                      onChange={(e) =>
+                        setSavingsData((d) => ({
+                          ...d,
+                          targetAmount: e.target.value,
+                        }))
+                      }
                       placeholder="10000"
                     />
                   </div>
@@ -452,14 +532,20 @@ export default function SetupWizard() {
               {step.id === "recurring" && (
                 <>
                   <p className="text-sm text-muted-foreground">
-                    Add a recurring monthly bill (rent, subscriptions, etc.). You can add more in Settings.
+                    Add a recurring bill (rent, subscriptions, etc.). You can add
+                    more in Settings.
                   </p>
                   <div className="space-y-2">
                     <Label htmlFor="recurringName">Bill name</Label>
                     <Input
                       id="recurringName"
                       value={recurringData.name}
-                      onChange={(e) => setRecurringData((d) => ({ ...d, name: e.target.value }))}
+                      onChange={(e) =>
+                        setRecurringData((d) => ({
+                          ...d,
+                          name: e.target.value,
+                        }))
+                      }
                       placeholder="Rent / Mortgage"
                     />
                   </div>
@@ -471,7 +557,12 @@ export default function SetupWizard() {
                       min="0"
                       step="0.01"
                       value={recurringData.amount}
-                      onChange={(e) => setRecurringData((d) => ({ ...d, amount: e.target.value }))}
+                      onChange={(e) =>
+                        setRecurringData((d) => ({
+                          ...d,
+                          amount: e.target.value,
+                        }))
+                      }
                       placeholder="1500"
                     />
                   </div>
@@ -479,14 +570,18 @@ export default function SetupWizard() {
                     <Label>Frequency</Label>
                     <Select
                       value={recurringData.frequency}
-                      onValueChange={(v) => setRecurringData((d) => ({ ...d, frequency: v }))}
+                      onValueChange={(v) =>
+                        setRecurringData((d) => ({ ...d, frequency: v }))
+                      }
                     >
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
                         {EXPENSE_FREQUENCIES.map((f) => (
-                          <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>
+                          <SelectItem key={f.value} value={f.value}>
+                            {f.label}
+                          </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -494,76 +589,20 @@ export default function SetupWizard() {
                 </>
               )}
 
-              {step.id === "email" && (
-                <>
-                  <p className="text-sm text-muted-foreground">
-                    Configure SMTP to enable email notifications and receipt forwarding. You can set this up later in Settings &rsaquo; Email.
-                  </p>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2 col-span-2 sm:col-span-1">
-                      <Label htmlFor="smtpHost">SMTP host</Label>
-                      <Input
-                        id="smtpHost"
-                        value={emailData.smtpHost}
-                        onChange={(e) => setEmailData((d) => ({ ...d, smtpHost: e.target.value }))}
-                        placeholder="smtp.example.com"
-                      />
-                    </div>
-                    <div className="space-y-2 col-span-2 sm:col-span-1">
-                      <Label htmlFor="smtpPort">Port</Label>
-                      <Input
-                        id="smtpPort"
-                        type="number"
-                        value={emailData.smtpPort}
-                        onChange={(e) => setEmailData((d) => ({ ...d, smtpPort: e.target.value }))}
-                        placeholder="587"
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="smtpUser">SMTP username</Label>
-                    <Input
-                      id="smtpUser"
-                      value={emailData.smtpUser}
-                      onChange={(e) => setEmailData((d) => ({ ...d, smtpUser: e.target.value }))}
-                      placeholder="user@example.com"
-                      autoComplete="username"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="smtpPass">SMTP password</Label>
-                    <Input
-                      id="smtpPass"
-                      type="password"
-                      value={emailData.smtpPass}
-                      onChange={(e) => setEmailData((d) => ({ ...d, smtpPass: e.target.value }))}
-                      placeholder="App password or SMTP password"
-                      autoComplete="current-password"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="fromAddress">From address</Label>
-                    <Input
-                      id="fromAddress"
-                      type="email"
-                      value={emailData.fromAddress}
-                      onChange={(e) => setEmailData((d) => ({ ...d, fromAddress: e.target.value }))}
-                      placeholder="budget@example.com"
-                    />
-                  </div>
-                </>
-              )}
-
               {step.id === "ai" && (
                 <>
                   <p className="text-sm text-muted-foreground">
-                    Configure an AI provider to enable receipt parsing and smart categorization. You can set this up later in Settings &rsaquo; AI Provider.
+                    Configure an AI provider for receipt parsing and smart
+                    categorization. You can set this up later in Settings &rsaquo; AI
+                    Provider.
                   </p>
                   <div className="space-y-2">
                     <Label>Provider</Label>
                     <Select
                       value={aiData.provider}
-                      onValueChange={(v) => setAiData((d) => ({ ...d, provider: v }))}
+                      onValueChange={(v) =>
+                        setAiData((d) => ({ ...d, provider: v }))
+                      }
                     >
                       <SelectTrigger>
                         <SelectValue />
@@ -582,7 +621,9 @@ export default function SetupWizard() {
                     <Input
                       id="aiModel"
                       value={aiData.model}
-                      onChange={(e) => setAiData((d) => ({ ...d, model: e.target.value }))}
+                      onChange={(e) =>
+                        setAiData((d) => ({ ...d, model: e.target.value }))
+                      }
                       placeholder="gpt-4o-mini"
                     />
                   </div>
@@ -592,58 +633,161 @@ export default function SetupWizard() {
                       id="aiKey"
                       type="password"
                       value={aiData.apiKey}
-                      onChange={(e) => setAiData((d) => ({ ...d, apiKey: e.target.value }))}
+                      onChange={(e) =>
+                        setAiData((d) => ({ ...d, apiKey: e.target.value }))
+                      }
                       placeholder="sk-..."
+                      autoComplete="off"
+                    />
+                  </div>
+                  {(aiData.provider === "OLLAMA" ||
+                    aiData.provider === "CUSTOM") && (
+                    <div className="space-y-2">
+                      <Label htmlFor="aiBaseUrl">Base URL</Label>
+                      <Input
+                        id="aiBaseUrl"
+                        value={aiData.baseUrl}
+                        onChange={(e) =>
+                          setAiData((d) => ({ ...d, baseUrl: e.target.value }))
+                        }
+                        placeholder="http://localhost:11434"
+                      />
+                    </div>
+                  )}
+                </>
+              )}
+
+              {step.id === "email" && (
+                <>
+                  <p className="text-sm text-muted-foreground">
+                    Configure SMTP for email notifications and receipt forwarding.
+                    You can set this up later in Settings &rsaquo; Email.
+                  </p>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2 col-span-2 sm:col-span-1">
+                      <Label htmlFor="smtpHost">SMTP host</Label>
+                      <Input
+                        id="smtpHost"
+                        value={emailData.smtpHost}
+                        onChange={(e) =>
+                          setEmailData((d) => ({
+                            ...d,
+                            smtpHost: e.target.value,
+                          }))
+                        }
+                        placeholder="smtp.example.com"
+                      />
+                    </div>
+                    <div className="space-y-2 col-span-2 sm:col-span-1">
+                      <Label htmlFor="smtpPort">Port</Label>
+                      <Input
+                        id="smtpPort"
+                        type="number"
+                        value={emailData.smtpPort}
+                        onChange={(e) =>
+                          setEmailData((d) => ({
+                            ...d,
+                            smtpPort: e.target.value,
+                          }))
+                        }
+                        placeholder="587"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="smtpUser">SMTP username</Label>
+                    <Input
+                      id="smtpUser"
+                      value={emailData.smtpUser}
+                      onChange={(e) =>
+                        setEmailData((d) => ({
+                          ...d,
+                          smtpUser: e.target.value,
+                        }))
+                      }
+                      placeholder="user@example.com"
+                      autoComplete="username"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="smtpPass">SMTP password</Label>
+                    <Input
+                      id="smtpPass"
+                      type="password"
+                      value={emailData.smtpPass}
+                      onChange={(e) =>
+                        setEmailData((d) => ({
+                          ...d,
+                          smtpPass: e.target.value,
+                        }))
+                      }
+                      placeholder="App password or SMTP password"
+                      autoComplete="current-password"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="fromAddress">From address</Label>
+                    <Input
+                      id="fromAddress"
+                      type="email"
+                      value={emailData.fromAddress}
+                      onChange={(e) =>
+                        setEmailData((d) => ({
+                          ...d,
+                          fromAddress: e.target.value,
+                        }))
+                      }
+                      placeholder="budget@example.com"
                     />
                   </div>
                 </>
               )}
 
               {step.id === "done" && (
-                <div className="text-center py-6 space-y-4">
-                  <div className="flex justify-center">
-                    <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
-                      <CheckCircle2 className="w-8 h-8 text-primary" />
-                    </div>
+                <div className="text-center py-4 space-y-3">
+                  <div className="flex items-center justify-center w-16 h-16 rounded-full bg-emerald-500/10 text-emerald-500 mx-auto">
+                    <CheckCircle2 className="w-8 h-8" />
                   </div>
                   <div>
                     <h3 className="text-lg font-semibold">You&apos;re all set!</h3>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      Your budget app is ready to use. Sign in with your admin account to get started.
+                    <p className="text-muted-foreground text-sm mt-1">
+                      Your Budget instance is configured and ready to use. Click
+                      below to go to the login page.
                     </p>
                   </div>
                 </div>
               )}
-
-              <div className="flex items-center gap-3 pt-2">
-                {step.optional && step.id !== "done" && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={handleSkip}
-                    disabled={loading}
-                    size="sm"
-                  >
-                    Skip for now
-                  </Button>
-                )}
-                <Button
-                  type="button"
-                  onClick={handleNext}
-                  disabled={loading}
-                  className="ml-auto"
-                >
-                  {loading ? (
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  ) : null}
-                  {step.id === "done" ? "Go to login" : "Continue"}
-                  {!loading && <ArrowRight className="w-4 h-4 ml-2" />}
-                </Button>
-              </div>
             </CardContent>
           </Card>
         </motion.div>
       </AnimatePresence>
+
+      <div className="flex justify-between items-center">
+        {step.optional ? (
+          <Button
+            variant="ghost"
+            onClick={handleSkip}
+            disabled={loading}
+            className="text-muted-foreground"
+          >
+            Skip for now
+          </Button>
+        ) : (
+          <div />
+        )}
+        <Button onClick={handleNext} disabled={loading} className="gap-2 min-w-28">
+          {loading ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : step.id === "done" ? (
+            "Go to Login"
+          ) : (
+            <>
+              Continue
+              <ChevronRight className="w-4 h-4" />
+            </>
+          )}
+        </Button>
+      </div>
     </div>
   );
 }

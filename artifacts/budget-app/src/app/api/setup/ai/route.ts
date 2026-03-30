@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { guardSetupRoute } from "@/lib/auth/setup-guard";
 
-const VALID_PROVIDERS = ["OPENAI", "ANTHROPIC", "OLLAMA", "OPENROUTER"] as const;
+const VALID_PROVIDERS = ["OPENAI", "ANTHROPIC", "GOOGLE", "OLLAMA", "CUSTOM"] as const;
 
 export async function POST(request: NextRequest) {
   try {
