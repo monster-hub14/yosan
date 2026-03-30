@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { guardSetupRoute } from "@/lib/auth/setup-guard";
 
 const DEFAULT_CATEGORIES = [
   { name: "Housing", color: "#6366f1", icon: "home" },
@@ -16,6 +17,9 @@ const DEFAULT_CATEGORIES = [
 
 export async function POST(request: NextRequest) {
   try {
+    const denied = await guardSetupRoute(request);
+    if (denied) return denied;
+
     const progress = await db.setupProgress.findUnique({ where: { id: "singleton" } });
     if (!progress?.adminAccountCreated) {
       return NextResponse.json(
@@ -29,7 +33,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Admin user not found" }, { status: 400 });
     }
 
-    const { name, currency } = await request.json();
+    let body: Record<string, unknown>;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
+    const { name, currency } = body as { name?: string; currency?: string };
 
     if (!name) {
       return NextResponse.json({ error: "Budget name is required" }, { status: 400 });

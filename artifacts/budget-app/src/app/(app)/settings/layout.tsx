@@ -1,6 +1,7 @@
 import { Metadata } from "next";
 import Link from "next/link";
 import { getSession } from "@/lib/auth/session";
+import { db } from "@/lib/db";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = {
@@ -32,12 +33,25 @@ export default async function SettingsLayout({
   const session = await getSession();
   const isAdmin = session?.role === "ADMIN";
 
+  let isBudgetOwner = false;
+  if (session && !isAdmin) {
+    const ownedBudget = await db.budget.findFirst({
+      where: { ownerId: session.userId },
+      select: { id: true },
+    });
+    isBudgetOwner = ownedBudget !== null;
+  }
+
+  const showBudgetSection = isAdmin || isBudgetOwner;
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Settings</h1>
         <p className="text-muted-foreground text-sm mt-1">
-          Manage your account, budget, and instance preferences.
+          {isAdmin
+            ? "Manage your account, budget, and instance preferences."
+            : "Manage your account preferences."}
         </p>
       </div>
 
@@ -56,18 +70,20 @@ export default async function SettingsLayout({
             </div>
           </div>
 
-          <div>
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-              Budget
-            </p>
-            <div className="space-y-0.5">
-              {budgetLinks.map((link) => (
-                <SettingsNavLink key={link.href} href={link.href}>
-                  {link.label}
-                </SettingsNavLink>
-              ))}
+          {showBudgetSection && (
+            <div>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                Budget
+              </p>
+              <div className="space-y-0.5">
+                {budgetLinks.map((link) => (
+                  <SettingsNavLink key={link.href} href={link.href}>
+                    {link.label}
+                  </SettingsNavLink>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           {isAdmin && (
             <div>

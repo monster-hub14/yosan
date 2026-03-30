@@ -1,9 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { guardSetupRoute } from "@/lib/auth/setup-guard";
+
+const VALID_PROVIDERS = ["OPENAI", "ANTHROPIC", "OLLAMA", "OPENROUTER"] as const;
 
 export async function POST(request: NextRequest) {
   try {
-    const { provider, model, apiKey, baseUrl } = await request.json();
+    const denied = await guardSetupRoute(request);
+    if (denied) return denied;
+
+    let body: Record<string, unknown>;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
+    const { provider, model, apiKey, baseUrl } = body as {
+      provider?: string;
+      model?: string;
+      apiKey?: string;
+      baseUrl?: string;
+    };
 
     if (!provider || !model || !apiKey) {
       return NextResponse.json(
@@ -12,18 +29,26 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const normalizedProvider = provider.toUpperCase() as (typeof VALID_PROVIDERS)[number];
+    if (!VALID_PROVIDERS.includes(normalizedProvider)) {
+      return NextResponse.json(
+        { error: `Invalid provider. Must be one of: ${VALID_PROVIDERS.join(", ")}` },
+        { status: 400 }
+      );
+    }
+
     await db.aIProviderConfig.upsert({
       where: { id: "singleton" },
       create: {
         id: "singleton",
-        provider,
+        provider: normalizedProvider,
         model,
         apiKey,
         baseUrl: baseUrl || null,
         isEnabled: true,
       },
       update: {
-        provider,
+        provider: normalizedProvider,
         model,
         apiKey,
         baseUrl: baseUrl || null,

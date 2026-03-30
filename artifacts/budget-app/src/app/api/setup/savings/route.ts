@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db";
+import { prisma } from "@/lib/db";
+import { guardSetupRoute } from "@/lib/auth/setup-guard";
 
 export async function POST(request: NextRequest) {
   try {
-    const budget = await db.budget.findFirst({ orderBy: { createdAt: "asc" } });
+    const denied = await guardSetupRoute(request);
+    if (denied) return denied;
+
+    const budget = await prisma.budget.findFirst({ orderBy: { createdAt: "asc" } });
     if (!budget) {
       return NextResponse.json({ error: "Create a budget first" }, { status: 400 });
     }
@@ -17,7 +21,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const goal = await db.savingsGoal.create({
+    const goal = await prisma.savingsGoal.create({
       data: {
         budgetId: budget.id,
         name: name.trim(),
@@ -25,7 +29,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    await db.setupProgress.update({
+    await prisma.setupProgress.update({
       where: { id: "singleton" },
       data: { savingsConfigured: true },
     });

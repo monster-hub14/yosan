@@ -1,7 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   TrendingUp,
@@ -11,15 +12,13 @@ import {
   Settings,
   Wallet,
   PiggyBank,
-  LogOut,
   ChevronRight,
-  X,
+  RefreshCw,
+  LineChart,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { type SessionPayload } from "@/lib/auth/types";
-import { useState } from "react";
-import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
 
 interface AppSidebarProps {
   user: SessionPayload;
@@ -30,27 +29,16 @@ const navItems = [
   { href: "/income", icon: TrendingUp, label: "Income" },
   { href: "/expenses", icon: TrendingDown, label: "Expenses" },
   { href: "/receipts", icon: Receipt, label: "Receipts" },
+  { href: "/recurring", icon: RefreshCw, label: "Recurring" },
   { href: "/savings", icon: PiggyBank, label: "Savings" },
   { href: "/reports", icon: BarChart3, label: "Reports" },
+  { href: "/analysis", icon: LineChart, label: "Analysis" },
+  { href: "/forecast", icon: Sparkles, label: "Forecast" },
 ];
 
 export default function AppSidebar({ user }: AppSidebarProps) {
   const pathname = usePathname();
-  const router = useRouter();
-  const [loggingOut, setLoggingOut] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
-
-  async function handleLogout() {
-    setLoggingOut(true);
-    try {
-      await fetch("/api/auth/logout", { method: "POST" });
-      router.push("/login");
-      router.refresh();
-    } catch {
-      toast.error("Failed to sign out");
-      setLoggingOut(false);
-    }
-  }
 
   return (
     <aside
@@ -66,7 +54,7 @@ export default function AppSidebar({ user }: AppSidebarProps) {
         )}
       >
         <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
-          <Wallet className="w-4.5 h-4.5 text-primary" />
+          <Wallet className="w-4 h-4 text-primary" />
         </div>
         {!collapsed && (
           <span className="font-semibold text-sidebar-foreground text-sm">
@@ -106,14 +94,14 @@ export default function AppSidebar({ user }: AppSidebarProps) {
               )}
               title={collapsed ? label : undefined}
             >
-              <Icon className="w-4.5 h-4.5 flex-shrink-0" />
+              <Icon className="w-4 h-4 flex-shrink-0" />
               {!collapsed && <span>{label}</span>}
             </Link>
           );
         })}
       </nav>
 
-      <div className="border-t border-sidebar-border p-2 space-y-0.5">
+      <div className="border-t border-sidebar-border p-2">
         <Link
           href="/settings"
           className={cn(
@@ -125,24 +113,9 @@ export default function AppSidebar({ user }: AppSidebarProps) {
           )}
           title={collapsed ? "Settings" : undefined}
         >
-          <Settings className="w-4.5 h-4.5 flex-shrink-0" />
+          <Settings className="w-4 h-4 flex-shrink-0" />
           {!collapsed && <span>Settings</span>}
         </Link>
-
-        <button
-          onClick={handleLogout}
-          disabled={loggingOut}
-          className={cn(
-            "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
-            "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-            "disabled:opacity-50 disabled:cursor-not-allowed",
-            collapsed && "justify-center px-2"
-          )}
-          title={collapsed ? "Sign out" : undefined}
-        >
-          <LogOut className="w-4.5 h-4.5 flex-shrink-0" />
-          {!collapsed && <span>{loggingOut ? "Signing out…" : "Sign out"}</span>}
-        </button>
       </div>
 
       {!collapsed && (
@@ -153,7 +126,7 @@ export default function AppSidebar({ user }: AppSidebarProps) {
                 {user.name.charAt(0).toUpperCase()}
               </span>
             </div>
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <p className="text-xs font-medium text-sidebar-foreground truncate">
                 {user.name}
               </p>

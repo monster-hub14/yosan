@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db";
+import { prisma } from "@/lib/db";
+import { guardSetupRoute } from "@/lib/auth/setup-guard";
 
 export async function POST(request: NextRequest) {
   try {
+    const denied = await guardSetupRoute(request);
+    if (denied) return denied;
+
     const { smtpHost, smtpPort, smtpUser, smtpPass, fromAddress, fromName } =
       await request.json();
 
@@ -10,7 +14,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "SMTP host is required" }, { status: 400 });
     }
 
-    await db.emailConfig.upsert({
+    await prisma.emailConfig.upsert({
       where: { id: "singleton" },
       create: {
         id: "singleton",
@@ -33,7 +37,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    await db.setupProgress.update({
+    await prisma.setupProgress.update({
       where: { id: "singleton" },
       data: { emailConfigured: true },
     });
