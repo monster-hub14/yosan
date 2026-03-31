@@ -83,9 +83,17 @@ const CONFIDENCE_COLORS = {
 
 function normalizeDateStr(raw: string | null | undefined): string | null {
   if (!raw) return null;
+  // If the string starts with YYYY-MM-DD already, extract that portion directly
+  // to avoid UTC conversion shifting the calendar day for timezone-aware inputs.
+  const match = raw.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (match) return match[1];
+  // Fallback: parse and format (handles other date representations)
   const d = new Date(raw);
   if (isNaN(d.getTime())) return null;
-  return d.toISOString().slice(0, 10);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 function validateDateYear(dateStr: string): string | null {
