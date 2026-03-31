@@ -35,10 +35,24 @@ function relayRedirect(request: NextRequest, params: Record<string, string>) {
   // even when the browser navigated to the public domain. Use resolveAppBaseUrl()
   // which reads x-forwarded-proto + x-forwarded-host (set by the Replit proxy) to
   // build the correct public base URL.
+  //
+  // When resolveAppBaseUrl() returns ok:false (APP_BASE_URL is set but invalid),
+  // fall back to the proxy headers directly — not request.url, which could be the
+  // loopback address. Only use request.url as a last resort if no headers are set.
   const baseUrlResult = resolveAppBaseUrl(request);
-  const base = baseUrlResult.ok
-    ? baseUrlResult.baseUrl
-    : `${new URL(request.url).protocol}//${new URL(request.url).host}`;
+  let base: string;
+  if (baseUrlResult.ok) {
+    base = baseUrlResult.baseUrl;
+  } else {
+    const fwdProto = request.headers.get("x-forwarded-proto")?.split(",")[0].trim();
+    const fwdHost = request.headers.get("x-forwarded-host")?.split(",")[0].trim();
+    if (fwdProto && fwdHost) {
+      base = `${fwdProto}://${fwdHost}`;
+    } else {
+      const u = new URL(request.url);
+      base = `${u.protocol}//${u.host}`;
+    }
+  }
   return NextResponse.redirect(new URL(`${RELAY_PATH}?${qs}`, base));
 }
 

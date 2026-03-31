@@ -96,10 +96,14 @@ export function GmailSettingsClient({ budgets, defaultBudgetId }: Props) {
     // When the app runs inside the Replit workspace iframe, Chrome treats
     // window.open() from an iframe as a new tab, not a popup. Use window.top
     // (which is same-origin in Replit dev) so Chrome applies top-level popup
-    // rules. Fall back to window if window.top is inaccessible (cross-origin).
+    // rules. Verify same-origin before using it — cross-origin access throws a
+    // SecurityError, which the try/catch guards against. Fall back to the
+    // iframe's own window if window.top is unavailable or cross-origin.
     let win: Window = window;
     try {
-      if (window.top) win = window.top;
+      if (window.top && window.top.location.origin === window.location.origin) {
+        win = window.top;
+      }
     } catch {
       // Cross-origin top window — stay in iframe context
     }
