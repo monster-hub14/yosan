@@ -219,6 +219,7 @@ If you enable Gmail integration, the app can automatically import receipts from 
 - Each user configures their **sync frequency** (30 min, 1 h, 6 h, 12 h, or 24 h) in **Settings → Gmail**.
 - The cron endpoint should be called frequently (every 15 minutes recommended); it skips users whose chosen interval hasn't elapsed yet.
 - AI extraction runs on every imported email: image/PDF attachments are processed for merchant, date, and total; text-only emails have their body analysed directly.
+- **Budget target**: receipts are imported into the user's earliest-created **owned** budget. If the user owns no budgets, the earliest budget they belong to as a member is used. This is a server-side default — it does not reflect which budget the user had open in the browser at the time of sync.
 
 ### Authentication
 
