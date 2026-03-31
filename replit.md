@@ -19,16 +19,19 @@ artifacts/
     src/
       app/
         (app)/         # Authenticated app shell
-          dashboard/
+          dashboard/   # DashboardStagger/DashboardItem animation wrappers
           expenses/
           income/
           receipts/
           reports/
-          savings/
+          savings/     # SavingsPage with circular SVG progress rings
           settings/    # Settings with admin/user/budget sections
         (auth)/        # Auth pages (login, setup wizard)
       components/
-        layout/        # AppSidebar, AppHeader
+        layout/        # AppShell (client, mobile state), AppSidebar (Framer Motion active pill),
+                       # AppHeader (hamburger for mobile), MobileNav (fixed bottom bar on <lg)
+        receipts/      # UploadReceiptModal (scan line animation during AI processing)
+        expenses/      # CategoryTotalsPanel (staggered entry + status CSS var colors)
         setup/         # SetupWizard (multi-step, Framer Motion)
         ui/            # shadcn/ui components
       lib/
@@ -46,6 +49,17 @@ artifacts/
   api-server/          # Hono.js API server (separate artifact)
   mockup-sandbox/      # Component preview server for canvas
 ```
+
+### UI Design System (Task #9 — Premium UI/UX)
+- **Status CSS tokens**: `--status-healthy-hsl`, `--status-caution-hsl`, `--status-risk-hsl` + `-bg/-border/-glow` variants in `:root` and `.dark`; used via inline `style` props
+- **Mobile layout**: `AppShell.tsx` manages `mobileSidebarOpen` state; sidebar is hidden on `<lg` and shown as fixed slide-over drawer; `MobileNav` fixed at bottom with 5 key items; main content has `pb-24 lg:pb-6`
+- **Sidebar**: `AppSidebar.tsx` — "Yosan AI" brand + logo image, Framer Motion `layoutId="sidebar-active-pill"` animated active highlight, `onClose` prop for mobile drawer
+- **Safe-to-spend widget**: SVG arc ring (r=42, circumference=263.9) with `motion.circle` animating `strokeDashoffset`; health fraction mapped from status; supportive copy ("Looking good", "Worth watching", "Let's look at this")
+- **Pay-period card**: gradient progress bar + milestone tick marks at 25/50/75%
+- **Dashboard**: Wrapped in `DashboardStagger` + `DashboardItem` for staggered fade-in entry (0.09s stagger)
+- **Savings goals**: Circular SVG rings (r=36, circ=226.2) with animated stroke-dashoffset; color changes at 50% (caution) and 80% (healthy)
+- **Receipt upload modal**: AI processing state replaced with animated scan-line effect (sweep over receipt silhouette + pulsing dots) instead of plain spinner
+- **Category totals panel**: Status badge/bar colors now use CSS var tokens; staggered row entry animations
 
 ### Settings URL Structure
 - `/settings/account` — User account settings

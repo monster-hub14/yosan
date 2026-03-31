@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Plus, Pencil, Trash2, PiggyBank, RefreshCw, Target } from "lucide-react";
+import { Plus, Pencil, Trash2, PiggyBank, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,11 +12,11 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 
 interface SavingsGoal {
   id: string;
@@ -38,6 +38,72 @@ interface Props {
   budgetId: string;
   currency: string;
 }
+
+const RING_R = 36;
+const RING_CIRC = 2 * Math.PI * RING_R;
+
+function CircularProgress({ percent }: { percent: number }) {
+  const clamped = Math.min(100, Math.max(0, percent));
+  const offset = RING_CIRC * (1 - clamped / 100);
+
+  const color =
+    clamped >= 80
+      ? "hsl(var(--status-healthy-hsl))"
+      : clamped >= 50
+      ? "hsl(var(--status-caution-hsl))"
+      : "hsl(var(--primary))";
+
+  return (
+    <div className="relative w-[88px] h-[88px] flex-shrink-0">
+      <svg viewBox="0 0 80 80" className="w-full h-full -rotate-90">
+        <circle
+          cx={40}
+          cy={40}
+          r={RING_R}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={5}
+          className="text-muted opacity-40"
+        />
+        <motion.circle
+          cx={40}
+          cy={40}
+          r={RING_R}
+          fill="none"
+          stroke={color}
+          strokeWidth={5}
+          strokeLinecap="round"
+          strokeDasharray={RING_CIRC}
+          initial={{ strokeDashoffset: RING_CIRC }}
+          animate={{ strokeDashoffset: offset }}
+          transition={{ duration: 1.0, ease: [0.25, 0.46, 0.45, 0.94], delay: 0.15 }}
+        />
+      </svg>
+      <div className="absolute inset-0 flex items-center justify-center">
+        <span className="text-xs font-bold tabular-nums" style={{ color }}>
+          {clamped.toFixed(0)}%
+        </span>
+      </div>
+    </div>
+  );
+}
+
+const EASE = [0.25, 0.46, 0.45, 0.94] as [number, number, number, number];
+
+const cardVariants = {
+  hidden: { opacity: 0, y: 20, scale: 0.97 },
+  show: {
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    transition: { duration: 0.38, ease: EASE },
+  },
+  exit: { opacity: 0, scale: 0.95, transition: { duration: 0.2 } },
+};
+
+const containerVariants = {
+  show: { transition: { staggerChildren: 0.08 } },
+};
 
 export default function SavingsPage({ budgetId, currency }: Props) {
   const [goals, setGoals] = useState<SavingsGoal[]>([]);
@@ -171,79 +237,95 @@ export default function SavingsPage({ budgetId, currency }: Props) {
       </div>
 
       {goals.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 gap-4 text-center">
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex flex-col items-center justify-center py-20 gap-4 text-center"
+        >
           <PiggyBank className="w-12 h-12 text-muted-foreground/50" />
           <div>
-            <h2 className="text-lg font-semibold">No savings goals</h2>
-            <p className="text-muted-foreground text-sm mt-1">Create a goal to start tracking your savings.</p>
+            <h2 className="text-lg font-semibold">No savings goals yet</h2>
+            <p className="text-muted-foreground text-sm mt-1">
+              Create a goal to start tracking your progress.
+            </p>
           </div>
           <Button onClick={openAdd}>
             <Plus className="w-4 h-4 mr-2" />
             Create goal
           </Button>
-        </div>
+        </motion.div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {goals.map((goal) => {
-            const progress = goal.targetAmount > 0
-              ? Math.min((goal.currentAmount / goal.targetAmount) * 100, 100)
-              : 0;
-            return (
-              <Card key={goal.id} className="border-border">
-                <CardContent className="p-5 space-y-4">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="w-9 h-9 rounded-lg bg-amber-500/10 flex items-center justify-center flex-shrink-0">
-                        <Target className="w-4 h-4 text-amber-500" />
+        <motion.div
+          variants={containerVariants}
+          initial="hidden"
+          animate="show"
+          className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"
+        >
+          <AnimatePresence>
+            {goals.map((goal) => {
+              const progress =
+                goal.targetAmount > 0
+                  ? Math.min((goal.currentAmount / goal.targetAmount) * 100, 100)
+                  : 0;
+
+              return (
+                <motion.div key={goal.id} variants={cardVariants} exit="exit" layout>
+                  <Card className="border-border h-full">
+                    <CardContent className="p-5 space-y-4">
+                      {/* Top row: actions */}
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="font-semibold text-sm leading-snug">{goal.name}</p>
+                        <div className="flex items-center gap-0.5 flex-shrink-0">
+                          {!goal.isActive && <Badge variant="secondary" className="text-xs mr-1">Inactive</Badge>}
+                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(goal)}>
+                            <Pencil className="w-3.5 h-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                            onClick={() => handleDelete(goal.id)}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
                       </div>
-                      <div className="min-w-0">
-                        <p className="font-semibold truncate">{goal.name}</p>
-                        {!goal.isActive && <Badge variant="secondary" className="text-xs">Inactive</Badge>}
+
+                      {/* Ring + amounts */}
+                      <div className="flex items-center gap-4">
+                        <CircularProgress percent={progress} />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-2xl font-bold leading-none">
+                            {formatCurrency(goal.currentAmount, currency)}
+                          </p>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            of {formatCurrency(goal.targetAmount, currency)} goal
+                          </p>
+                          {goal.perPaycheckAmount !== null && (
+                            <p className="text-xs text-muted-foreground mt-2">
+                              {formatCurrency(goal.perPaycheckAmount, currency)} / paycheck
+                              {goal.isMonthlyGoal && " (monthly)"}
+                            </p>
+                          )}
+                          {goal.targetDate && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Target:{" "}
+                              {new Date(goal.targetDate).toLocaleDateString("en-US", {
+                                month: "short",
+                                day: "numeric",
+                                year: "numeric",
+                              })}
+                            </p>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-1 flex-shrink-0">
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(goal)}>
-                        <Pencil className="w-3.5 h-3.5" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => handleDelete(goal.id)}>
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </Button>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="flex justify-between items-end">
-                      <span className="text-2xl font-bold">{formatCurrency(goal.currentAmount, currency)}</span>
-                      <span className="text-sm text-muted-foreground">/ {formatCurrency(goal.targetAmount, currency)}</span>
-                    </div>
-                    <div className="h-2 rounded-full bg-muted overflow-hidden">
-                      <motion.div
-                        className="h-full rounded-full bg-amber-500"
-                        initial={{ width: 0 }}
-                        animate={{ width: `${progress}%` }}
-                        transition={{ duration: 0.8, ease: "easeOut" }}
-                      />
-                    </div>
-                    <p className="text-xs text-muted-foreground">{progress.toFixed(0)}% complete</p>
-                  </div>
-
-                  {goal.perPaycheckAmount !== null && (
-                    <p className="text-xs text-muted-foreground">
-                      {formatCurrency(goal.perPaycheckAmount, currency)} / paycheck
-                      {goal.isMonthlyGoal && " (from monthly goal)"}
-                    </p>
-                  )}
-
-                  {goal.targetDate && (
-                    <p className="text-xs text-muted-foreground">
-                      Target: {new Date(goal.targetDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-                    </p>
-                  )}
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              );
+            })}
+          </AnimatePresence>
+        </motion.div>
       )}
 
       <Dialog open={showForm} onOpenChange={setShowForm}>

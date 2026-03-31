@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { ChevronDown, ChevronRight, Target, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -31,24 +31,39 @@ interface CategoryTotalsPanelProps {
   onTargetSaved?: () => void;
 }
 
-const statusColors = {
-  "on-track": { bar: "#22c55e", badge: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" },
-  approaching: { bar: "#f59e0b", badge: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400" },
-  over: { bar: "#ef4444", badge: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" },
+const statusConfig = {
+  "on-track": {
+    bar: "hsl(var(--status-healthy-hsl))",
+    badge: "text-[length:inherit] px-1.5 py-0 h-5 border-0",
+    badgeStyle: { background: "var(--status-healthy-bg)", color: "hsl(var(--status-healthy-hsl))" },
+    label: "✓",
+  },
+  approaching: {
+    bar: "hsl(var(--status-caution-hsl))",
+    badge: "text-[length:inherit] px-1.5 py-0 h-5 border-0",
+    badgeStyle: { background: "var(--status-caution-bg)", color: "hsl(var(--status-caution-hsl))" },
+    label: "~",
+  },
+  over: {
+    bar: "hsl(var(--status-risk-hsl))",
+    badge: "text-[length:inherit] px-1.5 py-0 h-5 border-0",
+    badgeStyle: { background: "var(--status-risk-bg)", color: "hsl(var(--status-risk-hsl))" },
+    label: "!",
+  },
 };
 
-function ProgressBar({ percent, status }: { percent: number | null; status: CategoryTotal["status"] }) {
+function ProgressBar({ percent, status, delay = 0 }: { percent: number | null; status: CategoryTotal["status"]; delay?: number }) {
   if (percent === null) return null;
   const clamped = Math.min(100, percent);
-  const color = statusColors[status].bar;
+  const cfg = statusConfig[status];
   return (
     <div className="mt-1.5 h-1.5 rounded-full bg-muted overflow-hidden">
       <motion.div
         className="h-full rounded-full"
-        style={{ backgroundColor: color }}
+        style={{ backgroundColor: cfg.bar }}
         initial={{ width: 0 }}
         animate={{ width: `${clamped}%` }}
-        transition={{ duration: 0.6, ease: "easeOut" }}
+        transition={{ duration: 0.55, ease: [0.25, 0.46, 0.45, 0.94], delay }}
       />
     </div>
   );
@@ -139,17 +154,23 @@ function SetTargetModal({
   );
 }
 
-function CategoryRow({ cat, depth = 0, budgetId, onEdit }: {
+function CategoryRow({ cat, depth = 0, budgetId, onEdit, index = 0 }: {
   cat: CategoryTotal;
   depth?: number;
   budgetId: string;
   onEdit: (cat: CategoryTotal) => void;
+  index?: number;
 }) {
   const [expanded, setExpanded] = useState(false);
   const hasChildren = (cat.children ?? []).length > 0;
+  const cfg = statusConfig[cat.status];
 
   return (
-    <div>
+    <motion.div
+      initial={{ opacity: 0, x: -8 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ duration: 0.3, delay: index * 0.04, ease: [0.25, 0.46, 0.45, 0.94] }}
+    >
       <div
         className={cn(
           "group flex items-center gap-2 py-2 px-3 rounded-lg hover:bg-muted/50 cursor-pointer transition-colors",
@@ -174,8 +195,8 @@ function CategoryRow({ cat, depth = 0, budgetId, onEdit }: {
           {cat.target !== null && (
             <>
               <span className="text-xs text-muted-foreground">/ ${cat.target.toFixed(0)}</span>
-              <Badge className={cn("text-xs px-1.5 py-0 h-5 border-0", statusColors[cat.status].badge)}>
-                {cat.status === "over" ? "Over" : cat.status === "approaching" ? "~" : "✓"}
+              <Badge className={cn("text-xs border-0 px-1.5 py-0 h-5", cfg.badge)} style={cfg.badgeStyle}>
+                {cfg.label}
               </Badge>
             </>
           )}
@@ -191,14 +212,25 @@ function CategoryRow({ cat, depth = 0, budgetId, onEdit }: {
 
       {cat.target !== null && cat.percentUsed !== null && (
         <div className={cn("px-3 pb-1", depth > 0 && "ml-5")}>
-          <ProgressBar percent={cat.percentUsed} status={cat.status} />
+          <ProgressBar percent={cat.percentUsed} status={cat.status} delay={index * 0.04 + 0.1} />
         </div>
       )}
 
-      {expanded && (cat.children ?? []).map((child) => (
-        <CategoryRow key={child.id} cat={child} depth={depth + 1} budgetId={budgetId} onEdit={onEdit} />
-      ))}
-    </div>
+      <AnimatePresence>
+        {expanded && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.2 }}
+          >
+            {(cat.children ?? []).map((child, ci) => (
+              <CategoryRow key={child.id} cat={child} depth={depth + 1} budgetId={budgetId} onEdit={onEdit} index={ci} />
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
   );
 }
 
@@ -246,8 +278,8 @@ export function CategoryTotalsPanel({ budgetId, periodStart, periodEnd, compact,
 
   return (
     <div className={cn("space-y-0.5", compact && "text-xs")}>
-      {totals.map((cat) => (
-        <CategoryRow key={cat.id} cat={cat} budgetId={budgetId} onEdit={setEditTarget} />
+      {totals.map((cat, i) => (
+        <CategoryRow key={cat.id} cat={cat} budgetId={budgetId} onEdit={setEditTarget} index={i} />
       ))}
 
       {editTarget && (

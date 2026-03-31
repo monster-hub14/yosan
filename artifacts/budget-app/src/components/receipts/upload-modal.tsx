@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Upload, X, FileImage, Loader2, CheckCircle2, AlertCircle, Receipt,
+  Upload, X, FileImage, CheckCircle2, AlertCircle, Receipt,
   Camera, Type, Image, ArrowLeft,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -26,6 +26,66 @@ interface UploadModalProps {
 
 type CaptureMode = "choose" | "upload" | "camera" | "screenshot" | "manual";
 type UploadState = "idle" | "uploading" | "processing" | "done" | "error";
+
+function ScanAnimation({ label, sublabel }: { label: string; sublabel: string }) {
+  return (
+    <div className="flex flex-col items-center gap-5 py-8">
+      {/* Receipt + scan line */}
+      <div className="relative w-28 h-36 flex items-center justify-center">
+        {/* Receipt silhouette */}
+        <div className="absolute inset-x-4 inset-y-0 rounded-lg bg-primary/8 border border-primary/20 flex flex-col items-center justify-center gap-2 overflow-hidden">
+          {/* Receipt lines */}
+          {[0, 1, 2, 3].map((i) => (
+            <motion.div
+              key={i}
+              className="h-px rounded-full bg-primary/25"
+              style={{ width: `${60 - i * 8}%` }}
+              initial={{ opacity: 0, scaleX: 0 }}
+              animate={{ opacity: 1, scaleX: 1 }}
+              transition={{ delay: 0.2 + i * 0.07, duration: 0.3 }}
+            />
+          ))}
+          {/* Total line */}
+          <motion.div
+            className="h-0.5 rounded-full bg-primary/40"
+            style={{ width: "65%" }}
+            initial={{ opacity: 0, scaleX: 0 }}
+            animate={{ opacity: 1, scaleX: 1 }}
+            transition={{ delay: 0.5, duration: 0.3 }}
+          />
+        </div>
+
+        {/* Sweep scan line */}
+        <motion.div
+          className="absolute inset-x-2 h-px"
+          style={{
+            background: "linear-gradient(90deg, transparent, hsl(var(--primary)), transparent)",
+            boxShadow: "0 0 8px 1px hsl(var(--primary) / 0.5)",
+          }}
+          animate={{ top: ["12%", "88%", "12%"] }}
+          transition={{ duration: 2.0, repeat: Infinity, ease: "easeInOut" }}
+        />
+      </div>
+
+      <div className="text-center">
+        <p className="font-semibold text-base">{label}</p>
+        <p className="text-sm text-muted-foreground mt-1">{sublabel}</p>
+      </div>
+
+      {/* Pulsing dots */}
+      <div className="flex items-center gap-2">
+        {[0, 1, 2].map((i) => (
+          <motion.div
+            key={i}
+            className="w-2 h-2 rounded-full bg-primary/60"
+            animate={{ opacity: [0.3, 1, 0.3], scale: [0.85, 1.15, 0.85] }}
+            transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.25, ease: "easeInOut" }}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export function UploadReceiptModal({ open, onClose, budgetId }: UploadModalProps) {
   const router = useRouter();
@@ -201,9 +261,12 @@ export function UploadReceiptModal({ open, onClose, budgetId }: UploadModalProps
               exit={{ opacity: 0, y: -8 }}
               className="space-y-3 py-1"
             >
-              {CAPTURE_OPTIONS.map(({ mode, icon: Icon, label, desc }) => (
-                <button
+              {CAPTURE_OPTIONS.map(({ mode, icon: Icon, label, desc }, i) => (
+                <motion.button
                   key={mode}
+                  initial={{ opacity: 0, x: -8 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: i * 0.06 }}
                   onClick={() => {
                     if (mode === "camera") {
                       setCaptureMode("camera");
@@ -215,6 +278,8 @@ export function UploadReceiptModal({ open, onClose, budgetId }: UploadModalProps
                       setCaptureMode(mode);
                     }
                   }}
+                  whileHover={{ scale: 1.01 }}
+                  whileTap={{ scale: 0.99 }}
                   className="w-full flex items-center gap-4 p-3 rounded-xl border border-border hover:border-primary/40 hover:bg-muted/30 transition-colors text-left"
                 >
                   <div className="p-2 rounded-lg bg-primary/10 shrink-0">
@@ -224,7 +289,7 @@ export function UploadReceiptModal({ open, onClose, budgetId }: UploadModalProps
                     <p className="font-medium text-sm">{label}</p>
                     <p className="text-xs text-muted-foreground">{desc}</p>
                   </div>
-                </button>
+                </motion.button>
               ))}
 
               {/* Hidden file inputs for camera and screenshot */}
@@ -236,7 +301,7 @@ export function UploadReceiptModal({ open, onClose, budgetId }: UploadModalProps
                 className="hidden"
                 onChange={(e) => {
                   const f = e.target.files?.[0];
-                  if (f) { handleFileSelect(f); /* stays on camera mode to show preview */ }
+                  if (f) { handleFileSelect(f); }
                 }}
               />
               <input
@@ -425,28 +490,33 @@ export function UploadReceiptModal({ open, onClose, budgetId }: UploadModalProps
             </motion.div>
           )}
 
-          {/* === UPLOADING / PROCESSING === */}
-          {(uploadState === "uploading" || uploadState === "processing") && (
+          {/* === UPLOADING === */}
+          {uploadState === "uploading" && (
             <motion.div
               key="uploading"
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="flex flex-col items-center gap-4 py-8"
             >
-              <div className="p-4 rounded-full bg-primary/10">
-                <Loader2 className="w-8 h-8 text-primary animate-spin" />
-              </div>
-              <div className="text-center">
-                <p className="font-medium">
-                  {uploadState === "uploading" ? "Uploading receipt…" : "AI is reading your receipt…"}
-                </p>
-                <p className="text-sm text-muted-foreground mt-1">
-                  {uploadState === "processing"
-                    ? "Extracting items, amounts, and merchant details"
-                    : "Sending to server"}
-                </p>
-              </div>
+              <ScanAnimation
+                label="Uploading receipt…"
+                sublabel="Sending to server"
+              />
+            </motion.div>
+          )}
+
+          {/* === PROCESSING === */}
+          {uploadState === "processing" && (
+            <motion.div
+              key="processing"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+            >
+              <ScanAnimation
+                label="Reading your receipt…"
+                sublabel="Extracting merchant, items, and amounts"
+              />
             </motion.div>
           )}
 
@@ -454,16 +524,22 @@ export function UploadReceiptModal({ open, onClose, budgetId }: UploadModalProps
           {uploadState === "done" && (
             <motion.div
               key="done"
-              initial={{ opacity: 0, scale: 0.95 }}
+              initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
+              transition={{ type: "spring", stiffness: 300, damping: 22 }}
               className="flex flex-col items-center gap-4 py-8"
             >
-              <div className="p-4 rounded-full bg-green-500/10">
-                <CheckCircle2 className="w-8 h-8 text-green-500" />
-              </div>
+              <motion.div
+                className="p-4 rounded-full bg-green-500/10"
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ type: "spring", stiffness: 350, damping: 20, delay: 0.1 }}
+              >
+                <CheckCircle2 className="w-10 h-10 text-green-500" />
+              </motion.div>
               <div className="text-center">
-                <p className="font-medium">Receipt ready for review</p>
-                <p className="text-sm text-muted-foreground mt-1">Taking you to the review screen…</p>
+                <p className="font-semibold text-base">Receipt ready for review</p>
+                <p className="text-sm text-muted-foreground mt-1">Taking you there now…</p>
               </div>
             </motion.div>
           )}
@@ -480,8 +556,8 @@ export function UploadReceiptModal({ open, onClose, budgetId }: UploadModalProps
                 <AlertCircle className="w-8 h-8 text-destructive" />
               </div>
               <div className="text-center">
-                <p className="font-medium">Upload failed</p>
-                <p className="text-sm text-muted-foreground mt-1">Check the error and try again</p>
+                <p className="font-semibold">Something went wrong</p>
+                <p className="text-sm text-muted-foreground mt-1">Check the error above and try again</p>
               </div>
               <Button variant="outline" onClick={resetState}>Try again</Button>
             </motion.div>

@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useTheme } from "next-themes";
 import {
   Moon, Sun, Bell, ChevronDown, User, LogOut, Settings,
-  Check, Wallet, Plus, ChevronRight
+  Check, Wallet, Plus, ChevronRight, Menu,
 } from "lucide-react";
 import { type SessionPayload } from "@/lib/auth/types";
 import { Badge } from "@/components/ui/badge";
@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 interface AppHeaderProps {
   user: SessionPayload;
   activeBudgetId?: string | null;
+  onMobileMenuToggle?: () => void;
 }
 
 interface BudgetOption {
@@ -26,7 +27,7 @@ interface BudgetOption {
   ownerId: string;
 }
 
-export default function AppHeader({ user, activeBudgetId }: AppHeaderProps) {
+export default function AppHeader({ user, activeBudgetId, onMobileMenuToggle }: AppHeaderProps) {
   const { theme, setTheme } = useTheme();
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -89,6 +90,17 @@ export default function AppHeader({ user, activeBudgetId }: AppHeaderProps) {
 
   return (
     <header className="h-14 flex items-center px-4 gap-3 border-b border-border bg-card/50 backdrop-blur-sm flex-shrink-0">
+      {/* Mobile hamburger */}
+      {onMobileMenuToggle && (
+        <button
+          onClick={onMobileMenuToggle}
+          className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors lg:hidden"
+          aria-label="Open navigation"
+        >
+          <Menu className="w-5 h-5" />
+        </button>
+      )}
+
       {budgets.length > 0 && (
         <div className="relative">
           <button
@@ -102,7 +114,7 @@ export default function AppHeader({ user, activeBudgetId }: AppHeaderProps) {
             )}
           >
             <Wallet className="w-3.5 h-3.5 text-primary flex-shrink-0" />
-            <span className="max-w-36 truncate">
+            <span className="max-w-28 sm:max-w-36 truncate">
               {currentBudget?.name ?? "Select budget"}
             </span>
             <ChevronDown className={cn("w-3.5 h-3.5 text-muted-foreground transition-transform", budgetMenuOpen && "rotate-180")} />
@@ -185,8 +197,8 @@ export default function AppHeader({ user, activeBudgetId }: AppHeaderProps) {
           aria-label="User menu"
           aria-expanded={menuOpen}
         >
-          <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-            <span className="text-xs font-semibold text-primary">
+          <div className="w-7 h-7 rounded-full bg-primary/15 flex items-center justify-center flex-shrink-0">
+            <span className="text-xs font-bold text-primary">
               {user.name.charAt(0).toUpperCase()}
             </span>
           </div>

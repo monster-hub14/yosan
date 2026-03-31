@@ -73,6 +73,22 @@
   --elevate-1: rgba(0, 0, 0, 0.03);
   --elevate-2: rgba(0, 0, 0, 0.08);
 
+  /* ── Status tokens: Healthy / Caution / Risk ── */
+  --status-healthy-hsl: 154 58% 39%;
+  --status-healthy-bg: rgba(22, 163, 74, 0.10);
+  --status-healthy-border: rgba(22, 163, 74, 0.22);
+  --status-healthy-glow: rgba(22, 163, 74, 0.18);
+
+  --status-caution-hsl: 37 90% 48%;
+  --status-caution-bg: rgba(202, 138, 4, 0.10);
+  --status-caution-border: rgba(202, 138, 4, 0.22);
+  --status-caution-glow: rgba(202, 138, 4, 0.18);
+
+  --status-risk-hsl: 347 77% 52%;
+  --status-risk-bg: rgba(190, 18, 60, 0.10);
+  --status-risk-border: rgba(190, 18, 60, 0.22);
+  --status-risk-glow: rgba(190, 18, 60, 0.18);
+
   --background: 220 20% 97%;
   --foreground: 220 30% 8%;
 
@@ -148,6 +164,22 @@
   --opaque-button-border-intensity: 8;
   --elevate-1: rgba(255, 255, 255, 0.04);
   --elevate-2: rgba(255, 255, 255, 0.08);
+
+  /* ── Status tokens: Healthy / Caution / Risk (dark mode) ── */
+  --status-healthy-hsl: 154 55% 50%;
+  --status-healthy-bg: rgba(52, 211, 153, 0.10);
+  --status-healthy-border: rgba(52, 211, 153, 0.20);
+  --status-healthy-glow: rgba(52, 211, 153, 0.14);
+
+  --status-caution-hsl: 37 90% 58%;
+  --status-caution-bg: rgba(251, 191, 36, 0.10);
+  --status-caution-border: rgba(251, 191, 36, 0.20);
+  --status-caution-glow: rgba(251, 191, 36, 0.14);
+
+  --status-risk-hsl: 347 85% 65%;
+  --status-risk-bg: rgba(251, 113, 133, 0.10);
+  --status-risk-border: rgba(251, 113, 133, 0.20);
+  --status-risk-glow: rgba(251, 113, 133, 0.14);
 
   --background: 224 28% 9%;
   --foreground: 220 15% 93%;
