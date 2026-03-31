@@ -47,6 +47,10 @@ function formatDate(dateStr: string) {
 function formatPeriodLabel(start: string, end: string): string {
   const s = new Date(start);
   const e = new Date(end);
+  const sameDay = s.toDateString() === e.toDateString();
+  if (sameDay) {
+    return s.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  }
   if (s.getMonth() === e.getMonth() && s.getFullYear() === e.getFullYear()) {
     return `${s.toLocaleDateString("en-US", { month: "short" })} ${s.getDate()}–${e.getDate()}, ${e.getFullYear()}`;
   }
