@@ -10,12 +10,14 @@ export const metadata: Metadata = {
 const userLinks = [
   { href: "/settings/account", label: "Account" },
   { href: "/settings/notifications", label: "Notifications" },
+  { href: "/settings/gmail", label: "Gmail Import" },
 ];
 
 const adminLinks = [
   { href: "/settings/users", label: "Users" },
   { href: "/settings/ai", label: "AI Provider" },
   { href: "/settings/email", label: "Email / SMTP" },
+  { href: "/settings/gmail-oauth", label: "Gmail OAuth" },
 ];
 
 const budgetLinks = [

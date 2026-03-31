@@ -178,3 +178,22 @@ docker-compose up -d
 - Forecast page (`/forecast`): Recharts AreaChart balance projection, stat cards, danger zone banner, upcoming events (paydays + bills), AI cash flow summary, period selector (14/30/42/60 days)
 - Notifications page (`/settings/notifications`): Grid toggle matrix (In-App vs Email per event), persists to DB, cron setup docs
 - CRON_SECRET env var secures the cron alerts endpoint for self-hosted scheduling
+
+### Task #30 — Gmail Receipt Import ✅ COMPLETE
+- Prisma models: `GmailOAuthConfig` (singleton, admin credentials), `GmailConnection` (per-user tokens), `GmailLabelConfig` (per-user label selection + sync settings); `gmailMessageId` on `PendingImport` for dedup
+- `src/lib/gmail.ts`: `getValidAccessToken` (auto-refresh with revoked detection), `fetchGmailLabels`, `fetchMessageIds` (multi-label, dedup, cutoff date), `fetchMessageDetail` (full MIME parse), `downloadAttachment`, `buildAuthUrl`, `exchangeCodeForTokens`, `GmailRevokedError`
+- All tokens stored AES-256 encrypted via `src/lib/encryption.ts`
+- API routes:
+  - `GET/PUT /api/settings/gmail-oauth` — admin: read/save Google OAuth Client ID + Secret
+  - `GET /api/settings/gmail/status` — user: connection status, labels, sync timestamps
+  - `GET /api/settings/gmail/auth` — initiates OAuth redirect to Google (CSRF state cookie)
+  - `GET /api/settings/gmail/callback` — exchanges code for tokens, stores encrypted
+  - `DELETE /api/settings/gmail/disconnect` — removes GmailConnection + GmailLabelConfig
+  - `GET /api/settings/gmail/labels` — fetches Gmail labels from API
+  - `POST /api/settings/gmail/labels` — saves selected labels + sync settings
+  - `POST /api/budgets/[id]/gmail/sync` — syncs emails, dedupes by gmailMessageId, downloads PDF/image attachments, stores all as NEEDS_REVIEW PendingImports
+- Settings pages:
+  - `/settings/gmail-oauth` — admin-only, Instance nav; Client ID/Secret form with setup instructions
+  - `/settings/gmail` — Account nav; connect/disconnect/label picker/sync now with budget selector
+- Receipt landing (`/receipts`): added "Import from Gmail" button alongside Upload
+- Inbox (`/receipts/inbox`): Gmail badge (blue), sender line, subject as title for Gmail imports

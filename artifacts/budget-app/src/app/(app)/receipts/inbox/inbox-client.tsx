@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Inbox, Loader2, Clock, CheckCircle2, XCircle, AlertCircle, Upload,
-  RefreshCw, Receipt, ChevronRight, Filter, Trash2, Save, Eye, Tag,
+  RefreshCw, Receipt, ChevronRight, Filter, Trash2, Save, Eye, Tag, Mail,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -357,7 +357,9 @@ export function InboxClient() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <p className="font-medium truncate">
-                          {parsed.merchant || imp.receipt?.originalFilename || "Unknown receipt"}
+                          {parsed.source === "gmail"
+                            ? (parsed.subject || parsed.merchant || "Gmail email")
+                            : (parsed.merchant || imp.receipt?.originalFilename || "Unknown receipt")}
                         </p>
                         {parsed.total != null && (
                           <span className="text-sm font-semibold text-primary shrink-0">
@@ -365,7 +367,23 @@ export function InboxClient() {
                           </span>
                         )}
                       </div>
+                      {/* Gmail sender line */}
+                      {parsed.source === "gmail" && parsed.sender && (
+                        <p className="text-xs text-muted-foreground truncate mt-0.5">
+                          <Mail className="w-3 h-3 inline mr-1" />
+                          {parsed.sender}
+                        </p>
+                      )}
                       <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                        {parsed.source === "gmail" && (
+                          <Badge
+                            variant="outline"
+                            className="text-xs gap-1 border-blue-500/40 text-blue-600 dark:text-blue-400"
+                          >
+                            <Mail className="w-3 h-3" />
+                            Gmail
+                          </Badge>
+                        )}
                         <Badge
                           variant="secondary"
                           className={`text-xs gap-1 ${meta.color}`}

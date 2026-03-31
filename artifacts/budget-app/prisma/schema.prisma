@@ -101,6 +101,8 @@ model User {
   aiControl             UserAIControl?
   notificationConfig    UserNotificationConfig?
   addedExpenses         Expense[]       @relation("AddedExpenses")
+  gmailConnection       GmailConnection?
+  gmailLabelConfig      GmailLabelConfig?
 }
 
 model Budget {
@@ -516,6 +518,7 @@ model PendingImport {
   status          ImportStatus @default(PENDING)
   data            String       @default("{}")
   error           String?
+  gmailMessageId  String?
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
 
@@ -524,6 +527,8 @@ model PendingImport {
   receipt     Receipt? @relation(fields: [receiptId], references: [id])
   confirmedBy User?    @relation("ConfirmedImports", fields: [confirmedById], references: [id])
   expense     Expense? @relation(fields: [expenseId], references: [id])
+
+  @@index([gmailMessageId])
 }
 
 model SetupProgress {
@@ -537,4 +542,37 @@ model SetupProgress {
   emailConfigured     Boolean   @default(false)
   completedAt         DateTime?
   updatedAt           DateTime  @updatedAt
+}
+
+model GmailOAuthConfig {
+  id           String   @id @default("singleton")
+  clientId     String?
+  clientSecret String?
+  updatedAt    DateTime @updatedAt
+}
+
+model GmailConnection {
+  id           String    @id @default(cuid())
+  userId       String    @unique
+  accessToken  String
+  refreshToken String
+  tokenEmail   String
+  expiresAt    DateTime
+  connectedAt  DateTime  @default(now())
+  isRevoked    Boolean   @default(false)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model GmailLabelConfig {
+  id                 String    @id @default(cuid())
+  userId             String    @unique
+  selectedLabelIds   String    @default("[]")
+  selectedLabelNames String    @default("{}")
+  lastSyncAt         DateTime?
+  lastSyncError      String?
+  syncCutoffDate     DateTime?
+  maxPerSync         Int       @default(50)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

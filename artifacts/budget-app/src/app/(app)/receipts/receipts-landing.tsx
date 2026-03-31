@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import {
-  Receipt, Upload, Inbox, Clock, CheckCircle2, ArrowRight,
+  Receipt, Upload, Inbox, Clock, CheckCircle2, ArrowRight, Mail,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -35,20 +35,31 @@ export function ReceiptsLanding() {
         </p>
       </motion.div>
 
-      {/* Main action */}
+      {/* Main actions */}
       <motion.div
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
+        className="grid grid-cols-1 sm:grid-cols-2 gap-3"
       >
         <Button
           size="lg"
-          className="w-full h-14 text-base gap-3"
+          className="h-14 text-base gap-3"
           onClick={() => setUploadOpen(true)}
         >
           <Upload className="w-5 h-5" />
           Upload a receipt
         </Button>
+        <Link href="/settings/gmail" className="block">
+          <Button
+            size="lg"
+            variant="outline"
+            className="h-14 text-base gap-3 w-full"
+          >
+            <Mail className="w-5 h-5" />
+            Import from Gmail
+          </Button>
+        </Link>
       </motion.div>
 
       {/* Quick links */}
