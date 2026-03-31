@@ -216,7 +216,7 @@ function baseTemplate(title: string, body: string): string {
         <table width="560" cellpadding="0" cellspacing="0" role="presentation" style="max-width:560px">
           <tr>
             <td align="center" style="padding:0 0 20px 0">
-              <img src="${LOGO_URL}" alt="Yosan AI" height="48" style="display:block;margin:0 auto 10px auto;border:0;height:48px;width:auto" />
+              <img src="${LOGO_URL}" alt="Yosan AI" height="96" style="display:block;margin:0 auto 10px auto;border:0;height:96px;width:auto" />
               <div style="color:#111827;font-size:22px;font-weight:700;letter-spacing:-0.01em">Yosan AI</div>
             </td>
           </tr>
