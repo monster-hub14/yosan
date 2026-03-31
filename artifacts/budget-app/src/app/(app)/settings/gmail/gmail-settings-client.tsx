@@ -87,6 +87,47 @@ export function GmailSettingsClient({ budgets, defaultBudgetId }: Props) {
     if (error) toast.error(`Gmail connection failed: ${error.replace(/_/g, " ")}`);
   }, [searchParams]);
 
+  function openOAuthPopup() {
+    const width = 520;
+    const height = 680;
+    const left = Math.round(window.screenX + (window.outerWidth - width) / 2);
+    const top = Math.round(window.screenY + (window.outerHeight - height) / 2);
+    const popup = window.open(
+      "/api/settings/gmail/auth",
+      "gmail-oauth",
+      `width=${width},height=${height},left=${left},top=${top},scrollbars=yes,resizable=yes`
+    );
+
+    if (!popup) {
+      // Popup blocked — fall back to same-tab navigation
+      window.location.href = "/api/settings/gmail/auth";
+      return;
+    }
+
+    function onMessage(event: MessageEvent) {
+      if (event.origin !== window.location.origin) return;
+      if (event.data?.type !== "gmail_oauth_complete") return;
+      window.removeEventListener("message", onMessage);
+      clearInterval(pollClose);
+      if (event.data.status === "connected") {
+        toast.success("Gmail connected successfully!");
+        fetchStatus();
+      } else {
+        toast.error(`Gmail connection failed: ${String(event.data.error ?? "unknown").replace(/_/g, " ")}`);
+      }
+    }
+
+    window.addEventListener("message", onMessage);
+
+    // Clean up listener if the popup is closed without completing
+    const pollClose = setInterval(() => {
+      if (popup.closed) {
+        clearInterval(pollClose);
+        window.removeEventListener("message", onMessage);
+      }
+    }, 500);
+  }
+
   async function loadLabels() {
     setLoadingLabels(true);
     try {
@@ -287,7 +328,7 @@ export function GmailSettingsClient({ budgets, defaultBudgetId }: Props) {
           ) : (
             <Button
               disabled={!status.oauthConfigured}
-              onClick={() => (window.location.href = "/api/settings/gmail/auth")}
+              onClick={openOAuthPopup}
             >
               <Mail className="w-4 h-4 mr-2" />
               {isRevoked ? "Reconnect Gmail" : "Connect Gmail"}

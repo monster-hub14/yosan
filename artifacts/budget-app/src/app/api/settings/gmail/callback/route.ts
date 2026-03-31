@@ -6,6 +6,7 @@ import { resolveAppBaseUrl } from "@/lib/gmail-base-url";
 import { jwtVerify } from "jose";
 
 const FLOW_COOKIE = "gmail_oauth_flow";
+const RELAY_PATH = "/settings/gmail/oauth-complete";
 
 function getSecret(): Uint8Array {
   const secret = process.env.JWT_SECRET ?? "";
@@ -27,6 +28,14 @@ async function verifyFlowToken(token: string): Promise<GmailFlowPayload | null> 
   }
 }
 
+/** Redirect to the OAuth relay page (works in both popup and same-tab contexts). */
+function relayRedirect(request: NextRequest, params: Record<string, string>) {
+  const qs = new URLSearchParams(params).toString();
+  // Use request.url as base — at callback time this IS the public URL
+  // because Google redirected the browser to our public callback URI.
+  return NextResponse.redirect(new URL(`${RELAY_PATH}?${qs}`, request.url));
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const code = searchParams.get("code");
@@ -34,53 +43,39 @@ export async function GET(request: NextRequest) {
   const error = searchParams.get("error");
 
   if (error) {
-    return NextResponse.redirect(
-      new URL(`/settings/gmail?error=${encodeURIComponent(error)}`, request.url)
-    );
+    return relayRedirect(request, { error });
   }
 
   // Validate the signed Lax flow cookie (sent even after cross-site redirect from Google)
   const flowCookie = request.cookies.get(FLOW_COOKIE)?.value;
   if (!flowCookie) {
-    return NextResponse.redirect(
-      new URL("/settings/gmail?error=missing_flow_cookie", request.url)
-    );
+    return relayRedirect(request, { error: "missing_flow_cookie" });
   }
 
   const flow = await verifyFlowToken(flowCookie);
   if (!flow) {
-    return NextResponse.redirect(
-      new URL("/settings/gmail?error=invalid_flow_token", request.url)
-    );
+    return relayRedirect(request, { error: "invalid_flow_token" });
   }
 
   // CSRF: state in query must match state embedded in the signed flow token
   if (!state || flow.state !== state) {
-    return NextResponse.redirect(
-      new URL("/settings/gmail?error=invalid_state", request.url)
-    );
+    return relayRedirect(request, { error: "invalid_state" });
   }
 
   if (!code) {
-    return NextResponse.redirect(
-      new URL("/settings/gmail?error=no_code", request.url)
-    );
+    return relayRedirect(request, { error: "no_code" });
   }
 
   const oauthCfg = await db.gmailOAuthConfig.findUnique({ where: { id: "singleton" } });
   if (!oauthCfg?.clientId || !oauthCfg?.clientSecret) {
-    return NextResponse.redirect(
-      new URL("/settings/gmail?error=oauth_not_configured", request.url)
-    );
+    return relayRedirect(request, { error: "oauth_not_configured" });
   }
 
   const clientId = decrypt(oauthCfg.clientId);
   const clientSecret = decrypt(oauthCfg.clientSecret);
   if (!clientId || !clientSecret) {
     console.error("[gmail-callback] credential decryption failed");
-    return NextResponse.redirect(
-      new URL("/settings/gmail?error=oauth_decrypt_failed", request.url)
-    );
+    return relayRedirect(request, { error: "oauth_decrypt_failed" });
   }
 
   // The redirect_uri sent to Google during token exchange MUST exactly match
@@ -88,12 +83,7 @@ export async function GET(request: NextRequest) {
   const baseUrlResult = resolveAppBaseUrl(request);
   if (!baseUrlResult.ok) {
     console.error(`[gmail-callback] base URL error: ${baseUrlResult.error}`);
-    return NextResponse.redirect(
-      new URL(
-        `/settings/gmail?error=${encodeURIComponent("invalid_base_url: " + baseUrlResult.error)}`,
-        request.url
-      )
-    );
+    return relayRedirect(request, { error: "invalid_base_url" });
   }
   const redirectUri = `${baseUrlResult.baseUrl}/api/settings/gmail/callback`;
 
@@ -102,9 +92,7 @@ export async function GET(request: NextRequest) {
     tokens = await exchangeCodeForTokens(clientId, clientSecret, code, redirectUri);
   } catch (err) {
     const msg = err instanceof Error ? err.message : "token_exchange_failed";
-    return NextResponse.redirect(
-      new URL(`/settings/gmail?error=${encodeURIComponent(msg)}`, request.url)
-    );
+    return relayRedirect(request, { error: msg });
   }
 
   // Bind tokens to the userId from the signed flow token (tamper-evident, server-signed)
@@ -128,9 +116,7 @@ export async function GET(request: NextRequest) {
     },
   });
 
-  const response = NextResponse.redirect(
-    new URL("/settings/gmail?connected=1", request.url)
-  );
+  const response = relayRedirect(request, { status: "connected" });
   response.cookies.delete(FLOW_COOKIE);
   return response;
 }
