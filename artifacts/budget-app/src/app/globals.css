@@ -306,4 +306,9 @@
   .border.active-elevate-2::after {
     inset: -1px;
   }
+
+  /* iOS safe-area bottom padding — used by MobileNav to clear the home indicator */
+  .safe-area-pb {
+    padding-bottom: max(0.625rem, env(safe-area-inset-bottom, 0px));
+  }
 }
