@@ -151,23 +151,19 @@ export async function GET(request: NextRequest, { params }: Params) {
     const src = budget.incomeSources[0];
     const pp = computePayPeriod(src.frequency, src.nextPayDate, src.amount, src.customDays);
 
-    // pp.start = retreat(nextPayDate) = the PREVIOUS pay date (e.g. March 19).
-    // Shift the period start forward by 1 day so "This Pay Period" begins the day
-    // AFTER the previous paycheck. This prevents the previous pay date from being
-    // counted as income for the current period in getPayDatesInRange.
-    //   This Pay Period  = [March 20, April 2]  → only April 2 paycheck  = $2,300
-    //   (old behaviour)  = [March 19, April 2]  → March 19 + April 2     = $4,600 ✗
+    // Start the period one day after the previous pay date so that
+    // getPayDatesInRange counts only the single upcoming paycheck, not
+    // both the prior and upcoming pay dates within the same window.
     const ppStart = new Date(pp.start);
     ppStart.setDate(ppStart.getDate() + 1);
     payPeriod = { start: ppStart.toISOString(), end: pp.end.toISOString() };
 
-    // Last period: end = pp.start (the previous pay date itself, e.g. March 19)
-    //              start = day after the pay date before pp.start (e.g. March 6)
-    //   Last Pay Period = [March 6, March 19] → only March 19 paycheck = $2,300
-    const lastPayEnd = pp.start; // March 19 — the most recent paycheck (previous period)
+    // Last period ends on the previous pay date (pp.start) and starts
+    // one day after the pay date before that.
+    const lastPayEnd = pp.start;
     const lastPayStartRaw = getPreviousPeriodStart(pp.start, src.frequency, src.customDays);
     const lastPayStart = new Date(lastPayStartRaw);
-    lastPayStart.setDate(lastPayStart.getDate() + 1); // day after pay date before pp.start
+    lastPayStart.setDate(lastPayStart.getDate() + 1);
     lastPayPeriod = { start: lastPayStart.toISOString(), end: lastPayEnd.toISOString() };
   }
 
