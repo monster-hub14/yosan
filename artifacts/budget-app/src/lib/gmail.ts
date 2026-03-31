@@ -8,12 +8,44 @@ import { db } from "@/lib/db";
 import { encrypt, decrypt } from "@/lib/encryption";
 
 // ---------------------------------------------------------------------------
-// Typed error for revoked / invalid refresh tokens
+// Typed errors
 // ---------------------------------------------------------------------------
+
 export class GmailRevokedError extends Error {
   constructor(userId: string) {
     super(`Gmail token revoked for user ${userId}. Reconnect required.`);
     this.name = "GmailRevokedError";
+  }
+}
+
+/** Thrown when decrypt() returns null for a stored token. */
+export class GmailDecryptError extends Error {
+  constructor(public readonly which: "access" | "refresh" | "oauth_config") {
+    super(`Failed to decrypt Gmail ${which} token. Reconnect required.`);
+    this.name = "GmailDecryptError";
+  }
+}
+
+/** Thrown when token refresh fails for a non-revocation reason. */
+export class GmailRefreshError extends Error {
+  constructor(
+    public readonly detail: string,
+    public readonly googleError?: string
+  ) {
+    super(`Gmail token refresh failed: ${detail}`);
+    this.name = "GmailRefreshError";
+  }
+}
+
+/** Thrown when the Gmail API returns a non-2xx response. */
+export class GmailApiError extends Error {
+  constructor(
+    public readonly status: number,
+    public readonly googleMessage: string,
+    public readonly googleBody?: unknown
+  ) {
+    super(`Gmail API error ${status}: ${googleMessage}`);
+    this.name = "GmailApiError";
   }
 }
 
@@ -47,22 +79,43 @@ async function getOAuthConfig() {
 
 /**
  * Returns a valid access token for the given user.
- * Refreshes if expired. Throws GmailRevokedError if the refresh token is invalid.
+ * Refreshes if expired.
+ * Throws GmailRevokedError if the refresh token is revoked.
+ * Throws GmailDecryptError if a stored token cannot be decrypted.
+ * Throws GmailRefreshError if refresh fails for a non-revocation reason.
  */
 export async function getValidAccessToken(userId: string): Promise<string> {
+  const LOG = "[gmail-token]";
+
   const conn = await db.gmailConnection.findUnique({ where: { userId } });
-  if (!conn) throw new GmailRevokedError(userId);
-  if (conn.isRevoked) throw new GmailRevokedError(userId);
+  if (!conn) {
+    console.log(`${LOG} userId=${userId} connection=not_found`);
+    throw new GmailRevokedError(userId);
+  }
+  if (conn.isRevoked) {
+    console.log(`${LOG} userId=${userId} connection=found isRevoked=true`);
+    throw new GmailRevokedError(userId);
+  }
+  console.log(`${LOG} userId=${userId} connection=found isRevoked=false`);
 
   const decryptedAccess = decrypt(conn.accessToken);
   const decryptedRefresh = decrypt(conn.refreshToken);
-  if (!decryptedAccess || !decryptedRefresh) throw new GmailRevokedError(userId);
+  console.log(
+    `${LOG} access_token_present=${decryptedAccess !== null ? "yes" : "no"} ` +
+    `refresh_token_present=${decryptedRefresh !== null ? "yes" : "no"}`
+  );
+
+  if (decryptedAccess === null) throw new GmailDecryptError("access");
+  if (decryptedRefresh === null) throw new GmailDecryptError("refresh");
 
   const fiveMinutesFromNow = new Date(Date.now() + 5 * 60 * 1000);
   if (conn.expiresAt > fiveMinutesFromNow) {
+    console.log(`${LOG} token_expiry=valid expiresAt=${conn.expiresAt.toISOString()}`);
     return decryptedAccess;
   }
+  console.log(`${LOG} token_expiry=needs_refresh expiresAt=${conn.expiresAt.toISOString()}`);
 
+  console.log(`${LOG} refresh_attempt=start`);
   const { clientId, clientSecret } = await getOAuthConfig();
   const res = await fetch(TOKEN_REFRESH_URL, {
     method: "POST",
@@ -75,9 +128,12 @@ export async function getValidAccessToken(userId: string): Promise<string> {
     }),
   });
 
+  console.log(`${LOG} refresh_http_status=${res.status}`);
   const data = (await res.json()) as TokenResponse;
 
   if (data.error || !data.access_token) {
+    console.error(`${LOG} refresh_error="${data.error}" description="${data.error_description ?? ""}"`);
+
     const isRevoked =
       data.error === "invalid_grant" ||
       data.error === "token_revoked" ||
@@ -85,9 +141,13 @@ export async function getValidAccessToken(userId: string): Promise<string> {
 
     if (isRevoked) {
       await db.gmailConnection.update({ where: { userId }, data: { isRevoked: true } });
+      console.log(`${LOG} marked_revoked=true`);
       throw new GmailRevokedError(userId);
     }
-    throw new Error(`Token refresh failed: ${data.error_description ?? data.error ?? "unknown"}`);
+    throw new GmailRefreshError(
+      data.error_description ?? data.error ?? "unknown",
+      data.error
+    );
   }
 
   const newExpiresAt = new Date(Date.now() + (data.expires_in - 30) * 1000);
@@ -98,6 +158,7 @@ export async function getValidAccessToken(userId: string): Promise<string> {
       expiresAt: newExpiresAt,
     },
   });
+  console.log(`${LOG} refresh_success=true newExpiresAt=${newExpiresAt.toISOString()}`);
 
   return data.access_token;
 }
@@ -115,15 +176,37 @@ interface GmailLabel {
 export async function fetchGmailLabels(
   userId: string
 ): Promise<{ id: string; name: string }[]> {
+  const LOG = "[gmail-labels]";
+
   const token = await getValidAccessToken(userId);
-  const res = await fetch(`${GMAIL_API_BASE}/labels`, {
+  console.log(`${LOG} token_acquired=yes`);
+
+  const url = `${GMAIL_API_BASE}/labels`;
+  console.log(`${LOG} api_request=start url=${url}`);
+
+  const res = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` },
   });
+  console.log(`${LOG} api_response_status=${res.status}`);
+
   if (!res.ok) {
-    throw new Error(`Gmail labels fetch failed: ${res.status} ${res.statusText}`);
+    let googleBody: unknown;
+    let googleMessage = res.statusText;
+    try {
+      googleBody = await res.json();
+      const body = googleBody as { error?: { message?: string } };
+      if (body?.error?.message) googleMessage = body.error.message;
+    } catch {
+      // Non-JSON error body — keep statusText
+    }
+    console.error(`${LOG} api_error status=${res.status} message="${googleMessage}"`, googleBody ?? "");
+    throw new GmailApiError(res.status, googleMessage, googleBody);
   }
+
   const data = (await res.json()) as { labels?: GmailLabel[] };
   const labels = data.labels ?? [];
+  console.log(`${LOG} labels_received=${labels.length}`);
+
   return labels
     .filter((l) => l.type !== "SYSTEM" || isUsefulSystemLabel(l.id))
     .map((l) => ({ id: l.id, name: l.name }))
