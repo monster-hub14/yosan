@@ -1,18 +1,28 @@
 import { Metadata } from "next";
-import { BarChart3 } from "lucide-react";
+import { redirect } from "next/navigation";
+import { getSession } from "@/lib/auth/session";
+import { getActiveBudgetId } from "@/lib/active-budget";
+import { ReportsClient } from "./reports-client";
 
 export const metadata: Metadata = { title: "Reports | Yosan AI" };
 
-export default function ReportsPage() {
+export default async function ReportsPage() {
+  const session = await getSession();
+  if (!session) redirect("/login");
+
+  const budgetId = await getActiveBudgetId(session.userId);
+  if (!budgetId) redirect("/dashboard");
+
   return (
-    <div className="flex flex-col items-center justify-center h-full gap-4 text-center py-16">
-      <BarChart3 className="w-10 h-10 text-muted-foreground/50" />
+    <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-semibold">Reports & Analytics</h2>
+        <h1 className="text-2xl font-bold tracking-tight">Reports</h1>
         <p className="text-muted-foreground text-sm mt-1">
-          Financial reports and AI-powered insights are coming in the next update.
+          Custom date-range analytics, spending breakdowns, and CSV export.
         </p>
       </div>
+
+      <ReportsClient budgetId={budgetId} />
     </div>
   );
 }
