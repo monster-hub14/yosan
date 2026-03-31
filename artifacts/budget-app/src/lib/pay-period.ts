@@ -156,12 +156,14 @@ function computeNextPayDate(
   const today = startOfDay(new Date());
   let next = startOfDay(anchor);
 
-  if (next >= today) return next;
+  if (next > today) return next;
 
-  // Advance until we reach or pass today
+  // Advance until we reach a date strictly after today.
+  // Using > (not >=) so that if a scheduled pay date falls on today,
+  // we treat today as the start of the new period (not the end of the old one).
   for (let i = 0; i < 1000; i++) {
     const candidate = advanceByFrequency(next, frequency, customDays);
-    if (candidate >= today) return candidate;
+    if (candidate > today) return candidate;
     next = candidate;
   }
 
