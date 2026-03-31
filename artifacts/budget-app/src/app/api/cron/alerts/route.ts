@@ -194,8 +194,12 @@ export async function POST(request: NextRequest) {
           sentCount.weekly++;
         }
 
-        // Extra recipients — always send if analysis was run; no frequency gating
-        if (analysis && extraEmails.length > 0) {
+        // Extra recipients — unconditional; no frequency/day gating, no pref check.
+        // Lazy-load analysis here too if the per-user loop didn't trigger it.
+        if (extraEmails.length > 0) {
+          if (!analysis) {
+            analysis = await generateInsights(budget.id, budget.owner.id);
+          }
           const topCats = analysis.insights
             .filter((i) => i.actual > 0)
             .sort((a, b) => b.actual - a.actual)
