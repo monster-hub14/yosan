@@ -92,10 +92,27 @@ export function GmailSettingsClient({ budgets, defaultBudgetId }: Props) {
     const height = 680;
     const left = Math.round(window.screenX + (window.outerWidth - width) / 2);
     const top = Math.round(window.screenY + (window.outerHeight - height) / 2);
-    const popup = window.open(
-      "/api/settings/gmail/auth",
+
+    // When the app runs inside the Replit workspace iframe, Chrome treats
+    // window.open() from an iframe as a new tab, not a popup. Use window.top
+    // (which is same-origin in Replit dev) so Chrome applies top-level popup
+    // rules. Fall back to window if window.top is inaccessible (cross-origin).
+    let win: Window = window;
+    try {
+      if (window.top) win = window.top;
+    } catch {
+      // Cross-origin top window — stay in iframe context
+    }
+
+    // Build an absolute URL so it resolves correctly regardless of which
+    // window context calls open() (win might be the workspace container page,
+    // not the budget app).
+    const authUrl = new URL("/api/settings/gmail/auth", window.location.href).href;
+
+    const popup = win.open(
+      authUrl,
       "gmail-oauth",
-      `width=${width},height=${height},left=${left},top=${top},scrollbars=yes,resizable=yes`
+      `popup=yes,width=${width},height=${height},left=${left},top=${top},scrollbars=yes,resizable=yes`
     );
 
     if (!popup) {
@@ -107,7 +124,7 @@ export function GmailSettingsClient({ budgets, defaultBudgetId }: Props) {
     function onMessage(event: MessageEvent) {
       if (event.origin !== window.location.origin) return;
       if (event.data?.type !== "gmail_oauth_complete") return;
-      window.removeEventListener("message", onMessage);
+      win.removeEventListener("message", onMessage);
       clearInterval(pollClose);
       if (event.data.status === "connected") {
         toast.success("Gmail connected successfully!");
@@ -117,13 +134,15 @@ export function GmailSettingsClient({ budgets, defaultBudgetId }: Props) {
       }
     }
 
-    window.addEventListener("message", onMessage);
+    // Register listener on the same window that will receive the postMessage
+    // (the relay page posts to window.opener, which is `win` here).
+    win.addEventListener("message", onMessage);
 
     // Clean up listener if the popup is closed without completing
     const pollClose = setInterval(() => {
       if (popup.closed) {
         clearInterval(pollClose);
-        window.removeEventListener("message", onMessage);
+        win.removeEventListener("message", onMessage);
       }
     }, 500);
   }

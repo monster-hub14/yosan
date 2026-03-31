@@ -31,9 +31,15 @@ async function verifyFlowToken(token: string): Promise<GmailFlowPayload | null> 
 /** Redirect to the OAuth relay page (works in both popup and same-tab contexts). */
 function relayRedirect(request: NextRequest, params: Record<string, string>) {
   const qs = new URLSearchParams(params).toString();
-  // Use request.url as base — at callback time this IS the public URL
-  // because Google redirected the browser to our public callback URI.
-  return NextResponse.redirect(new URL(`${RELAY_PATH}?${qs}`, request.url));
+  // Next.js sees request.url as the internal loopback URL (http://localhost:PORT/...)
+  // even when the browser navigated to the public domain. Use resolveAppBaseUrl()
+  // which reads x-forwarded-proto + x-forwarded-host (set by the Replit proxy) to
+  // build the correct public base URL.
+  const baseUrlResult = resolveAppBaseUrl(request);
+  const base = baseUrlResult.ok
+    ? baseUrlResult.baseUrl
+    : `${new URL(request.url).protocol}//${new URL(request.url).host}`;
+  return NextResponse.redirect(new URL(`${RELAY_PATH}?${qs}`, base));
 }
 
 export async function GET(request: NextRequest) {
