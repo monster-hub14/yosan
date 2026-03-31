@@ -1,0 +1,149 @@
+Build out the Reports tab as a fully functional custom date-range reporting, visualization, and export feature.
+
+Core requirements:
+
+* Allow the user to select a custom date range
+* Include quick presets:
+
+  * this pay period
+  * last pay period
+  * this month
+  * last month
+  * last 7 days
+* Show:
+
+  * total income for the selected period
+  * total expenses for the selected period
+  * net amount (income minus expenses)
+  * total saved for the selected period
+
+Visual reporting:
+
+1. Summary chart:
+
+* Add a chart showing:
+
+  * income vs expenses vs savings
+* Use a clean bar or grouped bar chart
+
+2. Spending breakdown charts:
+
+* Add BOTH:
+
+  * a pie chart
+  * a bar chart
+* These must show spending breakdown by **subcategory**, not just top-level categories
+
+Subcategory behavior:
+
+* When a user selects or views a category like “Recreation”, the charts must break it down into:
+
+  * Fishing
+  * Theme Parks
+  * Gaming
+  * Hobbies
+  * etc.
+* Do not collapse everything into vague labels like “Recreation” or “Meals”
+
+3. Bar chart requirements:
+
+* Each bar represents a subcategory
+* Bars must be sorted by highest spend first
+* Respect the selected date range
+* Use clean spacing between bars
+
+4. Pie chart requirements:
+
+* Show proportional spending by subcategory
+* Clearly distinguish slices with readable colors
+
+Labeling and readability (critical):
+
+* Do NOT overcrowd charts with labels
+* Implement:
+
+  * grouping small categories into “Other”
+  * truncating long labels with ellipsis (e.g. “Restaurant Delivery…”)
+  * optional slight rotation of labels if needed
+* Tooltips must show:
+
+  * full category/subcategory name
+  * exact amount
+  * percentage of total
+* Charts must remain readable on both desktop and mobile
+
+Trend chart:
+
+* Add a time-based chart (line or bar) showing spending over time
+* Adapt granularity based on range:
+
+  * short range → daily
+  * longer range → weekly/monthly
+
+Category detail:
+
+* Use the app’s purpose-aware category system and subcategories
+* Do not collapse all food spending into vague labels like “Meals”
+* Specifically distinguish subcategories such as:
+
+  * Takeout / Delivery
+  * Restaurant Food
+  * Fast Food
+  * Coffee Shops
+  * Groceries
+* Recognize merchants like DoorDash, Uber Eats, and Grubhub as delivery/takeout
+
+Insights:
+
+* Highlight categories that are consuming too much of the user’s income
+* Show plain-language insights such as:
+
+  * which category is highest
+  * which category may be too high relative to income
+  * where savings are being reduced by discretionary spending
+* Example:
+
+  * “You spent $300 on Takeout / Delivery in this period, which is 10% of your income.”
+
+Detailed report table:
+Include a detailed, filterable table with export support.
+
+Columns:
+
+* Report Date
+* Expense Name
+* Merchant
+* Category
+* Subcategory
+* Amount Spent
+
+Filtering:
+
+* custom date range
+* preset ranges
+* category filter
+* subcategory filter
+
+Export:
+
+* Add CSV export for the filtered report
+* Export must match the current table view
+* Structure the code so Excel export (.xlsx) can be added later
+
+UX expectations:
+
+* The Reports tab must not look empty or like a placeholder
+* It should feel useful, visual, and actionable
+* Highlight overspending in a supportive, non-judgmental way
+
+Chart UX:
+
+* Keep visuals clean, modern, and readable
+* Avoid clutter at all costs
+* Prioritize clarity over showing every possible data point
+* Support hover interactions and smooth transitions
+
+Future-ready:
+
+* Structure charts so clicking a category can later filter the table
+* Keep visualization components modular and reusable
