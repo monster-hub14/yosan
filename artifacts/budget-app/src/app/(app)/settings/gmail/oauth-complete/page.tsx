@@ -47,7 +47,7 @@ function OAuthCompleteInner() {
           {canCloseManually ? (
             <>
               <p className="text-xs text-muted-foreground">
-                This window did not close automatically.
+                You can close this tab.
               </p>
               <Link
                 href="/settings/gmail"
@@ -68,7 +68,7 @@ function OAuthCompleteInner() {
           {canCloseManually ? (
             <>
               <p className="text-xs text-muted-foreground">
-                This window did not close automatically.
+                You can close this tab.
               </p>
               <Link
                 href="/settings/gmail"

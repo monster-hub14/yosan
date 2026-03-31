@@ -105,7 +105,7 @@ export function GmailSettingsClient({ budgets, defaultBudgetId }: Props) {
     if (!popup) {
       // Popup blocked by the browser — do NOT navigate the current tab.
       toast.error(
-        "Popups are blocked. Please allow popups for this page and try again."
+        "Popups blocked — please allow popups for this page and try again."
       );
       return;
     }
