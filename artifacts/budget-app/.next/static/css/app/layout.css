@@ -618,6 +618,9 @@
   .h-64 {
     height: calc(var(--spacing) * 64);
   }
+  .h-72 {
+    height: calc(var(--spacing) * 72);
+  }
   .h-\[--cell-size\] {
     height: --cell-size;
   }

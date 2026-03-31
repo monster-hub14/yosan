@@ -28,7 +28,7 @@ export default async function LoginPage() {
     <div className="space-y-6">
       <div className="flex flex-col items-center gap-3 text-center">
         <div className="flex items-center justify-center">
-          <img src="/logo.png" alt="Budget Logo" className="w-24 h-24" />
+          <img src="/logo.png" alt="Budget Logo" className="w-72 h-72" />
         </div>
         <div>
           <h1 className="text-2xl font-bold text-foreground">Budget</h1>
