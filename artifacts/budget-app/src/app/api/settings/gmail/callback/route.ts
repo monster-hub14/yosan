@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getSessionFromRequest } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { decrypt, encrypt } from "@/lib/encryption";
 import { exchangeCodeForTokens } from "@/lib/gmail";
@@ -20,10 +21,15 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const savedState = request.cookies.get("gmail_oauth_state")?.value;
-  const userId = request.cookies.get("gmail_oauth_user")?.value;
+  // Require an authenticated session — do not rely on user cookie
+  const session = await getSessionFromRequest(request);
+  if (!session) {
+    return NextResponse.redirect(new URL("/login", request.url));
+  }
 
-  if (!savedState || !state || savedState !== state || !userId) {
+  const savedState = request.cookies.get("gmail_oauth_state")?.value;
+
+  if (!savedState || !state || savedState !== state) {
     return NextResponse.redirect(
       new URL("/settings/gmail?error=invalid_state", request.url)
     );
@@ -56,10 +62,11 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  // Bind tokens to the authenticated session user — not a client-supplied cookie
   await db.gmailConnection.upsert({
-    where: { userId },
+    where: { userId: session.userId },
     create: {
-      userId,
+      userId: session.userId,
       accessToken: encrypt(tokens.accessToken),
       refreshToken: encrypt(tokens.refreshToken),
       tokenEmail: tokens.email,
@@ -80,6 +87,5 @@ export async function GET(request: NextRequest) {
     new URL("/settings/gmail?connected=1", request.url)
   );
   response.cookies.delete("gmail_oauth_state");
-  response.cookies.delete("gmail_oauth_user");
   return response;
 }

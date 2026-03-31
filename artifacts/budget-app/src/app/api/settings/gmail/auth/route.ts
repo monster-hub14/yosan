@@ -29,13 +29,9 @@ export async function GET(request: NextRequest) {
   const authUrl = buildAuthUrl(clientId, redirectUri, state);
 
   const response = NextResponse.redirect(authUrl);
+  // State cookie — used solely for CSRF check in callback.
+  // The callback binds tokens to the authenticated server session (not this cookie).
   response.cookies.set("gmail_oauth_state", state, {
-    httpOnly: true,
-    sameSite: "lax",
-    maxAge: 600,
-    path: "/",
-  });
-  response.cookies.set("gmail_oauth_user", session.userId, {
     httpOnly: true,
     sameSite: "lax",
     maxAge: 600,

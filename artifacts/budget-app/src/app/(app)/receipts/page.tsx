@@ -10,11 +10,16 @@ export default async function ReceiptsPage() {
   const session = await getSession();
   if (!session) redirect("/login");
 
-  const firstMembership = await db.budgetMembership.findFirst({
-    where: { userId: session.userId },
-    select: { budgetId: true },
+  const budget = await db.budget.findFirst({
+    where: {
+      OR: [
+        { ownerId: session.userId },
+        { memberships: { some: { userId: session.userId } } },
+      ],
+    },
+    select: { id: true },
     orderBy: { createdAt: "asc" },
   });
 
-  return <ReceiptsLanding defaultBudgetId={firstMembership?.budgetId} />;
+  return <ReceiptsLanding defaultBudgetId={budget?.id} />;
 }

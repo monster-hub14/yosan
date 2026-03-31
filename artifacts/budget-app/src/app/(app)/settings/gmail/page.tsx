@@ -14,7 +14,10 @@ export default async function GmailSettingsPage() {
   const budgets = await import("@/lib/db").then(({ db }) =>
     db.budget.findMany({
       where: {
-        memberships: { some: { userId: session.userId } },
+        OR: [
+          { ownerId: session.userId },
+          { memberships: { some: { userId: session.userId } } },
+        ],
       },
       select: { id: true, name: true },
       orderBy: { createdAt: "asc" },
