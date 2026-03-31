@@ -3,8 +3,6 @@
  * Server-only. NEVER import from client components.
  */
 
-import fs from "fs";
-import path from "path";
 import { db } from "@/lib/db";
 import { decrypt } from "@/lib/encryption";
 
@@ -192,40 +190,13 @@ export async function testEmailConfig(params: TestEmailParams): Promise<{ ok: bo
 // ---- Email templates ----
 
 /**
- * Load the Yosan AI logo as a base64 data URL for embedding in HTML emails.
- * Loaded lazily on the first template render, then cached for the module lifetime.
- * Lazy loading (rather than top-level module init) is intentional — Next.js evaluates
- * modules at build time where the public/ directory may not be accessible.
- * Falls back gracefully to no-logo if the file is missing or unreadable.
- */
-let _logoDataUrl: string | null | undefined = undefined; // undefined = not yet attempted
-function getLogoDataUrl(): string | null {
-  if (_logoDataUrl !== undefined) return _logoDataUrl;
-  try {
-    const logoPath = path.join(process.cwd(), "public", "logo.png");
-    const data = fs.readFileSync(logoPath);
-    _logoDataUrl = `data:image/png;base64,${data.toString("base64")}`;
-    if (process.env.NODE_ENV !== "production") {
-      console.log(`[email] Logo loaded from ${logoPath} (${data.length} bytes)`);
-    }
-  } catch (err) {
-    console.warn("[email] Could not load logo for email templates:", err instanceof Error ? err.message : String(err));
-    _logoDataUrl = null;
-  }
-  return _logoDataUrl;
-}
-
-/**
  * Branded base template for all Yosan AI emails.
- * Automatically embeds the Yosan logo from public/logo.png as a base64 data URL.
+ * Uses a pure HTML/CSS logo mark — no image files, no file-system reads.
+ * This keeps every email under 10 KB and avoids Gmail's 102 KB clip threshold.
  * @param title  Card header title
  * @param body   HTML body content
  */
 function baseTemplate(title: string, body: string): string {
-  const logoDataUrl = getLogoDataUrl();
-  const logoHtml = logoDataUrl
-    ? `<img src="${logoDataUrl}" alt="Yosan AI" height="48" style="height:48px;width:auto;display:block;margin:0 auto 10px auto" />`
-    : "";
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -237,11 +208,12 @@ function baseTemplate(title: string, body: string): string {
   <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background:#f0f2f5;padding:40px 0">
     <tr>
       <td align="center">
-        <!-- Logo / app name above card -->
+        <!-- Logo mark + app name above card -->
         <table width="560" cellpadding="0" cellspacing="0" role="presentation" style="max-width:560px">
           <tr>
             <td align="center" style="padding:0 0 20px 0">
-              ${logoHtml}
+              <!-- Orange rounded-square "Y" lettermark — CSS only, works in all email clients -->
+              <div style="display:inline-block;background:#FF3C00;border-radius:12px;width:52px;height:52px;line-height:52px;text-align:center;font-size:30px;font-weight:900;color:#ffffff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;margin-bottom:10px">Y</div>
               <div style="color:#111827;font-size:22px;font-weight:700;letter-spacing:-0.01em">Yosan AI</div>
             </td>
           </tr>
