@@ -159,7 +159,9 @@ export function ReviewClient({ id }: ReviewClientProps) {
       const p: ParsedData = JSON.parse(importData.data || "{}");
       setParsed(p);
       setMerchant(p.merchant || "");
-      setDate(normalizeDateStr(p.date) || new Date().toISOString().slice(0, 10));
+      const initialDate = normalizeDateStr(p.date) || new Date().toISOString().slice(0, 10);
+      setDate(initialDate);
+      setDateError(validateDateYear(initialDate));
       setTotal(p.total != null ? String(p.total) : "");
       // Pre-fill item categories from AI suggestions
       const initCats: Record<number, string> = {};
@@ -533,7 +535,7 @@ export function ReviewClient({ id }: ReviewClientProps) {
                 {!isAlreadyDone && isDateStale(date) && !dateError && (
                   <span className="ml-1 inline-flex items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded">
                     <AlertTriangle className="w-3 h-3" />
-                    {new Date(date).getFullYear()} — please verify
+                    Date is from {new Date(date).getFullYear()} — please verify
                   </span>
                 )}
               </Label>
