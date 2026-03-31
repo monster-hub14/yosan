@@ -31,22 +31,22 @@ interface Props {
   defaultBudgetId?: string;
 }
 
-const STEPS = [
+const STEPS: { num: number; Icon: React.ElementType; title: string; desc: string }[] = [
   {
     num: 1,
-    icon: Mail,
+    Icon: Mail,
     title: "Connect your Gmail account",
     desc: "Authorize read-only access so Yosan AI can scan for receipt emails.",
   },
   {
     num: 2,
-    icon: Tag,
+    Icon: Tag,
     title: "Choose receipt labels",
     desc: 'Pick the Gmail labels (e.g. "Receipts", "INBOX") that contain your purchase emails.',
   },
   {
     num: 3,
-    icon: RefreshCw,
+    Icon: RefreshCw,
     title: "Sync and review",
     desc: "Run a sync to import matching emails into your Pending Imports for review.",
   },
@@ -122,12 +122,8 @@ export function GmailOAuthForm({ budgets, defaultBudgetId }: Props) {
                 </CardDescription>
               </div>
             </div>
-            {config.isConfigured ? (
-              <Badge variant="outline" className="gap-1 border-emerald-500/50 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 shrink-0">
-                <CheckCircle2 className="w-3 h-3" />
-                Configured
-              </Badge>
-            ) : (
+            {/* Show "Not set" badge only when not configured; configured state is shown via callout below */}
+            {!config.isConfigured && (
               <Badge variant="outline" className="gap-1 text-muted-foreground shrink-0">
                 <AlertCircle className="w-3 h-3" />
                 Not set
@@ -136,7 +132,7 @@ export function GmailOAuthForm({ budgets, defaultBudgetId }: Props) {
           </div>
         </CardHeader>
         <CardContent className="space-y-5">
-          {/* Success callout — shown when configured */}
+          {/* Success callout — replaces badge when configured */}
           {config.isConfigured && (
             <div className="flex gap-3 p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
               <CheckCircle2 className="w-5 h-5 shrink-0 mt-0.5 text-emerald-600 dark:text-emerald-400" />
@@ -145,7 +141,8 @@ export function GmailOAuthForm({ budgets, defaultBudgetId }: Props) {
                   Google OAuth is configured
                 </p>
                 <p className="text-sm text-emerald-700 dark:text-emerald-400 mt-0.5">
-                  Users on this instance can now connect their Gmail accounts for receipt import. Complete the steps below to set up your own account.
+                  Users on this instance can now connect their Gmail accounts for receipt import.
+                  Complete the steps below to set up your own account.
                 </p>
               </div>
             </div>
@@ -158,10 +155,14 @@ export function GmailOAuthForm({ budgets, defaultBudgetId }: Props) {
               <li>Go to <span className="font-mono">console.cloud.google.com</span> → APIs &amp; Services → Credentials</li>
               <li>Create an OAuth 2.0 Client ID for a Web Application</li>
               <li>
-                Add <span className="font-mono break-all">{typeof window !== "undefined" ? window.location.origin : ""}/api/settings/gmail/callback</span> as an Authorized Redirect URI
+                Add <span className="font-mono break-all">
+                  {typeof window !== "undefined" ? window.location.origin : ""}/api/settings/gmail/callback
+                </span> as an Authorized Redirect URI
               </li>
               <li>
-                Add <span className="font-mono break-all">{typeof window !== "undefined" ? window.location.origin : ""}</span> as an Authorized JavaScript Origin
+                Add <span className="font-mono break-all">
+                  {typeof window !== "undefined" ? window.location.origin : ""}
+                </span> as an Authorized JavaScript Origin (no trailing slash, no path)
               </li>
               <li>Enable the Gmail API in your project</li>
               <li>Paste the Client ID and Client Secret below and save</li>
@@ -222,27 +223,38 @@ export function GmailOAuthForm({ budgets, defaultBudgetId }: Props) {
         <>
           {/* Numbered step guide */}
           <div>
-            <h2 className="text-base font-semibold mb-1">Next: set up your Gmail receipt import</h2>
-            <p className="text-sm text-muted-foreground mb-4">
-              OAuth is ready. Follow these three steps to start importing receipts from your inbox.
+            <h2 className="text-base font-semibold mb-1">Next: set up Gmail receipt import</h2>
+            <p className="text-sm text-muted-foreground mb-5">
+              OAuth credentials are ready. Follow these three steps to start importing receipts from your inbox.
             </p>
-            <ol className="space-y-3">
-              {STEPS.map((step) => (
-                <li key={step.num} className="flex gap-3">
-                  <div className="flex-none flex items-center justify-center w-7 h-7 rounded-full bg-primary/10 text-primary text-xs font-bold mt-0.5">
-                    {step.num}
+            <ol className="space-y-4">
+              {STEPS.map(({ num, Icon, title, desc }) => (
+                <li key={num} className="flex gap-3">
+                  <div className="flex-none flex items-center justify-center w-8 h-8 rounded-full bg-primary/10 text-primary shrink-0 mt-0.5">
+                    <Icon className="w-4 h-4" />
                   </div>
-                  <div>
-                    <p className="text-sm font-medium leading-tight">{step.title}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">{step.desc}</p>
+                  <div className="pt-1">
+                    <p className="text-sm font-medium leading-tight">
+                      <span className="text-muted-foreground mr-1.5">{num}.</span>
+                      {title}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{desc}</p>
                   </div>
                 </li>
               ))}
             </ol>
-            <div className="flex items-center gap-1.5 mt-4 text-xs text-muted-foreground">
-              <ArrowRight className="w-3.5 h-3.5" />
-              Complete the steps using the panel below
+          </div>
+
+          {/* Prominent CTA when not yet connected */}
+          <div className="flex items-center gap-3 p-4 rounded-lg border border-primary/30 bg-primary/5">
+            <Mail className="w-5 h-5 text-primary shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm font-medium">Connect Gmail to start importing receipt emails</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Use the panel below to authorize your account, choose labels, and run your first sync.
+              </p>
             </div>
+            <ArrowRight className="w-4 h-4 text-muted-foreground shrink-0" />
           </div>
 
           {/* Full Gmail user settings embedded */}
