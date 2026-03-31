@@ -60,7 +60,7 @@ export function CreateUserButton() {
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         if (res.status === 409) {
-          setEmailError("An account with this email already exists.");
+          setEmailError("Email already in use.");
         } else {
           toast.error(data.error ?? "Failed to create user");
         }
