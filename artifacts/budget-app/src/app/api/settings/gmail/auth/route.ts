@@ -46,6 +46,28 @@ export async function GET(request: NextRequest) {
   console.log(`[gmail-auth] baseUrl: ${baseUrl} (source: ${baseUrlSource})`);
   console.log(`[gmail-auth] redirectUri: ${redirectUri}`);
 
+  // ── HTTPS enforcement in production ───────────────────────────────────────
+  const isProduction = process.env.NODE_ENV === "production";
+  if (isProduction && !redirectUri.startsWith("https://")) {
+    console.error(
+      `[gmail-auth] Blocking OAuth: redirect URI is not HTTPS in production. ` +
+        `Set APP_BASE_URL to your public HTTPS URL (e.g. https://yourdomain.com).`
+    );
+    return NextResponse.json(
+      {
+        ok: false,
+        error:
+          "Gmail OAuth requires HTTPS in production. " +
+          "Set APP_BASE_URL to your public HTTPS URL (e.g. https://yourdomain.com) " +
+          "and restart the app.",
+        errorCode: "gmail_http_not_allowed_in_production",
+        detectedUrl: baseUrl,
+        source: baseUrlSource,
+      },
+      { status: 400 }
+    );
+  }
+
   // ── Credential validation ─────────────────────────────────────────────────
   const oauthCfg = await db.gmailOAuthConfig.findUnique({ where: { id: "singleton" } });
   if (!oauthCfg?.clientId || !oauthCfg?.clientSecret) {

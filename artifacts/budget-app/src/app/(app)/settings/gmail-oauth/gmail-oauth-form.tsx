@@ -5,6 +5,7 @@ import {
   Loader2, Save, Mail, Eye, EyeOff, CheckCircle2, AlertCircle,
   ArrowRight, Tag, RefreshCw, Bug, ChevronDown, ChevronRight,
   Copy, ExternalLink, ShieldCheck, ShieldAlert, Key, TriangleAlert,
+  Globe,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -44,6 +45,17 @@ interface DebugData {
   scope: string;
   authUrlPreview: string | null;
   configUpdatedAt: string | null;
+}
+
+interface BaseUrlStatus {
+  isExplicitlySet: boolean;
+  isProduction: boolean;
+  detectedUrl: string | null;
+  source: string;
+  error: string | null;
+  isHttps: boolean;
+  needsAction: boolean;
+  severity: "ok" | "warn" | "error";
 }
 
 interface RedirectUriValidation {
@@ -144,12 +156,16 @@ export function GmailOAuthForm({ budgets, defaultBudgetId }: Props) {
   const [copied, setCopied] = useState(false);
   const [copiedOrigin, setCopiedOrigin] = useState(false);
   const [copiedCallback, setCopiedCallback] = useState(false);
+  const [baseUrlStatus, setBaseUrlStatus] = useState<BaseUrlStatus | null>(null);
 
   useEffect(() => {
-    fetch("/api/settings/gmail-oauth")
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.config) setConfig(data.config);
+    Promise.all([
+      fetch("/api/settings/gmail-oauth").then((r) => r.json()),
+      fetch("/api/settings/gmail/base-url-status").then((r) => r.json()),
+    ])
+      .then(([oauthData, urlStatus]) => {
+        if (oauthData.config) setConfig(oauthData.config);
+        setBaseUrlStatus(urlStatus as BaseUrlStatus);
       })
       .finally(() => setLoading(false));
   }, []);
@@ -242,8 +258,115 @@ export function GmailOAuthForm({ budgets, defaultBudgetId }: Props) {
   const instrOrigin = debugData?.authorizedJavascriptOrigin ?? windowOrigin;
   const instrCallback = debugData?.redirectUri ?? `${windowOrigin}/api/settings/gmail/callback`;
 
+  // Block the "Connect Gmail" button when we're in production and the resolved URL is HTTP.
+  const connectBlocked =
+    baseUrlStatus !== null &&
+    baseUrlStatus.isProduction &&
+    !baseUrlStatus.isHttps;
+
   return (
     <div className="space-y-8 max-w-2xl">
+
+      {/* ── APP_BASE_URL warning banner ── */}
+      {baseUrlStatus && baseUrlStatus.severity !== "ok" && (
+        <div
+          className={
+            baseUrlStatus.severity === "error"
+              ? "flex gap-3 p-4 rounded-lg border border-red-500/40 bg-red-500/10"
+              : "flex gap-3 p-4 rounded-lg border border-amber-400/40 bg-amber-400/10"
+          }
+        >
+          <Globe
+            className={
+              baseUrlStatus.severity === "error"
+                ? "w-5 h-5 shrink-0 mt-0.5 text-red-600 dark:text-red-400"
+                : "w-5 h-5 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400"
+            }
+          />
+          <div className="flex-1 min-w-0 space-y-2">
+            <p
+              className={
+                baseUrlStatus.severity === "error"
+                  ? "text-sm font-semibold text-red-800 dark:text-red-300"
+                  : "text-sm font-semibold text-amber-800 dark:text-amber-300"
+              }
+            >
+              {baseUrlStatus.severity === "error" && !baseUrlStatus.isHttps && baseUrlStatus.isProduction
+                ? "Gmail OAuth requires HTTPS — APP_BASE_URL not configured"
+                : baseUrlStatus.error
+                ? "APP_BASE_URL is set but invalid"
+                : "APP_BASE_URL is not configured — Gmail OAuth may not work"}
+            </p>
+
+            <p
+              className={
+                baseUrlStatus.severity === "error"
+                  ? "text-xs text-red-700 dark:text-red-400"
+                  : "text-xs text-amber-700 dark:text-amber-400"
+              }
+            >
+              {baseUrlStatus.error
+                ? baseUrlStatus.error
+                : baseUrlStatus.isProduction && !baseUrlStatus.isHttps
+                ? "Google requires HTTPS for OAuth redirect URIs. The detected URL uses HTTP, which will be rejected by Google."
+                : "Without APP_BASE_URL set explicitly, the app guesses its public URL from request headers. On Docker or reverse-proxy setups this guess is often wrong or uses HTTP, which breaks the Gmail OAuth flow."}
+            </p>
+
+            {/* Detected URL */}
+            {baseUrlStatus.detectedUrl && (
+              <div className="space-y-0.5">
+                <p
+                  className={
+                    baseUrlStatus.severity === "error"
+                      ? "text-[11px] font-medium text-red-700 dark:text-red-400"
+                      : "text-[11px] font-medium text-amber-700 dark:text-amber-400"
+                  }
+                >
+                  Currently detected URL
+                  <span className="font-normal ml-1 opacity-70">
+                    (source: {baseUrlStatus.source})
+                  </span>
+                </p>
+                <p className="font-mono text-xs bg-background/60 rounded px-2 py-1 border border-border/60 break-all">
+                  {baseUrlStatus.detectedUrl}
+                  {!baseUrlStatus.isHttps && (
+                    <span className="ml-2 text-[10px] font-sans text-red-600 dark:text-red-400 font-medium">
+                      ← HTTP (not HTTPS)
+                    </span>
+                  )}
+                </p>
+              </div>
+            )}
+
+            {/* Fix instructions */}
+            <div className="rounded-md border border-border/50 bg-background/40 px-3 py-2 space-y-1.5">
+              <p
+                className={
+                  baseUrlStatus.severity === "error"
+                    ? "text-[11px] font-semibold text-red-700 dark:text-red-400"
+                    : "text-[11px] font-semibold text-amber-700 dark:text-amber-400"
+                }
+              >
+                How to fix
+              </p>
+              <p className="text-xs text-foreground/70">
+                Set the <span className="font-mono font-medium">APP_BASE_URL</span> environment variable to your
+                server&apos;s public HTTPS origin and restart the app:
+              </p>
+              <p className="font-mono text-xs bg-muted/60 rounded px-2 py-1 break-all">
+                APP_BASE_URL=https://yourdomain.com
+              </p>
+              <p className="text-[11px] text-muted-foreground">
+                In Docker: add to your <span className="font-mono">.env</span> file or{" "}
+                <span className="font-mono">environment:</span> section in{" "}
+                <span className="font-mono">docker-compose.yml</span>.
+                Must be just the origin — no path, no trailing slash.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Section 1: Admin OAuth Credentials ── */}
       <Card className="border-border">
         <CardHeader>
@@ -719,16 +842,38 @@ export function GmailOAuthForm({ budgets, defaultBudgetId }: Props) {
             </ol>
           </div>
 
-          {/* Prominent CTA */}
-          <div className="flex items-center gap-3 p-4 rounded-lg border border-primary/30 bg-primary/5">
-            <Mail className="w-5 h-5 text-primary shrink-0" />
+          {/* Prominent CTA — dimmed when connect is blocked */}
+          <div
+            className={
+              connectBlocked
+                ? "flex items-center gap-3 p-4 rounded-lg border border-red-500/30 bg-red-500/5"
+                : "flex items-center gap-3 p-4 rounded-lg border border-primary/30 bg-primary/5"
+            }
+          >
+            <Mail
+              className={
+                connectBlocked
+                  ? "w-5 h-5 text-red-500 shrink-0"
+                  : "w-5 h-5 text-primary shrink-0"
+              }
+            />
             <div className="flex-1">
-              <p className="text-sm font-medium">Connect Gmail to start importing receipt emails</p>
+              <p className="text-sm font-medium">
+                {connectBlocked
+                  ? "Gmail connection unavailable until APP_BASE_URL is set"
+                  : "Connect Gmail to start importing receipt emails"}
+              </p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Use the panel below to authorize your account, choose labels, and run your first sync.
+                {connectBlocked
+                  ? "Fix the configuration issue above, then restart the app to enable Gmail OAuth."
+                  : "Use the panel below to authorize your account, choose labels, and run your first sync."}
               </p>
             </div>
-            <ArrowRight className="w-4 h-4 text-muted-foreground shrink-0" />
+            {connectBlocked ? (
+              <TriangleAlert className="w-4 h-4 text-red-500 shrink-0" />
+            ) : (
+              <ArrowRight className="w-4 h-4 text-muted-foreground shrink-0" />
+            )}
           </div>
 
           {/* Full Gmail user settings embedded */}
@@ -737,7 +882,16 @@ export function GmailOAuthForm({ budgets, defaultBudgetId }: Props) {
               <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
             </div>
           }>
-            <GmailSettingsClient budgets={budgets} defaultBudgetId={defaultBudgetId} />
+            <GmailSettingsClient
+              budgets={budgets}
+              defaultBudgetId={defaultBudgetId}
+              connectBlocked={connectBlocked}
+              connectBlockedReason={
+                connectBlocked
+                  ? "Gmail OAuth requires HTTPS. Set APP_BASE_URL=https://yourdomain.com and restart."
+                  : undefined
+              }
+            />
           </Suspense>
         </>
       )}

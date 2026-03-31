@@ -104,5 +104,16 @@ export async function checkStartup(): Promise<void> {
     console.warn("[startup] Could not check/migrate AI API key encryption:", err);
   }
 
+  // Warn (non-fatal) if APP_BASE_URL is not set in production.
+  // Without it, Gmail OAuth redirect URIs may resolve to an internal HTTP address
+  // which will fail Google's HTTPS requirement and result in silent OAuth errors.
+  if (process.env.NODE_ENV === "production" && !process.env.APP_BASE_URL) {
+    console.warn(
+      "[startup] WARNING: APP_BASE_URL is not set. " +
+        "Gmail OAuth may fail because the redirect URI could resolve to an internal HTTP address. " +
+        "Set APP_BASE_URL to your public HTTPS URL, e.g. APP_BASE_URL=https://yourdomain.com"
+    );
+  }
+
   console.log("[startup] Startup checks passed.");
 }

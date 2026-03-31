@@ -54,9 +54,11 @@ interface Budget {
 interface Props {
   budgets: Budget[];
   defaultBudgetId?: string;
+  connectBlocked?: boolean;
+  connectBlockedReason?: string;
 }
 
-export function GmailSettingsClient({ budgets, defaultBudgetId }: Props) {
+export function GmailSettingsClient({ budgets, defaultBudgetId, connectBlocked = false, connectBlockedReason }: Props) {
   const searchParams = useSearchParams();
 
   const [loadingStatus, setLoadingStatus] = useState(true);
@@ -349,14 +351,22 @@ export function GmailSettingsClient({ budgets, defaultBudgetId }: Props) {
               </Button>
             </div>
           ) : (
-            <Button
-              disabled={!status.oauthConfigured}
-              onClick={openOAuthPopup}
-            >
-              <Mail className="w-4 h-4 mr-2" />
-              {isRevoked ? "Reconnect Gmail" : "Connect Gmail"}
-              <ArrowRight className="w-4 h-4 ml-2" />
-            </Button>
+            <div className="space-y-2">
+              <Button
+                disabled={!status.oauthConfigured || connectBlocked}
+                onClick={openOAuthPopup}
+                title={connectBlocked ? (connectBlockedReason ?? "Gmail OAuth is unavailable — check your APP_BASE_URL configuration") : undefined}
+              >
+                <Mail className="w-4 h-4 mr-2" />
+                {isRevoked ? "Reconnect Gmail" : "Connect Gmail"}
+                <ArrowRight className="w-4 h-4 ml-2" />
+              </Button>
+              {connectBlocked && (
+                <p className="text-xs text-red-600 dark:text-red-400">
+                  {connectBlockedReason ?? "Set APP_BASE_URL to your public HTTPS URL before connecting."}
+                </p>
+              )}
+            </div>
           )}
         </CardContent>
       </Card>
