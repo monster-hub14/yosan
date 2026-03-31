@@ -1,0 +1,137 @@
+There is a frontend/backend contract bug in the SMTP settings flow.
+
+Current error:
+Failed to execute 'json' on 'Response': Unexpected end of JSON input
+at EmailSettingsForm.useEffect in src/app/(app)/settings/email/email-form.tsx
+
+What this means:
+The frontend is calling response.json() on a response that has an empty body or a non-JSON body. This usually means one of these is happening:
+
+1. the route returns 204 No Content
+2. the route throws and Next returns an empty/error response
+3. the route returns plain text instead of JSON
+4. the frontend is parsing JSON without checking response.ok / content-length / content-type
+
+Fix this properly.
+
+Requirements:
+
+1. Make every SMTP settings API route return valid JSON in all cases
+   For these routes:
+
+* src/app/api/settings/email/route.ts
+* src/app/api/settings/email/test/route.ts
+* src/app/api/settings/email-status/route.ts
+
+Return JSON for:
+
+* success
+* validation failure
+* auth failure
+* internal error
+
+Use a consistent shape like:
+{
+"ok": true,
+"data": { ... }
+}
+
+or
+
+{
+"ok": false,
+"error": {
+"code": "smtp_not_configured",
+"message": "SMTP not configured"
+}
+}
+
+Do not return empty responses for these routes.
+
+2. Fix the frontend fetch handling in email-form.tsx
+   Before calling response.json():
+
+* check response.headers.get("content-type")
+* safely handle empty bodies
+* handle non-OK responses gracefully
+
+Create a helper like safeJson(response) that:
+
+* returns parsed JSON if present
+* returns null if body is empty
+* does not throw Unexpected end of JSON input
+
+Example behavior:
+
+* if response status is 204, do not call json()
+* if response body is empty, handle it cleanly
+* if response is not ok, surface the server error message if available
+
+3. Investigate the exact failing route
+   The stack points to EmailSettingsForm.useEffect around line 216.
+   Check what request is being made there:
+
+* GET /api/settings/email
+* GET /api/settings/email-status
+* or some other settings bootstrap request
+
+That route is likely returning an empty body or crashing before JSON is returned.
+
+4. Add server-side logging for the email settings routes
+   Log:
+
+* route entered
+* auth passed/failed
+* config found/not found
+* response status being returned
+* caught exception message
+
+Never log passwords or decrypted secret values.
+
+5. Fix “no config yet” behavior
+   If no SMTP config exists yet, the GET route must still return valid JSON, for example:
+   {
+   "ok": true,
+   "data": {
+   "configured": false,
+   "enabled": false,
+   "smtpHost": "",
+   "smtpPort": 587,
+   "encryption": "starttls",
+   "smtpUser": "",
+   "fromName": "",
+   "fromAddress": "",
+   "lastTestedAt": null,
+   "lastTestOk": null,
+   "lastTestError": null
+   }
+   }
+
+Do not return an empty body for missing config.
+
+6. Fix save route response shape
+   When SMTP settings are saved, return JSON that the frontend can immediately use.
+   Example:
+   {
+   "ok": true,
+   "data": {
+   "configured": true,
+   "lastTestedAt": null,
+   "lastTestOk": null
+   }
+   }
+
+7. Fix useEffect initialization path
+   In EmailSettingsForm.useEffect:
+
+* wrap fetch/parse in try/catch
+* show a user-friendly error if loading fails
+* do not let the component crash because JSON parsing failed
+
+Expected result:
+
+* Opening the SMTP settings page never throws “Unexpected end of JSON input”
+* If no config exists yet, the page still loads normally
+* Saving settings returns proper JSON
+* Test email route returns proper JSON
+* All email settings routes behave consistently
