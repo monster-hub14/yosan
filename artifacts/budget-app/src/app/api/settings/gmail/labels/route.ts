@@ -67,13 +67,13 @@ export async function GET(request: NextRequest) {
     // GmailRefreshError — token refresh request failed for a non-revocation reason
     if (err instanceof GmailRefreshError) {
       console.error(
-        `${LOG} errorCode=gmail_refresh_failed googleError="${err.googleError ?? ""}" message="${err.message}"`
+        `${LOG} errorCode=internal_error (refresh_failed) googleError="${err.googleError ?? ""}" message="${err.message}"`
       );
       return NextResponse.json(
         {
           ok: false,
           error: "Gmail access token refresh failed. Please reconnect your Gmail account.",
-          errorCode: "gmail_refresh_failed",
+          errorCode: "internal_error",
           reconnect_required: true,
         },
         { status: 502 }
