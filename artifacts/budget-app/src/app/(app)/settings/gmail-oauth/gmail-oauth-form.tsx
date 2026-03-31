@@ -237,6 +237,11 @@ export function GmailOAuthForm({ budgets, defaultBudgetId }: Props) {
 
   const uriValidation = debugData ? validateRedirectUri(debugData) : null;
 
+  // Prefer server-resolved values from debug data; fall back to browser origin
+  const windowOrigin = typeof window !== "undefined" ? window.location.origin : "";
+  const instrOrigin = debugData?.authorizedJavascriptOrigin ?? windowOrigin;
+  const instrCallback = debugData?.redirectUri ?? `${windowOrigin}/api/settings/gmail/callback`;
+
   return (
     <div className="space-y-8 max-w-2xl">
       {/* ── Section 1: Admin OAuth Credentials ── */}
@@ -366,14 +371,11 @@ export function GmailOAuthForm({ budgets, defaultBudgetId }: Props) {
                     <span className="text-[10px] font-semibold text-foreground/70 uppercase tracking-wide">Authorized JavaScript Origin</span>
                     <span className="flex items-center gap-2">
                       <span className="flex-1 font-mono text-[11px] bg-background border border-border rounded px-2 py-1 break-all">
-                        {typeof window !== "undefined" ? window.location.origin : ""}
+                        {instrOrigin}
                       </span>
                       <button
                         type="button"
-                        onClick={() =>
-                          typeof window !== "undefined" &&
-                          copyInstructionUri(window.location.origin, "origin")
-                        }
+                        onClick={() => copyInstructionUri(instrOrigin, "origin")}
                         className="flex-none flex items-center gap-1 text-[10px] px-2 py-1 rounded border border-border bg-background hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
                       >
                         {copiedOrigin ? <CheckCircle2 className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
@@ -387,17 +389,11 @@ export function GmailOAuthForm({ budgets, defaultBudgetId }: Props) {
                     <span className="text-[10px] font-semibold text-foreground/70 uppercase tracking-wide">Authorized Redirect URI</span>
                     <span className="flex items-center gap-2">
                       <span className="flex-1 font-mono text-[11px] bg-background border border-border rounded px-2 py-1 break-all">
-                        {typeof window !== "undefined" ? window.location.origin : ""}/api/settings/gmail/callback
+                        {instrCallback}
                       </span>
                       <button
                         type="button"
-                        onClick={() =>
-                          typeof window !== "undefined" &&
-                          copyInstructionUri(
-                            `${window.location.origin}/api/settings/gmail/callback`,
-                            "callback"
-                          )
-                        }
+                        onClick={() => copyInstructionUri(instrCallback, "callback")}
                         className="flex-none flex items-center gap-1 text-[10px] px-2 py-1 rounded border border-border bg-background hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
                       >
                         {copiedCallback ? <CheckCircle2 className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
