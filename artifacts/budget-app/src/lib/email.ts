@@ -190,9 +190,18 @@ export async function testEmailConfig(params: TestEmailParams): Promise<{ ok: bo
 // ---- Email templates ----
 
 /**
+ * Yosan AI logo as a base64-encoded inline SVG string literal.
+ * Orange rounded-square (#FF3C00) with white "Y" lettermark — 278 bytes of SVG,
+ * ~372 chars of base64. Baked in at compile time; no file-system reads.
+ * Total email HTML stays well below Gmail's 102 KB clip threshold.
+ */
+const LOGO_SVG_DATA_URL =
+  "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNTIiIGhlaWdodD0iNTIiIHZpZXdCb3g9IjAgMCA1MiA1MiIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNTIiIGhlaWdodD0iNTIiIHJ4PSIxMiIgZmlsbD0iI0ZGM0MwMCIvPjx0ZXh0IHg9IjI2IiB5PSI0MCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1mYW1pbHk9IkFyaWFsLEhlbHZldGljYSxzYW5zLXNlcmlmIiBmb250LXNpemU9IjMwIiBmb250LXdlaWdodD0iOTAwIiBmaWxsPSJ3aGl0ZSI+WTwvdGV4dD48L3N2Zz4=";
+
+/**
  * Branded base template for all Yosan AI emails.
- * Uses a pure HTML/CSS logo mark — no image files, no file-system reads.
- * This keeps every email under 10 KB and avoids Gmail's 102 KB clip threshold.
+ * Uses an inline SVG logo (base64 data URL, ~400 chars) — no file-system reads.
+ * This keeps every email well under 10 KB and below Gmail's 102 KB clip threshold.
  * @param title  Card header title
  * @param body   HTML body content
  */
@@ -208,12 +217,11 @@ function baseTemplate(title: string, body: string): string {
   <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background:#f0f2f5;padding:40px 0">
     <tr>
       <td align="center">
-        <!-- Logo mark + app name above card -->
+        <!-- SVG logo mark + app name above card -->
         <table width="560" cellpadding="0" cellspacing="0" role="presentation" style="max-width:560px">
           <tr>
             <td align="center" style="padding:0 0 20px 0">
-              <!-- Orange rounded-square "Y" lettermark — CSS only, works in all email clients -->
-              <div style="display:inline-block;background:#FF3C00;border-radius:12px;width:52px;height:52px;line-height:52px;text-align:center;font-size:30px;font-weight:900;color:#ffffff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;margin-bottom:10px">Y</div>
+              <img src="${LOGO_SVG_DATA_URL}" alt="Yosan AI" width="52" height="52" style="display:block;margin:0 auto 10px auto;border:0" />
               <div style="color:#111827;font-size:22px;font-weight:700;letter-spacing:-0.01em">Yosan AI</div>
             </td>
           </tr>
