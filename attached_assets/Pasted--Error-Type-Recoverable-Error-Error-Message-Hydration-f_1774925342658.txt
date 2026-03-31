@@ -1,0 +1,79 @@
+## Error Type
+Recoverable Error
+
+## Error Message
+Hydration failed because the server rendered HTML didn't match the client. As a result this tree will be regenerated on the client. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+https://react.dev/link/hydration-mismatch
+
+  ...
+    <HTTPAccessFallbackErrorBoundary pathname="/expenses" notFound={<SegmentViewNode>} forbidden={undefined} ...>
+      <RedirectBoundary>
+        <RedirectErrorBoundary router={{...}}>
+          <InnerLayoutRouter url="/expenses" tree={[...]} cacheNode={{lazyData:null, ...}} segmentPath={[...]}>
+            <SegmentViewNode type="layout" pagePath="(app)/layo...">
+              <SegmentTrieNode>
+              <AppLayout>
+                <AppShell user={{userId:"cm...", ...}} activeBudgetId="cmndz09tp0...">
+                  <div className="flex h-scr...">
+                    <AnimatePresence>
+                    <div>
+                    <div className="flex flex-...">
+                      <AppHeader user={{userId:"cm...", ...}} activeBudgetId="cmndz09tp0..." ...>
+                        <header className="h-14 flex ...">
+                          <button>
+                          <div>
+                          <Badge>
+                          <button onClick={function onClick} className="p-2 rounde..." aria-label="Toggle theme">
+                            <Sun className="w-4 h-4">
+                              <_c ref={null} iconNode={[...]} className="lucide-sun...">
+                                <svg
+                                  ref={null}
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  width={24}
+                                  height={24}
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth={2}
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
++                                 className="lucide lucide-sun w-4 h-4"
+-                                 className="lucide lucide-moon w-4 h-4"
+                                  aria-hidden="true"
+                                >
++                                 <circle cx="12" cy="12" r="4">
+-                                 <path
+-                                   d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8..."
+-                                 >
+                                  ...
+                          ...
+                      ...
+                    ...
+          ...
+
+
+
+    at circle (<anonymous>:null:null)
+    at AppHeader (src/components/layout/AppHeader.tsx:179:29)
+    at AppShell (src/components/layout/AppShell.tsx:55:9)
+    at AppLayout (src/app/(app)/layout.tsx:20:5)
+
+## Code Frame
+  177 |         aria-label="Toggle theme"
+  178 |       >
+> 179 |         {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+      |                             ^
+  180 |       </button>
+  181 |
+  182 |       <button
+
+Next.js version: 15.5.14 (Webpack)
