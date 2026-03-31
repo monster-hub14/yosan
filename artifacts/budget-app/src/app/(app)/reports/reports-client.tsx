@@ -17,10 +17,14 @@ interface DateRangeState {
   preset: string;
 }
 
+function localDateStr(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 function getInitialDateRange(): DateRangeState {
   const now = new Date();
-  const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
-  const end = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10);
+  const start = localDateStr(new Date(now.getFullYear(), now.getMonth(), 1));
+  const end = localDateStr(new Date(now.getFullYear(), now.getMonth() + 1, 0));
   return { start, end, preset: "this-month" };
 }
 

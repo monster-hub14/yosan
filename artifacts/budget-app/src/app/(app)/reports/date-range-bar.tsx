@@ -13,8 +13,16 @@ const PRESETS = [
   { id: "last-7-days", label: "Last 7 Days" },
 ];
 
+/** Format a Date as YYYY-MM-DD using LOCAL time (avoids UTC midnight off-by-one). */
+function localDateStr(d: Date): string {
+  const yr = d.getFullYear();
+  const mo = String(d.getMonth() + 1).padStart(2, "0");
+  const da = String(d.getDate()).padStart(2, "0");
+  return `${yr}-${mo}-${da}`;
+}
+
 function todayStr(): string {
-  return new Date().toISOString().slice(0, 10);
+  return localDateStr(new Date());
 }
 
 function getPresetRange(
@@ -31,24 +39,24 @@ function getPresetRange(
       if (lastPayPeriod) return { start: lastPayPeriod.start.slice(0, 10), end: lastPayPeriod.end.slice(0, 10) };
       break;
     case "this-month": {
-      const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
-      const end = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10);
+      const start = localDateStr(new Date(now.getFullYear(), now.getMonth(), 1));
+      const end = localDateStr(new Date(now.getFullYear(), now.getMonth() + 1, 0));
       return { start, end };
     }
     case "last-month": {
-      const start = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().slice(0, 10);
-      const end = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().slice(0, 10);
+      const start = localDateStr(new Date(now.getFullYear(), now.getMonth() - 1, 1));
+      const end = localDateStr(new Date(now.getFullYear(), now.getMonth(), 0));
       return { start, end };
     }
     case "last-7-days": {
       const end = todayStr();
       const s = new Date(now);
       s.setDate(s.getDate() - 6);
-      return { start: s.toISOString().slice(0, 10), end };
+      return { start: localDateStr(s), end };
     }
   }
-  const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
-  const end = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10);
+  const start = localDateStr(new Date(now.getFullYear(), now.getMonth(), 1));
+  const end = localDateStr(new Date(now.getFullYear(), now.getMonth() + 1, 0));
   return { start, end };
 }
 
