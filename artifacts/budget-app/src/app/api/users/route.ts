@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin, isSessionPayload } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
+import { sendMail, welcomeEmail } from "@/lib/email";
 
 export async function GET(request: NextRequest) {
   const session = await requireAdmin(request);
@@ -48,6 +49,12 @@ export async function POST(request: NextRequest) {
       role: role === "ADMIN" ? "ADMIN" : "USER",
     },
     select: { id: true, email: true, name: true, role: true, createdAt: true },
+  });
+
+  // Fire-and-forget: send welcome email to the newly created user
+  const { subject, html } = welcomeEmail({ userName: user.name, userEmail: user.email });
+  sendMail({ to: user.email, subject, html }).catch((err) => {
+    console.warn("[users] Failed to send welcome email:", err instanceof Error ? err.message : String(err));
   });
 
   return NextResponse.json({ user }, { status: 201 });

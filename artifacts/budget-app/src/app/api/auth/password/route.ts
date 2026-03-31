@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { requireAuth, isSessionPayload } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
+import { sendMail, passwordChangedEmail } from "@/lib/email";
 
 export async function POST(request: NextRequest) {
   const session = await requireAuth(request);
@@ -22,7 +23,7 @@ export async function POST(request: NextRequest) {
 
   const user = await db.user.findUnique({
     where: { id: session.userId },
-    select: { passwordHash: true },
+    select: { passwordHash: true, email: true, name: true },
   });
 
   if (!user) {
@@ -38,6 +39,12 @@ export async function POST(request: NextRequest) {
   await db.user.update({
     where: { id: session.userId },
     data: { passwordHash },
+  });
+
+  // Fire-and-forget: send password-changed confirmation email
+  const { subject, html } = passwordChangedEmail({ userName: user.name, userEmail: user.email });
+  sendMail({ to: user.email, subject, html }).catch((err) => {
+    console.warn("[password] Failed to send password-changed email:", err instanceof Error ? err.message : String(err));
   });
 
   return NextResponse.json({ ok: true });

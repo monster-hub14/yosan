@@ -3,6 +3,8 @@
  * Server-only. NEVER import from client components.
  */
 
+import fs from "fs";
+import path from "path";
 import { db } from "@/lib/db";
 import { decrypt } from "@/lib/encryption";
 
@@ -190,15 +192,35 @@ export async function testEmailConfig(params: TestEmailParams): Promise<{ ok: bo
 // ---- Email templates ----
 
 /**
+ * Load the Yosan AI logo as a base64 data URL for embedding in HTML emails.
+ * Loaded once lazily on first call; cached for the lifetime of the module.
+ * Falls back gracefully if the file is missing or unreadable.
+ */
+let _logoDataUrl: string | null | undefined = undefined; // undefined = not yet attempted
+function getLogoDataUrl(): string | null {
+  if (_logoDataUrl !== undefined) return _logoDataUrl;
+  try {
+    const logoPath = path.join(process.cwd(), "public", "logo.png");
+    const data = fs.readFileSync(logoPath);
+    _logoDataUrl = `data:image/png;base64,${data.toString("base64")}`;
+    console.log(`[email] Logo loaded from ${logoPath} (${data.length} bytes)`);
+  } catch (err) {
+    console.warn("[email] Could not load logo for email templates:", err instanceof Error ? err.message : String(err));
+    _logoDataUrl = null;
+  }
+  return _logoDataUrl;
+}
+
+/**
  * Branded base template for all Yosan AI emails.
- * Renders correctly with or without a logo image.
+ * Automatically embeds the Yosan logo from public/logo.png as a base64 data URL.
  * @param title  Card header title
  * @param body   HTML body content
- * @param logoUrl Optional absolute URL to the app logo image
  */
-function baseTemplate(title: string, body: string, logoUrl?: string): string {
-  const logoHtml = logoUrl
-    ? `<img src="${logoUrl}" alt="Yosan AI" height="32" style="height:32px;width:auto;display:block;margin-bottom:8px" />`
+function baseTemplate(title: string, body: string): string {
+  const logoDataUrl = getLogoDataUrl();
+  const logoHtml = logoDataUrl
+    ? `<img src="${logoDataUrl}" alt="Yosan AI" height="48" style="height:48px;width:auto;display:block;margin:0 auto 10px auto" />`
     : "";
   return `<!DOCTYPE html>
 <html lang="en">
@@ -214,9 +236,9 @@ function baseTemplate(title: string, body: string, logoUrl?: string): string {
         <!-- Logo / app name above card -->
         <table width="560" cellpadding="0" cellspacing="0" role="presentation" style="max-width:560px">
           <tr>
-            <td style="padding:0 0 16px 0">
+            <td align="center" style="padding:0 0 20px 0">
               ${logoHtml}
-              <span style="color:#6b7280;font-size:13px;font-weight:500;letter-spacing:0.04em;text-transform:uppercase">Yosan AI</span>
+              <div style="color:#111827;font-size:22px;font-weight:700;letter-spacing:-0.01em">Yosan AI</div>
             </td>
           </tr>
         </table>
@@ -426,6 +448,100 @@ export function receiptReminderEmail(params: {
       <p>Hi ${params.userName},</p>
       <p>It's been <strong>${params.daysSinceLastUpload} day${params.daysSinceLastUpload !== 1 ? "s" : ""}</strong> since your last receipt upload in <em>${params.budgetName}</em>.</p>
       <p style="color:#6b7280;font-size:14px">Keeping your receipts up to date helps Yosan AI give you accurate spending insights and cash flow forecasts.</p>
+    `),
+  };
+}
+
+// ---- Transactional emails ----
+
+export function passwordChangedEmail(params: {
+  userName: string;
+  userEmail: string;
+}): { subject: string; html: string } {
+  const timestamp = new Date().toLocaleString("en-US", {
+    dateStyle: "long",
+    timeStyle: "short",
+    timeZone: "UTC",
+  });
+  return {
+    subject: "Yosan AI — Your password has been changed",
+    html: baseTemplate("Password Changed", `
+      <p>Hi ${params.userName},</p>
+      <p>Your Yosan AI account password was successfully changed on <strong>${timestamp} UTC</strong>.</p>
+      <table cellpadding="0" cellspacing="0" role="presentation"
+             style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:6px;padding:16px 20px;width:100%;margin:16px 0">
+        <tr>
+          <td style="color:#0369a1;font-size:14px">
+            <strong>Account:</strong> ${params.userEmail}
+          </td>
+        </tr>
+      </table>
+      <p style="color:#6b7280;font-size:13px">
+        If you did not make this change, please contact your Yosan AI administrator immediately.
+      </p>
+    `),
+  };
+}
+
+export function welcomeEmail(params: {
+  userName: string;
+  userEmail: string;
+  appUrl?: string;
+}): { subject: string; html: string } {
+  const loginLink = params.appUrl
+    ? `<p style="margin:20px 0 0"><a href="${params.appUrl}/login" style="display:inline-block;background:#1d4ed8;color:#ffffff;text-decoration:none;padding:10px 22px;border-radius:6px;font-size:14px;font-weight:600">Sign In to Yosan AI</a></p>`
+    : "";
+  return {
+    subject: "Welcome to Yosan AI — your account is ready",
+    html: baseTemplate("Welcome to Yosan AI", `
+      <p>Hi ${params.userName},</p>
+      <p>An administrator has created a Yosan AI account for you. You can now sign in with your credentials.</p>
+      <table cellpadding="0" cellspacing="0" role="presentation"
+             style="background:#f8faff;border-radius:6px;padding:16px 20px;width:100%;margin:16px 0">
+        <tr><td style="color:#6b7280;font-size:13px;padding:3px 0">Email</td><td style="font-weight:600;font-size:14px;text-align:right">${params.userEmail}</td></tr>
+      </table>
+      <p style="color:#6b7280;font-size:13px">
+        Use the password provided by your administrator to sign in. You can change your password at any time from your account settings.
+      </p>
+      ${loginLink}
+    `),
+  };
+}
+
+export function budgetInviteEmail(params: {
+  userName: string;
+  budgetName: string;
+  budgetType: string;
+  role: string;
+  inviterName: string;
+  appUrl?: string;
+}): { subject: string; html: string } {
+  const roleLabel: Record<string, string> = {
+    ADMIN: "Admin",
+    MEMBER: "Member",
+    VIEWER: "Viewer",
+    HELPER: "Helper",
+    CO_OWNER: "Co-owner",
+  };
+  const displayRole = roleLabel[params.role] ?? params.role;
+  const typeLabel = params.budgetType === "SHARED" ? "shared" : "personal";
+  const loginLink = params.appUrl
+    ? `<p style="margin:20px 0 0"><a href="${params.appUrl}" style="display:inline-block;background:#1d4ed8;color:#ffffff;text-decoration:none;padding:10px 22px;border-radius:6px;font-size:14px;font-weight:600">Open Yosan AI</a></p>`
+    : "";
+  return {
+    subject: `You've been added to "${params.budgetName}" on Yosan AI`,
+    html: baseTemplate("Budget Access Granted", `
+      <p>Hi ${params.userName},</p>
+      <p><strong>${params.inviterName}</strong> has added you to a ${typeLabel} budget on Yosan AI.</p>
+      <table cellpadding="0" cellspacing="0" role="presentation"
+             style="background:#f8faff;border-radius:6px;padding:16px 20px;width:100%;margin:16px 0">
+        <tr><td style="color:#6b7280;font-size:13px;padding:3px 0">Budget</td><td style="font-weight:700;font-size:15px;text-align:right">${params.budgetName}</td></tr>
+        <tr><td style="color:#6b7280;font-size:13px;padding:3px 0">Your role</td><td style="font-weight:600;text-align:right">${displayRole}</td></tr>
+      </table>
+      <p style="color:#6b7280;font-size:13px">
+        Sign in to Yosan AI to view your budgets and start tracking expenses.
+      </p>
+      ${loginLink}
     `),
   };
 }

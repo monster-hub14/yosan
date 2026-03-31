@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth, requireBudgetRead, requireBudgetManage, isSessionPayload } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
+import { sendMail, budgetInviteEmail } from "@/lib/email";
 
 export async function GET(
   request: NextRequest,
@@ -49,7 +50,7 @@ export async function POST(
 
   const budget = await db.budget.findUnique({
     where: { id },
-    select: { budgetType: true, ownerId: true },
+    select: { budgetType: true, ownerId: true, name: true },
   });
   if (!budget) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
@@ -74,6 +75,12 @@ export async function POST(
     return NextResponse.json({ error: "Owner cannot be added as member" }, { status: 400 });
   }
 
+  // Look up inviter name for the email notification
+  const inviter = await db.user.findUnique({
+    where: { id: session.userId },
+    select: { name: true },
+  });
+
   if (budget.budgetType === "SHARED") {
     const validRoles = ["ADMIN", "MEMBER"];
     if (!validRoles.includes(role)) {
@@ -85,6 +92,18 @@ export async function POST(
       create: { budgetId: id, userId: targetUserId, role },
       update: { role },
       include: { user: { select: { id: true, name: true, email: true } } },
+    });
+
+    // Fire-and-forget: notify the added user
+    const { subject, html } = budgetInviteEmail({
+      userName: membership.user.name,
+      budgetName: budget.name,
+      budgetType: budget.budgetType,
+      role,
+      inviterName: inviter?.name ?? "An administrator",
+    });
+    sendMail({ to: membership.user.email, subject, html }).catch((err) => {
+      console.warn("[members] Failed to send budget invite email:", err instanceof Error ? err.message : String(err));
     });
 
     return NextResponse.json({ membership }, { status: 201 });
@@ -104,6 +123,21 @@ export async function POST(
         data: { role, isActive: true },
         include: { user: { select: { id: true, name: true, email: true } } },
       });
+
+      // Fire-and-forget: notify the updated user
+      if (share.user) {
+        const { subject, html } = budgetInviteEmail({
+          userName: share.user.name,
+          budgetName: budget.name,
+          budgetType: budget.budgetType,
+          role,
+          inviterName: inviter?.name ?? "An administrator",
+        });
+        sendMail({ to: share.user.email, subject, html }).catch((err) => {
+          console.warn("[members] Failed to send budget invite email:", err instanceof Error ? err.message : String(err));
+        });
+      }
+
       return NextResponse.json({ share });
     }
 
@@ -111,6 +145,20 @@ export async function POST(
       data: { budgetId: id, userId: targetUserId, role },
       include: { user: { select: { id: true, name: true, email: true } } },
     });
+
+    // Fire-and-forget: notify the newly added user
+    if (share.user) {
+      const { subject, html } = budgetInviteEmail({
+        userName: share.user.name,
+        budgetName: budget.name,
+        budgetType: budget.budgetType,
+        role,
+        inviterName: inviter?.name ?? "An administrator",
+      });
+      sendMail({ to: share.user.email, subject, html }).catch((err) => {
+        console.warn("[members] Failed to send budget invite email:", err instanceof Error ? err.message : String(err));
+      });
+    }
 
     return NextResponse.json({ share }, { status: 201 });
   }
