@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
         smtpUser: smtpUser?.trim() || null,
         smtpPass: encryptedPass,
         fromAddress: fromAddress?.trim() || null,
-        fromName: fromName?.trim() || "Budget App",
+        fromName: fromName?.trim() || "Yosan AI",
         isEnabled: true,
       },
       update: {
@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
         smtpUser: smtpUser?.trim() || null,
         smtpPass: encryptedPass,
         fromAddress: fromAddress?.trim() || null,
-        fromName: fromName?.trim() || "Budget App",
+        fromName: fromName?.trim() || "Yosan AI",
         isEnabled: true,
       },
     });

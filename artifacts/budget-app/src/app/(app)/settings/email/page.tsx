@@ -4,7 +4,7 @@ import { getSession } from "@/lib/auth/session";
 import { EmailSettingsForm } from "./email-form";
 
 export const metadata: Metadata = {
-  title: "Email Settings | Budget",
+  title: "Email Settings | Yosan AI",
 };
 
 export default async function EmailSettingsPage() {

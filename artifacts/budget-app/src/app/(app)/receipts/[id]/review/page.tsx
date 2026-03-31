@@ -1,7 +1,7 @@
 import { Metadata } from "next";
 import { ReviewClient } from "../review-client";
 
-export const metadata: Metadata = { title: "Review Receipt | Budget" };
+export const metadata: Metadata = { title: "Review Receipt | Yosan AI" };
 
 interface Props {
   params: Promise<{ id: string }>;

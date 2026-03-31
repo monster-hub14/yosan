@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { Lock } from "lucide-react";
 
-export const metadata: Metadata = { title: "Budget Members | Budget" };
+export const metadata: Metadata = { title: "Budget Members | Yosan AI" };
 
 export default async function BudgetMembersServerPage() {
   const session = await getSession();

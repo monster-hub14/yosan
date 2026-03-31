@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
       user: config.smtpUser ?? undefined,
       pass: decryptedPass ?? undefined,
       fromAddress: config.fromAddress,
-      fromName: config.fromName ?? "Budget App",
+      fromName: config.fromName ?? "Yosan AI",
       toAddress: body.toAddress,
     });
     return NextResponse.json(result);
@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
     user: body.user,
     pass: body.pass,
     fromAddress: body.fromAddress ?? "noreply@budget.local",
-    fromName: body.fromName ?? "Budget App",
+    fromName: body.fromName ?? "Yosan AI",
     toAddress: body.toAddress,
   });
 

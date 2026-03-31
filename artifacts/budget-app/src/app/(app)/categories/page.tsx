@@ -9,7 +9,7 @@ import { CategoryTotalsPanel } from "@/components/expenses/category-totals-panel
 import { CategoriesClient } from "@/app/(app)/settings/budget/categories/categories-client";
 import { BarChart3, Tag } from "lucide-react";
 
-export const metadata: Metadata = { title: "Categories | Budget" };
+export const metadata: Metadata = { title: "Categories | Yosan AI" };
 
 export default async function CategoriesPage() {
   const session = await getSession();

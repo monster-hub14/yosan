@@ -30,7 +30,7 @@ async function getEmailConfig(): Promise<EmailConfig | null> {
     user: config.smtpUser ?? null,
     pass: decryptedPass,
     fromAddress: config.fromAddress,
-    fromName: config.fromName || "Budget App",
+    fromName: config.fromName || "Yosan AI",
     secure: enc === "TLS",
     requireTls: enc === "STARTTLS",
   };
@@ -101,8 +101,8 @@ export async function testEmailConfig(config: {
     await transporter.sendMail({
       from: `"${config.fromName}" <${config.fromAddress}>`,
       to: config.toAddress,
-      subject: "Budget App — Test Email",
-      html: `<p>This is a test email from your Budget App. SMTP configuration is working correctly.</p>`,
+      subject: "Yosan AI — Test Email",
+      html: `<p>This is a test email from Yosan AI. SMTP configuration is working correctly.</p>`,
     });
 
     return { ok: true };
@@ -128,7 +128,7 @@ function baseTemplate(title: string, body: string): string {
 ${body}
 </td></tr>
 <tr><td style="padding:16px 32px;background:#f8f8f8;color:#888;font-size:12px;border-top:1px solid #eee">
-Sent by Budget App &mdash; <a href="#" style="color:#2563eb">Manage notification preferences</a>
+Sent by Yosan AI &mdash; <a href="#" style="color:#2563eb">Manage notification preferences</a>
 </td></tr>
 </table>
 </td></tr>
@@ -288,7 +288,7 @@ export function receiptReminderEmail(params: {
     html: baseTemplate("Receipt Upload Reminder", `
       <p>Hi ${params.userName},</p>
       <p>It's been <strong>${params.daysSinceLastUpload} day${params.daysSinceLastUpload !== 1 ? "s" : ""}</strong> since your last receipt upload in <em>${params.budgetName}</em>.</p>
-      <p>Keeping your receipts up to date helps Budget App give you accurate spending insights and cash flow forecasts.</p>
+      <p>Keeping your receipts up to date helps Yosan AI give you accurate spending insights and cash flow forecasts.</p>
       <p style="margin-top:24px"><a href="#" style="background:#2563eb;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:600">Upload Receipts Now</a></p>
     `),
   };

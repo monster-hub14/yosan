@@ -7,7 +7,7 @@ import { ExpensesClient } from "./expenses-client";
 import { CategoryTotalsPanel } from "@/components/expenses/category-totals-panel";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
-export const metadata: Metadata = { title: "Expenses | Budget" };
+export const metadata: Metadata = { title: "Expenses | Yosan AI" };
 
 export default async function ExpensesPage() {
   const session = await getSession();

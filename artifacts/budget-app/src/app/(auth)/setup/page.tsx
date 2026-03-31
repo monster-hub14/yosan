@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import SetupWizard from "@/components/setup/SetupWizard";
 
 export const metadata: Metadata = {
-  title: "Setup | Budget",
+  title: "Setup | Yosan AI",
 };
 
 export default async function SetupPage() {

@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "Settings | Budget",
+  title: "Settings | Yosan AI",
 };
 
 interface SettingItem {

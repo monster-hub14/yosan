@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 import { LoginForm } from "./login-form";
 
 export const metadata: Metadata = {
-  title: "Sign In | Budget",
+  title: "Sign In | Yosan AI",
 };
 
 export default async function LoginPage() {
@@ -28,10 +28,10 @@ export default async function LoginPage() {
     <div className="space-y-6">
       <div className="flex flex-col items-center gap-3 text-center">
         <div className="flex items-center justify-center">
-          <img src="/logo.png" alt="Budget Logo" className="w-72 h-72" />
+          <img src="/logo.png" alt="Yosan AI Logo" className="w-72 h-72" />
         </div>
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Budget</h1>
+          <h1 className="text-2xl font-bold text-foreground">Yosan AI</h1>
           <p className="text-sm text-muted-foreground">AI-powered budget tracker</p>
         </div>
       </div>

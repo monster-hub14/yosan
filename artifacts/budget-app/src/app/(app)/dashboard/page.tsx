@@ -13,7 +13,7 @@ import SafeToSpendWidget from "./SafeToSpendWidget";
 import PayPeriodCard from "./PayPeriodCard";
 import { CategoryTotalsPanel } from "@/components/expenses/category-totals-panel";
 
-export const metadata: Metadata = { title: "Dashboard | Budget" };
+export const metadata: Metadata = { title: "Dashboard | Yosan AI" };
 
 function formatCurrency(amount: number, currency = "USD") {
   return new Intl.NumberFormat("en-US", {

@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { Wallet } from "lucide-react";
 
-export const metadata: Metadata = { title: "Recurring Bills | Budget" };
+export const metadata: Metadata = { title: "Recurring Bills | Yosan AI" };
 
 export default async function RecurringPageWrapper() {
   const session = await getSession();

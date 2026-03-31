@@ -1,39 +1,82 @@
-# Self-Hosting Guide
+# Self-Hosting Guide — Yosan AI
 
-This guide covers running the Budget App on your own infrastructure (TrueNAS SCALE, Unraid, bare-metal Linux, etc.).
-
-## Prerequisites
-
-- Node.js 20+ or Docker
-- A writeable data directory for SQLite and file uploads
+This guide covers running Yosan AI on your own infrastructure (TrueNAS SCALE, Unraid, bare-metal Linux, etc.).
 
 ---
 
-## Docker (recommended)
+## Prerequisites
 
-```dockerfile
-FROM node:20-alpine
-WORKDIR /app
-COPY . .
-RUN npm install -g pnpm && pnpm install --frozen-lockfile
-RUN pnpm --filter @workspace/budget-app run build
+- Docker 24+ and Docker Compose v2 (for the recommended path)
+- **Or** Node.js 22+ and pnpm 9+ (for the bare-metal path)
+- A writable directory for persistent data and uploads
 
-ENV DATABASE_URL=file:./data/budget.db
-ENV PORT=24432
-EXPOSE 24432
-CMD ["pnpm", "--filter", "@workspace/budget-app", "run", "start"]
-```
+---
 
-Mount persistent volumes:
-```
-/app/artifacts/budget-app/data    → SQLite database
-/app/artifacts/budget-app/uploads → Receipt file uploads
-```
+## Quick Start — Docker Compose (recommended)
 
-Run migrations on first start (or after upgrades):
+### 1. Create a project folder
+
 ```bash
-cd artifacts/budget-app && npx prisma migrate deploy
+mkdir yosan-ai && cd yosan-ai
 ```
+
+### 2. Copy the app files
+
+Clone or download the `artifacts/budget-app/` directory into this folder, or copy only these files:
+
+```
+Dockerfile
+docker-compose.yml
+package.json
+pnpm-lock.yaml
+prisma/
+src/
+public/
+next.config.ts
+tsconfig.json
+```
+
+### 3. Create a `.env` file
+
+```bash
+# Required
+JWT_SECRET=<at-least-32-random-characters>
+ENCRYPTION_KEY=<at-least-32-random-characters>
+CRON_SECRET=<at-least-32-random-characters>
+
+# Optional
+PORT=24432
+```
+
+Generate secure values:
+```bash
+openssl rand -hex 32   # run once per variable
+```
+
+### 4. Build and start
+
+```bash
+docker compose up -d --build
+```
+
+The first start automatically runs database migrations before the app comes up.
+
+### 5. Open the setup wizard
+
+Navigate to `http://<your-host>:24432/setup` and complete the wizard (admin account → AI provider → SMTP → first budget).
+
+---
+
+## TrueNAS SCALE — Custom Apps
+
+TrueNAS SCALE uses Docker Compose under the hood for Custom Apps.
+
+1. Go to **Apps → Discover Apps → Custom App**.
+2. Paste or upload your `docker-compose.yml`.
+3. Add environment variable entries for `JWT_SECRET`, `ENCRYPTION_KEY`, `CRON_SECRET`, and optionally `PORT`.
+4. Map persistent host paths (or let TrueNAS manage named volumes) for `/app/data` and `/app/uploads`.
+5. Click **Install** and wait for the container health check to pass.
+6. Open `http://<truenas-ip>:24432/setup` to complete setup.
 
 ---
 
@@ -41,14 +84,36 @@ cd artifacts/budget-app && npx prisma migrate deploy
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `DATABASE_URL` | Yes | — | SQLite path, e.g. `file:./data/budget.db` |
-| `JWT_SECRET` | Yes | — | Secret for session tokens (32+ random chars) |
-| `PORT` | No | `3000` | HTTP port the app listens on |
-| `UPLOAD_DIR` | No | `./uploads` | Directory for uploaded receipt files |
-| `CRON_SECRET` | No* | — | Bearer token securing `/api/cron/alerts` |
-| `ENCRYPTION_KEY` | No* | falls back to JWT_SECRET | AES key for encrypting SMTP/API passwords |
+| `DATABASE_URL` | Yes (set by Compose) | `file:/app/data/budget.db` | SQLite path — do not change unless you know what you're doing |
+| `JWT_SECRET` | **Yes** | — | Signs session tokens — use 32+ random characters |
+| `ENCRYPTION_KEY` | **Yes** | falls back to `JWT_SECRET` | AES-256 key for encrypting stored SMTP passwords and AI API keys |
+| `CRON_SECRET` | **Yes** | — | Bearer token that authenticates `/api/cron/alerts` requests |
+| `PORT` | No | `24432` | HTTP port the app listens on |
+| `UPLOAD_DIR` | No | `/app/uploads` | Directory for uploaded receipt images |
+| `NODE_ENV` | No | `production` | Set by the Dockerfile — do not override |
 
-\* Required for production use.
+> **Security note:** `ENCRYPTION_KEY` and `CRON_SECRET` are critical for production use.
+> Losing `ENCRYPTION_KEY` means stored SMTP/AI passwords can no longer be decrypted.
+
+---
+
+## Persistent Volumes
+
+The app writes to two directories inside the container. Mount these as persistent volumes:
+
+| Container path | Contents |
+|---|---|
+| `/app/data` | SQLite database (`budget.db`) |
+| `/app/uploads` | Uploaded receipt images |
+
+The `docker-compose.yml` creates named Docker volumes (`yosan_data`, `yosan_uploads`) automatically.
+For TrueNAS or other hosts where you want bind mounts to a specific host path, replace the volume entries:
+
+```yaml
+volumes:
+  - /mnt/tank/yosan/data:/app/data
+  - /mnt/tank/yosan/uploads:/app/uploads
+```
 
 ---
 
@@ -64,8 +129,6 @@ Every cron request **must** include the `CRON_SECRET` as a Bearer token:
 Authorization: Bearer <CRON_SECRET>
 ```
 
-Set `CRON_SECRET` to a long random string in your environment (e.g. `openssl rand -hex 32`).
-
 ### Alert types
 
 | `type` value | What it sends |
@@ -79,51 +142,50 @@ Set `CRON_SECRET` to a long random string in your environment (e.g. `openssl ran
 | `savings_goal_risk` | Savings goals less than 50% funded |
 | `receipt_reminder` | No receipt uploaded in 7+ days |
 
-### Schedule recommendations (system cron or TrueNAS Tasks)
+### Recommended cron schedule (system cron or TrueNAS Tasks)
 
-Run **all** daily:
+Run all alert types once daily:
 ```cron
-0 7 * * *   curl -sf -X POST https://budget.yourdomain.com/api/cron/alerts \
-              -H "Authorization: Bearer $CRON_SECRET" \
-              -H "Content-Type: application/json" \
-              -d '{"type":"all"}'
+0 8 * * *  curl -sf -X POST http://localhost:24432/api/cron/alerts \
+             -H "Authorization: Bearer YOUR_CRON_SECRET" \
+             -H "Content-Type: application/json" \
+             -d '{"type":"all"}'
 ```
 
-Or split by type for finer control:
-
+Or use finer-grained timing:
 ```cron
-# Overspending + bills check — daily at 08:00
-0 8 * * *   curl -sf -X POST https://budget.local:24432/api/cron/alerts \
+# Overspending + bills — daily at 08:00
+0 8 * * *   curl -sf -X POST http://localhost:24432/api/cron/alerts \
               -H "Authorization: Bearer YOUR_CRON_SECRET" \
               -H "Content-Type: application/json" \
               -d '{"type":"overspending"}'
 
 # Bill reminders — daily at 08:05
-5 8 * * *   curl -sf -X POST https://budget.local:24432/api/cron/alerts \
+5 8 * * *   curl -sf -X POST http://localhost:24432/api/cron/alerts \
               -H "Authorization: Bearer YOUR_CRON_SECRET" \
               -H "Content-Type: application/json" \
               -d '{"type":"bills"}'
 
 # Payday reminder — daily at 08:10
-10 8 * * *  curl -sf -X POST https://budget.local:24432/api/cron/alerts \
+10 8 * * *  curl -sf -X POST http://localhost:24432/api/cron/alerts \
               -H "Authorization: Bearer YOUR_CRON_SECRET" \
               -H "Content-Type: application/json" \
               -d '{"type":"payday"}'
 
-# Deficit risk — daily at 08:15
-15 8 * * *  curl -sf -X POST https://budget.local:24432/api/cron/alerts \
+# Cash flow deficit risk — daily at 08:15
+15 8 * * *  curl -sf -X POST http://localhost:24432/api/cron/alerts \
               -H "Authorization: Bearer YOUR_CRON_SECRET" \
               -H "Content-Type: application/json" \
               -d '{"type":"deficit_risk"}'
 
-# Weekly digest — Sundays at 09:00 (also respects per-user DAILY/MONTHLY setting)
-0 9 * * 0   curl -sf -X POST https://budget.local:24432/api/cron/alerts \
+# Weekly digest — Sundays at 09:00
+0 9 * * 0   curl -sf -X POST http://localhost:24432/api/cron/alerts \
               -H "Authorization: Bearer YOUR_CRON_SECRET" \
               -H "Content-Type: application/json" \
               -d '{"type":"weekly"}'
 
-# Receipt reminder — weekly on Mondays
-0 9 * * 1   curl -sf -X POST https://budget.local:24432/api/cron/alerts \
+# Receipt reminder — Mondays at 09:00
+0 9 * * 1   curl -sf -X POST http://localhost:24432/api/cron/alerts \
               -H "Authorization: Bearer YOUR_CRON_SECRET" \
               -H "Content-Type: application/json" \
               -d '{"type":"receipt_reminder"}'
@@ -134,7 +196,7 @@ Or split by type for finer control:
 1. Go to **System Settings → Advanced → Cron Jobs → Add**.
 2. Set **Command** to the `curl` command above (with your full URL and CRON_SECRET).
 3. Set **Schedule** using the cron expression (e.g. `0 8 * * *`).
-4. Enable **Run As User** = root (or a user with curl access).
+4. Set **Run As User** to `root` or a user with `curl` access.
 
 ### Manual trigger (testing)
 
@@ -147,33 +209,59 @@ curl -X POST http://localhost:24432/api/cron/alerts \
 
 ---
 
-## First-Run Setup
+## Upgrading
 
-1. Start the app and navigate to `http://<host>:<port>/setup`.
-2. Complete the setup wizard: create admin account, configure AI provider, SMTP, and first budget.
-3. Configure notification preferences per user under **Settings → Notifications**.
-4. Add the cron job(s) above to your scheduler.
-
----
-
-## Database Migrations
-
-After upgrading, run:
-```bash
-cd artifacts/budget-app && DATABASE_URL="file:./data/budget.db" npx prisma migrate deploy
-```
-
-This applies any new migration files without resetting your data.
+1. Pull or copy the new app files into your project folder.
+2. Rebuild and restart:
+   ```bash
+   docker compose up -d --build
+   ```
+3. The container entrypoint runs `prisma migrate deploy` automatically on startup, applying any new migrations without touching your data.
 
 ---
 
-## Backup
+## Database Backup
 
 Back up these paths regularly:
-- `artifacts/budget-app/data/budget.db` — all budget data
-- `artifacts/budget-app/uploads/` — receipt images
 
-SQLite backup command:
+| Path | Contents |
+|---|---|
+| `/app/data/budget.db` | All budget, expense, and settings data |
+| `/app/uploads/` | Uploaded receipt images |
+
+SQLite hot backup (safe while the app is running):
 ```bash
-sqlite3 data/budget.db ".backup data/budget.db.bak"
+docker exec <container_name> sqlite3 /app/data/budget.db ".backup /app/data/budget.db.bak"
 ```
+
+Or copy the volume directory directly with the container running — SQLite WAL mode makes this safe.
+
+---
+
+## Bare-Metal (Node.js)
+
+If you prefer not to use Docker:
+
+1. Install Node.js 22+ and pnpm 9+.
+2. Copy the app files into a directory.
+3. Install dependencies:
+   ```bash
+   pnpm install --frozen-lockfile
+   ```
+4. Generate the Prisma client:
+   ```bash
+   npx prisma generate
+   ```
+5. Create a `.env` file with the environment variables listed above.
+6. Run migrations:
+   ```bash
+   DATABASE_URL="file:./data/budget.db" npx prisma migrate deploy
+   ```
+7. Build:
+   ```bash
+   pnpm run build
+   ```
+8. Start:
+   ```bash
+   PORT=24432 pnpm run start
+   ```

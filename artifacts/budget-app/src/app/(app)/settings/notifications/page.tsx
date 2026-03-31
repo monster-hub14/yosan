@@ -4,7 +4,7 @@ import { getSession } from "@/lib/auth/session";
 import { NotificationsForm } from "./notifications-form";
 
 export const metadata: Metadata = {
-  title: "Notifications | Settings | Budget",
+  title: "Notifications | Settings | Yosan AI",
 };
 
 export default async function NotificationsPage() {

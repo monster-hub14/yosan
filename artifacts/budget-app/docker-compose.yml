@@ -1,0 +1,29 @@
+services:
+  yosan-ai:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "${PORT:-24432}:${PORT:-24432}"
+    environment:
+      DATABASE_URL: file:/app/data/budget.db
+      JWT_SECRET: ${JWT_SECRET}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      CRON_SECRET: ${CRON_SECRET}
+      PORT: ${PORT:-24432}
+      UPLOAD_DIR: /app/uploads
+      NODE_ENV: production
+    volumes:
+      - yosan_data:/app/data
+      - yosan_uploads:/app/uploads
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:${PORT:-24432}/api/setup/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  yosan_data:
+  yosan_uploads:

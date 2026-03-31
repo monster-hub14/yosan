@@ -16,7 +16,7 @@ import { Wallet } from "lucide-react";
 import { EmailForwardingPanel } from "./email-forwarding-panel";
 
 export const metadata: Metadata = {
-  title: "Budget Settings | Budget",
+  title: "Budget Settings | Yosan AI",
 };
 
 export default async function BudgetSettingsPage() {

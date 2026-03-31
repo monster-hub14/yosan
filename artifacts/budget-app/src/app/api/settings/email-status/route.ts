@@ -19,6 +19,6 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({
     isEnabled: config?.isEnabled ?? false,
-    fromName: config?.fromName ?? "Budget App",
+    fromName: config?.fromName ?? "Yosan AI",
   });
 }

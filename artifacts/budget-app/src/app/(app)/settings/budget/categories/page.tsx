@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tag } from "lucide-react";
 import { CategoriesClient } from "./categories-client";
 
-export const metadata: Metadata = { title: "Categories | Settings | Budget" };
+export const metadata: Metadata = { title: "Categories | Settings | Yosan AI" };
 
 export default async function CategoriesPage() {
   const session = await getSession();

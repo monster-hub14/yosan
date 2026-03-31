@@ -273,14 +273,6 @@ function buildFallbackRecommendations(
   return recs;
 }
 
-function getWeekStart(): string {
-  const d = new Date();
-  const day = d.getUTCDay();
-  const diff = d.getUTCDate() - day + (day === 0 ? -6 : 1);
-  d.setUTCDate(diff);
-  return d.toISOString().slice(0, 10);
-}
-
 export async function persistInsight(budgetId: string, result: AnalysisResult): Promise<string> {
   const insight = await db.insight.create({
     data: {

@@ -61,7 +61,7 @@ export async function PUT(request: NextRequest) {
       smtpUser: smtpUser || null,
       smtpPass: resolvedEncryptedPass ?? null,
       fromAddress: fromAddress || null,
-      fromName: fromName || "Budget App",
+      fromName: fromName || "Yosan AI",
       isEnabled: isEnabled ?? false,
     },
     update: {
@@ -70,7 +70,7 @@ export async function PUT(request: NextRequest) {
       smtpEncryption: smtpEncryption || "STARTTLS",
       smtpUser: smtpUser || null,
       fromAddress: fromAddress || null,
-      fromName: fromName || "Budget App",
+      fromName: fromName || "Yosan AI",
       isEnabled: isEnabled ?? false,
       ...(resolvedEncryptedPass !== undefined ? { smtpPass: resolvedEncryptedPass } : {}),
     },

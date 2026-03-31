@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth/session";
 import NewBudgetForm from "./NewBudgetForm";
 
-export const metadata: Metadata = { title: "New Budget | Budget" };
+export const metadata: Metadata = { title: "New Budget | Yosan AI" };
 
 export default async function NewBudgetPage() {
   const session = await getSession();

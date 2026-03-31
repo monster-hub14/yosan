@@ -1,7 +1,7 @@
 import { Metadata } from "next";
 import { BarChart3 } from "lucide-react";
 
-export const metadata: Metadata = { title: "Reports | Budget" };
+export const metadata: Metadata = { title: "Reports | Yosan AI" };
 
 export default function ReportsPage() {
   return (

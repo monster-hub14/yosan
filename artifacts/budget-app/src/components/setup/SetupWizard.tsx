@@ -105,7 +105,7 @@ export default function SetupWizard() {
     smtpUser: "",
     smtpPass: "",
     fromAddress: "",
-    fromName: "Budget App",
+    fromName: "Yosan AI",
   });
 
   const step = steps[currentStep];

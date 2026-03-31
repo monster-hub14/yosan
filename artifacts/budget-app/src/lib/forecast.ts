@@ -274,10 +274,3 @@ function advanceByExpenseFrequency(date: Date, frequency: string): Date {
   return d;
 }
 
-function getWeekStart(): string {
-  const d = new Date();
-  const day = d.getUTCDay();
-  const diff = d.getUTCDate() - day + (day === 0 ? -6 : 1);
-  d.setUTCDate(diff);
-  return d.toISOString().slice(0, 10);
-}

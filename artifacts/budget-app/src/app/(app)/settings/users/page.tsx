@@ -22,7 +22,7 @@ import { UserRound, Shield } from "lucide-react";
 import { UserAIControlButton } from "./user-ai-controls";
 
 export const metadata: Metadata = {
-  title: "Users | Settings | Budget",
+  title: "Users | Settings | Yosan AI",
 };
 
 export default async function UsersPage() {

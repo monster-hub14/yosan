@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { Wallet } from "lucide-react";
 
-export const metadata: Metadata = { title: "Income | Budget" };
+export const metadata: Metadata = { title: "Income | Yosan AI" };
 
 export default async function IncomePageWrapper() {
   const session = await getSession();

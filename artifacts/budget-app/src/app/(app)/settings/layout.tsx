@@ -4,7 +4,7 @@ import { getSession } from "@/lib/auth/session";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = {
-  title: "Settings | Budget",
+  title: "Settings | Yosan AI",
 };
 
 const userLinks = [

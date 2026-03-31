@@ -30,7 +30,7 @@ export function EmailSettingsForm() {
     smtpUser: "",
     smtpPass: "",
     fromAddress: "",
-    fromName: "Budget App",
+    fromName: "Yosan AI",
     isEnabled: false,
   });
 
@@ -215,7 +215,7 @@ export function EmailSettingsForm() {
                   id="fromName"
                   value={config.fromName}
                   onChange={(e) => setConfig((c) => ({ ...c, fromName: e.target.value }))}
-                  placeholder="Budget App"
+                  placeholder="Yosan AI"
                 />
               </div>
             </div>
