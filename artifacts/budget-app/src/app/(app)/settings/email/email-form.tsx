@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   Loader2,
   Save,
@@ -15,6 +15,7 @@ import {
   ChevronDown,
   ChevronRight,
   Clock,
+  RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,6 +31,29 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
+
+// ---------------------------------------------------------------------------
+// safeJson: safely parses a fetch Response body without throwing.
+// Returns null for empty bodies, non-JSON bodies, or malformed JSON.
+// ---------------------------------------------------------------------------
+async function safeJson(res: Response): Promise<unknown> {
+  const ct = res.headers.get("content-type") ?? "";
+  try {
+    const text = await res.text();
+    if (!text.trim()) return null;
+    // Parse if content-type says JSON, or if body looks like JSON
+    if (
+      ct.includes("application/json") ||
+      text.trimStart().startsWith("{") ||
+      text.trimStart().startsWith("[")
+    ) {
+      return JSON.parse(text);
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 interface EmailConfig {
   smtpHost: string;
@@ -123,6 +147,7 @@ function StatusBadge({ kind, lastTestedAt }: { kind: StatusKind; lastTestedAt: s
 
 export function EmailSettingsForm() {
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testEmail, setTestEmail] = useState("");
@@ -137,22 +162,49 @@ export function EmailSettingsForm() {
    */
   const [savedSmtpHost, setSavedSmtpHost] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetch("/api/settings/email")
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.config) {
-          const loaded: EmailConfig = { ...DEFAULT_CONFIG, ...data.config };
-          setConfig(loaded);
-          setSavedSmtpHost(loaded.smtpHost || null);
-          // If advanced fields are already set, open them by default
-          if (loaded.fromAddress || (loaded.fromName && loaded.fromName !== "Yosan AI")) {
-            setAdvancedOpen(true);
-          }
+  const loadConfig = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const res = await fetch("/api/settings/email");
+      const data = await safeJson(res) as Record<string, unknown> | null;
+
+      if (data === null) {
+        setLoadError(
+          res.ok
+            ? "Unexpected response from server — please reload the page"
+            : `Server error (${res.status}) — check server logs`
+        );
+        return;
+      }
+
+      if (!data.ok) {
+        const msg = typeof data.error === "string" && data.error
+          ? data.error
+          : "Failed to load email settings";
+        setLoadError(msg);
+        return;
+      }
+
+      const cfg = data.config as Partial<EmailConfig> | null | undefined;
+      if (cfg) {
+        const loaded: EmailConfig = { ...DEFAULT_CONFIG, ...cfg };
+        setConfig(loaded);
+        setSavedSmtpHost(loaded.smtpHost || null);
+        if (loaded.fromAddress || (loaded.fromName && loaded.fromName !== "Yosan AI")) {
+          setAdvancedOpen(true);
         }
-      })
-      .finally(() => setLoading(false));
+      }
+    } catch {
+      setLoadError("Failed to load email settings — please reload the page");
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    loadConfig();
+  }, [loadConfig]);
 
   const statusKind = getStatus(config, !!savedSmtpHost);
   /** Test is available only when the server has a saved SMTP host, regardless of current form edits. */
@@ -167,17 +219,31 @@ export function EmailSettingsForm() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(config),
       });
-      const data = await res.json();
-      if (res.ok) {
-        // Update config with what was returned (preserves lastTestedAt etc.)
-        if (data.config) {
-          setConfig((c) => ({ ...c, ...data.config }));
-          setSavedSmtpHost(data.config.smtpHost || null);
-        }
-        toast.success("Settings saved");
-      } else {
-        toast.error(data.error || "Failed to save");
+      const data = await safeJson(res) as Record<string, unknown> | null;
+
+      if (data === null) {
+        toast.error(res.ok ? "Unexpected response from server" : "Server error — check server logs");
+        return;
       }
+
+      if (!data.ok) {
+        toast.error(
+          typeof data.error === "string" && data.error ? data.error : "Failed to save"
+        );
+        return;
+      }
+
+      // Confirm the response includes the saved config
+      if (!data.config || typeof data.config !== "object") {
+        toast.error("Unexpected response from server");
+        return;
+      }
+
+      // Refresh state from server truth
+      const saved = data.config as Partial<EmailConfig>;
+      setConfig((c) => ({ ...c, ...saved }));
+      setSavedSmtpHost((saved.smtpHost as string) || null);
+      toast.success("Settings saved");
     } catch {
       toast.error("Something went wrong");
     } finally {
@@ -196,19 +262,35 @@ export function EmailSettingsForm() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ toAddress: testEmail }),
       });
-      const data = await res.json();
-      if (res.ok && data.ok) {
-        setTestResult({ ok: true, lastTestedAt: data.lastTestedAt });
-        setConfig((c) => ({ ...c, lastTestOk: true, lastTestError: null, lastTestedAt: data.lastTestedAt ?? c.lastTestedAt }));
+      const data = await safeJson(res) as Record<string, unknown> | null;
+
+      if (data === null) {
+        const errMsg = res.ok ? "Unexpected response from server" : "Server error — check server logs";
+        setTestResult({ ok: false, error: errMsg });
+        toast.error(errMsg);
+        return;
+      }
+
+      if (data.ok === true) {
+        const lastTestedAt = typeof data.lastTestedAt === "string" ? data.lastTestedAt : undefined;
+        setTestResult({ ok: true, lastTestedAt });
+        setConfig((c) => ({
+          ...c,
+          lastTestOk: true,
+          lastTestError: null,
+          lastTestedAt: lastTestedAt ?? c.lastTestedAt,
+        }));
         toast.success("Test email sent successfully");
       } else {
-        const errMsg = data.error ?? "Send failed";
-        setTestResult({ ok: false, error: errMsg, lastTestedAt: data.lastTestedAt });
+        const errMsg =
+          typeof data.error === "string" && data.error ? data.error : "Send failed";
+        const lastTestedAt = typeof data.lastTestedAt === "string" ? data.lastTestedAt : undefined;
+        setTestResult({ ok: false, error: errMsg, lastTestedAt });
         setConfig((c) => ({
           ...c,
           lastTestOk: false,
           lastTestError: errMsg,
-          lastTestedAt: data.lastTestedAt ?? c.lastTestedAt,
+          lastTestedAt: lastTestedAt ?? c.lastTestedAt,
         }));
         toast.error(errMsg);
       }
@@ -224,6 +306,35 @@ export function EmailSettingsForm() {
     return (
       <div className="flex justify-center py-12">
         <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="space-y-6 max-w-xl">
+        <Card className="border-border">
+          <CardContent className="pt-6">
+            <div className="rounded-md bg-destructive/10 border border-destructive/30 px-4 py-3 flex items-start gap-3">
+              <XCircle className="w-4 h-4 text-destructive mt-0.5 shrink-0" />
+              <div className="flex-1 space-y-2">
+                <p className="text-sm text-destructive font-medium">
+                  Could not load email settings
+                </p>
+                <p className="text-xs text-destructive/80">{loadError}</p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 gap-1.5 text-xs"
+                  onClick={loadConfig}
+                >
+                  <RefreshCw className="w-3 h-3" />
+                  Retry
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }
