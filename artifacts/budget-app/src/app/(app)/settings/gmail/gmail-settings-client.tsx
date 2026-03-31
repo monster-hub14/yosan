@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   Loader2, Mail, CheckCircle2, AlertCircle, RefreshCw, LogOut,
-  Tag, Calendar, Hash, ArrowRight, Info, RotateCcw,
+  Tag, Calendar, Hash, ArrowRight, Info, RotateCcw, ExternalLink,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -54,6 +54,7 @@ export function GmailSettingsClient({ budgets, defaultBudgetId }: Props) {
   const [status, setStatus] = useState<GmailStatus | null>(null);
   const [labels, setLabels] = useState<GmailLabel[]>([]);
   const [loadingLabels, setLoadingLabels] = useState(false);
+  const [labelApiError, setLabelApiError] = useState<"api_disabled" | null>(null);
   const [selectedLabelIds, setSelectedLabelIds] = useState<string[]>([]);
   const [syncCutoffDate, setSyncCutoffDate] = useState("");
   const [maxPerSync, setMaxPerSync] = useState(50);
@@ -137,11 +138,17 @@ export function GmailSettingsClient({ budgets, defaultBudgetId }: Props) {
 
   async function loadLabels() {
     setLoadingLabels(true);
+    setLabelApiError(null);
     try {
       const res = await fetch("/api/settings/gmail/labels");
       const data = await res.json();
       if (data.ok) {
         setLabels(data.labels ?? []);
+      } else if (
+        data.errorCode === "gmail_api_forbidden" ||
+        data.errorCode === "gmail_api_unauthorized"
+      ) {
+        setLabelApiError("api_disabled");
       } else if (data.reconnect_required) {
         toast.error("Gmail disconnected. Please reconnect.");
         fetchStatus();
@@ -358,6 +365,32 @@ export function GmailSettingsClient({ budgets, defaultBudgetId }: Props) {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* Gmail API not enabled banner */}
+            {labelApiError === "api_disabled" && (
+              <div className="flex gap-3 p-4 rounded-lg bg-amber-500/10 border border-amber-500/30">
+                <AlertCircle className="w-5 h-5 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+                <div className="space-y-2 min-w-0">
+                  <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
+                    Gmail API not enabled or access denied
+                  </p>
+                  <p className="text-sm text-amber-700 dark:text-amber-400">
+                    Your OAuth credentials are valid, but the Gmail API may not be enabled in your
+                    Google Cloud project. Go to the Gmail API library page, enable it, wait a few
+                    minutes, then try loading labels again.
+                  </p>
+                  <a
+                    href="https://console.cloud.google.com/apis/library/gmail.googleapis.com"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-sm font-medium text-amber-800 dark:text-amber-300 underline underline-offset-2 hover:no-underline"
+                  >
+                    Enable Gmail API in Google Cloud Console
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                </div>
+              </div>
+            )}
+
             <div className="flex items-center gap-2">
               <Button variant="outline" size="sm" onClick={loadLabels} disabled={loadingLabels}>
                 {loadingLabels ? (
