@@ -43,7 +43,32 @@ export async function PUT(
   const access = await requireBudgetManage(session, id);
   if (access instanceof NextResponse) return access;
 
-  const { name, currency, description } = await request.json();
+  const { name, currency, description, additionalNotificationEmails } = await request.json();
+
+  // Validate + deduplicate additional notification emails if provided
+  let additionalEmailsJson: string | undefined;
+  if (additionalNotificationEmails !== undefined) {
+    if (!Array.isArray(additionalNotificationEmails)) {
+      return NextResponse.json({ ok: false, error: "additionalNotificationEmails must be an array" }, { status: 400 });
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const seen = new Set<string>();
+    const deduped: string[] = [];
+    for (const raw of additionalNotificationEmails) {
+      if (typeof raw !== "string") {
+        return NextResponse.json({ ok: false, error: "Each email must be a string" }, { status: 400 });
+      }
+      const email = raw.trim().toLowerCase();
+      if (!emailRegex.test(email)) {
+        return NextResponse.json({ ok: false, error: `Invalid email address: ${raw}` }, { status: 400 });
+      }
+      if (!seen.has(email)) {
+        seen.add(email);
+        deduped.push(email);
+      }
+    }
+    additionalEmailsJson = JSON.stringify(deduped);
+  }
 
   const budget = await db.budget.update({
     where: { id },
@@ -51,6 +76,7 @@ export async function PUT(
       ...(name ? { name: name.trim() } : {}),
       ...(currency ? { currency } : {}),
       ...(description !== undefined ? { description: description?.trim() || null } : {}),
+      ...(additionalEmailsJson !== undefined ? { additionalNotificationEmails: additionalEmailsJson } : {}),
     },
   });
 

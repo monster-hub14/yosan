@@ -83,6 +83,12 @@ export async function POST(request: NextRequest) {
       ...budget.memberships.map((m) => m.user),
     ].filter((u): u is typeof budget.owner => !!u);
 
+    // Parse additional notification email addresses (budget-level, no account required)
+    const extraEmails: string[] = (() => {
+      try { return JSON.parse(budget.additionalNotificationEmails) as string[]; }
+      catch { return []; }
+    })();
+
     // Load per-user notification configs for bill reminder lead time + notification email
     const userIds = allUsers.map((u) => u.id);
     const notifConfigs = await db.userNotificationConfig.findMany({
@@ -113,6 +119,22 @@ export async function POST(request: NextRequest) {
               currency: budget.currency,
             });
             await sendMail({ to: toEmail, subject, html });
+            sentCount.overspending++;
+          }
+        }
+
+        // Extra recipients (no preference check — explicitly configured)
+        for (const extraEmail of extraEmails) {
+          for (const cat of overspentCats) {
+            const { subject, html } = overspendingAlertEmail({
+              userName: budget.name,
+              budgetName: budget.name,
+              categoryName: cat.categoryName,
+              spent: cat.actual,
+              target: cat.target ?? cat.actual,
+              currency: budget.currency,
+            });
+            await sendMail({ to: extraEmail, subject, html });
             sentCount.overspending++;
           }
         }
@@ -171,6 +193,28 @@ export async function POST(request: NextRequest) {
           await sendMail({ to: toEmail, subject, html });
           sentCount.weekly++;
         }
+
+        // Extra recipients — always send if analysis was run; no frequency gating
+        if (analysis && extraEmails.length > 0) {
+          const topCats = analysis.insights
+            .filter((i) => i.actual > 0)
+            .sort((a, b) => b.actual - a.actual)
+            .slice(0, 5)
+            .map((i) => ({ name: i.categoryName, amount: i.actual }));
+          for (const extraEmail of extraEmails) {
+            const { subject, html } = weeklySummaryEmail({
+              userName: budget.name,
+              budgetName: budget.name,
+              totalSpent: analysis.totalSpent,
+              totalIncome: analysis.totalBudget ?? 0,
+              currency: budget.currency,
+              topCategories: topCats,
+              status: analysis.status,
+            });
+            await sendMail({ to: extraEmail, subject, html });
+            sentCount.weekly++;
+          }
+        }
       } catch (err) {
         console.error(`[cron/alerts] digest summary failed for budget ${budget.id}:`, err);
       }
@@ -207,6 +251,27 @@ export async function POST(request: NextRequest) {
           sentCount.bills++;
         }
       }
+
+      // Extra recipients — use default lead of 3 days
+      const extraTargetDate = new Date(today.getTime() + 3 * 86400000);
+      const extraTargetDateStr = extraTargetDate.toISOString().slice(0, 10);
+      for (const rec of budget.recurringExpenses) {
+        if (!rec.nextDueDate) continue;
+        const dueStr = new Date(rec.nextDueDate).toISOString().slice(0, 10);
+        if (dueStr !== extraTargetDateStr) continue;
+        for (const extraEmail of extraEmails) {
+          const { subject, html } = upcomingBillEmail({
+            userName: budget.name,
+            budgetName: budget.name,
+            billName: rec.name,
+            amount: rec.amount,
+            dueDate: dueStr,
+            currency: budget.currency,
+          });
+          await sendMail({ to: extraEmail, subject, html });
+          sentCount.bills++;
+        }
+      }
     }
 
     // Payday reminders — 1 day ahead
@@ -234,6 +299,19 @@ export async function POST(request: NextRequest) {
             currency: budget.currency,
           });
           await sendMail({ to: toEmail, subject, html });
+          sentCount.payday++;
+        }
+
+        // Extra recipients
+        for (const extraEmail of extraEmails) {
+          const { subject, html } = paydayReminderEmail({
+            userName: budget.name,
+            budgetName: budget.name,
+            payAmount: source.amount,
+            payDate: tomorrowStr,
+            currency: budget.currency,
+          });
+          await sendMail({ to: extraEmail, subject, html });
           sentCount.payday++;
         }
       }
@@ -269,6 +347,19 @@ export async function POST(request: NextRequest) {
             await sendMail({ to: toEmail, subject, html });
             sentCount.deficitRisk++;
           }
+
+          // Extra recipients
+          for (const extraEmail of extraEmails) {
+            const { subject, html } = deficitRiskEmail({
+              userName: budget.name,
+              budgetName: budget.name,
+              projectedDeficit: worstBalance,
+              withinDays: Math.max(1, withinDays),
+              currency: budget.currency,
+            });
+            await sendMail({ to: extraEmail, subject, html });
+            sentCount.deficitRisk++;
+          }
         }
       } catch (err) {
         console.error(`[cron/alerts] deficit risk check failed for budget ${budget.id}:`, err);
@@ -301,6 +392,20 @@ export async function POST(request: NextRequest) {
             currency: budget.currency,
           });
           await sendMail({ to: toEmail, subject, html });
+          sentCount.savingsGoalRisk++;
+        }
+
+        // Extra recipients
+        for (const extraEmail of extraEmails) {
+          const { subject, html } = savingsGoalRiskEmail({
+            userName: budget.name,
+            budgetName: budget.name,
+            goalName: goal.name,
+            targetAmount: goal.targetAmount,
+            currentAmount: goal.currentAmount ?? 0,
+            currency: budget.currency,
+          });
+          await sendMail({ to: extraEmail, subject, html });
           sentCount.savingsGoalRisk++;
         }
       }
@@ -340,6 +445,17 @@ export async function POST(request: NextRequest) {
               daysSinceLastUpload: daysSince,
             });
             await sendMail({ to: toEmail, subject, html });
+            sentCount.receiptReminder++;
+          }
+
+          // Extra recipients
+          for (const extraEmail of extraEmails) {
+            const { subject, html } = receiptReminderEmail({
+              userName: budget.name,
+              budgetName: budget.name,
+              daysSinceLastUpload: daysSince,
+            });
+            await sendMail({ to: extraEmail, subject, html });
             sentCount.receiptReminder++;
           }
         }

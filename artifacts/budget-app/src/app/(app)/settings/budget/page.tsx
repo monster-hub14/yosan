@@ -14,6 +14,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Wallet } from "lucide-react";
 import { EmailForwardingPanel } from "./email-forwarding-panel";
+import { AdditionalNotificationEmailsPanel } from "./additional-notification-emails-panel";
 
 export const metadata: Metadata = {
   title: "Budget Settings | Yosan AI",
@@ -114,6 +115,15 @@ export default async function BudgetSettingsPage() {
 
       {/* Receipt forwarding (budget-level) */}
       <EmailForwardingPanel budgetId={budget.id} />
+
+      {/* Additional notification email addresses */}
+      <AdditionalNotificationEmailsPanel
+        budgetId={budget.id}
+        initialEmails={(() => {
+          try { return JSON.parse(budget.additionalNotificationEmails) as string[]; }
+          catch { return []; }
+        })()}
+      />
     </div>
   );
 }
