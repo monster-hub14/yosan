@@ -42,14 +42,17 @@ export async function GET(request: NextRequest) {
 
     // GmailDecryptError — decrypt() returned null (corrupt/key mismatch) or empty string
     if (err instanceof GmailDecryptError) {
-      // null reason → actual decryption failure for access or refresh token
-      // empty reason → successfully decrypted but token string is empty
-      const code =
-        err.reason === "null"
-          ? "gmail_token_decrypt_failed"
-          : err.which === "access"
-          ? "gmail_access_token_missing"
-          : "gmail_refresh_token_missing";
+      // null reason → decryption failed (corrupt ciphertext or key mismatch)
+      // empty reason → decrypt succeeded but produced an empty string
+      // oauth_config → always a decrypt failure regardless of reason
+      let code: string;
+      if (err.reason === "null" || err.which === "oauth_config") {
+        code = "gmail_token_decrypt_failed";
+      } else if (err.which === "access") {
+        code = "gmail_access_token_missing";
+      } else {
+        code = "gmail_refresh_token_missing";
+      }
       console.error(
         `${LOG} errorCode=${code} which=${err.which} reason=${err.reason} message="${err.message}"`
       );
