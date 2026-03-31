@@ -3,7 +3,8 @@
 import { useState, useEffect, Suspense } from "react";
 import {
   Loader2, Save, Mail, Eye, EyeOff, CheckCircle2, AlertCircle,
-  ArrowRight, Tag, RefreshCw,
+  ArrowRight, Tag, RefreshCw, Bug, ChevronDown, ChevronRight,
+  Copy, ExternalLink, ShieldCheck, ShieldAlert, Key,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,6 +25,23 @@ interface OAuthConfig {
 interface Budget {
   id: string;
   name: string;
+}
+
+interface DebugData {
+  ok: boolean;
+  error?: string;
+  decryptionOk: boolean;
+  clientIdSuffix: string | null;
+  clientIdLength: number | null;
+  rawClientIdLength: number | null;
+  hasClientSecret: boolean;
+  encryptionKeySource: string;
+  appBaseUrl: string;
+  appBaseUrlSource: string;
+  redirectUri: string;
+  scope: string;
+  authUrlPreview: string | null;
+  configUpdatedAt: string | null;
 }
 
 interface Props {
@@ -52,6 +70,15 @@ const STEPS: { num: number; Icon: React.ElementType; title: string; desc: string
   },
 ];
 
+function DebugRow({ label, value, mono = false }: { label: string; value: React.ReactNode; mono?: boolean }) {
+  return (
+    <div className="grid grid-cols-[180px_1fr] gap-2 py-1.5 border-b border-border/50 last:border-0 text-xs">
+      <span className="text-muted-foreground font-medium">{label}</span>
+      <span className={mono ? "font-mono break-all" : ""}>{value}</span>
+    </div>
+  );
+}
+
 export function GmailOAuthForm({ budgets, defaultBudgetId }: Props) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -62,6 +89,11 @@ export function GmailOAuthForm({ budgets, defaultBudgetId }: Props) {
     isConfigured: false,
   });
 
+  const [debugOpen, setDebugOpen] = useState(false);
+  const [debugData, setDebugData] = useState<DebugData | null>(null);
+  const [loadingDebug, setLoadingDebug] = useState(false);
+  const [copied, setCopied] = useState(false);
+
   useEffect(() => {
     fetch("/api/settings/gmail-oauth")
       .then((r) => r.json())
@@ -70,6 +102,31 @@ export function GmailOAuthForm({ budgets, defaultBudgetId }: Props) {
       })
       .finally(() => setLoading(false));
   }, []);
+
+  async function loadDebug() {
+    setLoadingDebug(true);
+    try {
+      const res = await fetch("/api/settings/gmail/debug");
+      const data = await res.json();
+      setDebugData(data);
+    } catch {
+      toast.error("Failed to load debug info");
+    } finally {
+      setLoadingDebug(false);
+    }
+  }
+
+  function toggleDebug() {
+    if (!debugOpen && !debugData) loadDebug();
+    setDebugOpen((v) => !v);
+  }
+
+  async function copyAuthUrl() {
+    if (!debugData?.authUrlPreview) return;
+    await navigator.clipboard.writeText(debugData.authUrlPreview);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
@@ -86,6 +143,7 @@ export function GmailOAuthForm({ budgets, defaultBudgetId }: Props) {
       const data = await res.json();
       if (data.ok) {
         setConfig(data.config);
+        setDebugData(null); // invalidate debug cache after save
         toast.success("Gmail OAuth credentials saved");
       } else {
         toast.error(data.error || "Failed to save credentials");
@@ -122,7 +180,6 @@ export function GmailOAuthForm({ budgets, defaultBudgetId }: Props) {
                 </CardDescription>
               </div>
             </div>
-            {/* Show "Not set" badge only when not configured; configured state is shown via callout below */}
             {!config.isConfigured && (
               <Badge variant="outline" className="gap-1 text-muted-foreground shrink-0">
                 <AlertCircle className="w-3 h-3" />
@@ -132,7 +189,7 @@ export function GmailOAuthForm({ budgets, defaultBudgetId }: Props) {
           </div>
         </CardHeader>
         <CardContent className="space-y-5">
-          {/* Success callout — replaces badge when configured */}
+          {/* Success callout */}
           {config.isConfigured && (
             <div className="flex gap-3 p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
               <CheckCircle2 className="w-5 h-5 shrink-0 mt-0.5 text-emerald-600 dark:text-emerald-400" />
@@ -165,6 +222,7 @@ export function GmailOAuthForm({ budgets, defaultBudgetId }: Props) {
                 </span> as an Authorized JavaScript Origin (no trailing slash, no path)
               </li>
               <li>Enable the Gmail API in your project</li>
+              <li>Add <span className="font-mono">gmail.readonly</span> scope to your OAuth consent screen</li>
               <li>Paste the Client ID and Client Secret below and save</li>
             </ol>
           </div>
@@ -218,6 +276,160 @@ export function GmailOAuthForm({ budgets, defaultBudgetId }: Props) {
         </CardContent>
       </Card>
 
+      {/* ── OAuth Debug Panel (shown when configured) ── */}
+      {config.isConfigured && (
+        <Card className="border-border border-dashed">
+          <CardHeader className="pb-3">
+            <button
+              type="button"
+              onClick={toggleDebug}
+              className="flex items-center gap-2 w-full text-left"
+            >
+              {debugOpen ? (
+                <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />
+              ) : (
+                <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+              )}
+              <Bug className="w-4 h-4 text-muted-foreground shrink-0" />
+              <span className="text-sm font-medium">OAuth Debug</span>
+              <span className="text-xs text-muted-foreground ml-1">
+                — verify client ID, redirect URI, and decryption status
+              </span>
+            </button>
+          </CardHeader>
+
+          {debugOpen && (
+            <CardContent className="pt-0 space-y-4">
+              {loadingDebug ? (
+                <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Loading debug info…
+                </div>
+              ) : debugData ? (
+                <>
+                  {/* Decryption status banner */}
+                  {debugData.decryptionOk ? (
+                    <div className="flex items-center gap-2 p-3 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-xs text-emerald-700 dark:text-emerald-400">
+                      <ShieldCheck className="w-4 h-4 shrink-0" />
+                      Credentials decrypted successfully — the app is reading your stored client ID correctly.
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 p-3 rounded-md bg-red-500/10 border border-red-500/30 text-xs text-red-700 dark:text-red-400">
+                      <ShieldAlert className="w-4 h-4 shrink-0" />
+                      Decryption failed — the stored credentials cannot be read. Re-enter and save your Client ID and Secret.
+                    </div>
+                  )}
+
+                  {/* Debug fields table */}
+                  <div className="rounded-md border border-border px-3 py-1">
+                    <DebugRow
+                      label="Decryption"
+                      value={
+                        debugData.decryptionOk ? (
+                          <span className="text-emerald-600 dark:text-emerald-400 font-medium">✓ OK</span>
+                        ) : (
+                          <span className="text-red-600 dark:text-red-400 font-medium">✗ FAILED</span>
+                        )
+                      }
+                    />
+                    <DebugRow
+                      label="Encryption key source"
+                      value={
+                        <span className="flex items-center gap-1.5">
+                          <Key className="w-3 h-3 text-muted-foreground" />
+                          <span className="font-mono">{debugData.encryptionKeySource}</span>
+                        </span>
+                      }
+                    />
+                    <DebugRow
+                      label="Client ID"
+                      value={
+                        debugData.clientIdSuffix
+                          ? `${debugData.clientIdSuffix} (${debugData.clientIdLength} chars)`
+                          : "— (decryption failed)"
+                      }
+                      mono
+                    />
+                    <DebugRow
+                      label="Raw encrypted length"
+                      value={debugData.rawClientIdLength ? `${debugData.rawClientIdLength} chars` : "—"}
+                    />
+                    <DebugRow
+                      label="Has client secret"
+                      value={
+                        debugData.hasClientSecret ? (
+                          <span className="text-emerald-600 dark:text-emerald-400">✓ yes</span>
+                        ) : (
+                          <span className="text-red-600 dark:text-red-400">✗ no / decryption failed</span>
+                        )
+                      }
+                    />
+                    <DebugRow label="App base URL" value={debugData.appBaseUrl} mono />
+                    <DebugRow label="Base URL source" value={debugData.appBaseUrlSource} />
+                    <DebugRow label="Redirect URI" value={debugData.redirectUri} mono />
+                    <DebugRow label="Scope" value={debugData.scope} mono />
+                    <DebugRow
+                      label="Config saved"
+                      value={
+                        debugData.configUpdatedAt
+                          ? new Date(debugData.configUpdatedAt).toLocaleString()
+                          : "—"
+                      }
+                    />
+                  </div>
+
+                  {/* Auth URL preview */}
+                  {debugData.authUrlPreview && (
+                    <div className="space-y-2">
+                      <p className="text-xs font-medium text-muted-foreground">
+                        Auth URL preview — this is the exact URL the app sends to Google:
+                      </p>
+                      <div className="rounded-md border border-border bg-muted/30 p-2">
+                        <p className="text-xs font-mono break-all text-foreground/80 leading-relaxed">
+                          {debugData.authUrlPreview}
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-xs gap-1.5"
+                          onClick={copyAuthUrl}
+                        >
+                          <Copy className="w-3 h-3" />
+                          {copied ? "Copied!" : "Copy URL"}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-xs gap-1.5"
+                          onClick={() => window.open(debugData.authUrlPreview!, "_blank")}
+                        >
+                          <ExternalLink className="w-3 h-3" />
+                          Open in new tab
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 text-xs gap-1.5 ml-auto"
+                          onClick={loadDebug}
+                          disabled={loadingDebug}
+                        >
+                          {loadingDebug ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                          Refresh
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="text-xs text-muted-foreground py-2">Failed to load debug info.</div>
+              )}
+            </CardContent>
+          )}
+        </Card>
+      )}
+
       {/* ── Section 2: User setup flow (shown only once OAuth is configured) ── */}
       {config.isConfigured && (
         <>
@@ -245,7 +457,7 @@ export function GmailOAuthForm({ budgets, defaultBudgetId }: Props) {
             </ol>
           </div>
 
-          {/* Prominent CTA when not yet connected */}
+          {/* Prominent CTA */}
           <div className="flex items-center gap-3 p-4 rounded-lg border border-primary/30 bg-primary/5">
             <Mail className="w-5 h-5 text-primary shrink-0" />
             <div className="flex-1">

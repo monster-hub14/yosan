@@ -391,6 +391,8 @@ export async function downloadAttachment(
 // OAuth URL builder
 // ---------------------------------------------------------------------------
 
+export const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
+
 export function buildAuthUrl(
   clientId: string,
   redirectUri: string,
@@ -400,7 +402,7 @@ export function buildAuthUrl(
     client_id: clientId,
     redirect_uri: redirectUri,
     response_type: "code",
-    scope: "https://www.googleapis.com/auth/gmail.readonly",
+    scope: GMAIL_SCOPE,
     access_type: "offline",
     prompt: "consent",
     state,
