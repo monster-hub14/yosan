@@ -30,12 +30,15 @@ interface BudgetOption {
 export default function AppHeader({ user, activeBudgetId, onMobileMenuToggle }: AppHeaderProps) {
   const { theme, setTheme } = useTheme();
   const router = useRouter();
+  const [mounted, setMounted] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [budgetMenuOpen, setBudgetMenuOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [budgets, setBudgets] = useState<BudgetOption[]>([]);
   const [currentBudget, setCurrentBudget] = useState<BudgetOption | null>(null);
   const [switching, setSwitching] = useState(false);
+
+  useEffect(() => { setMounted(true); }, []);
 
   useEffect(() => {
     fetch("/api/budgets")
@@ -176,7 +179,7 @@ export default function AppHeader({ user, activeBudgetId, onMobileMenuToggle }: 
         className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
         aria-label="Toggle theme"
       >
-        {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+        {mounted ? (theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />) : <span className="w-4 h-4 block" />}
       </button>
 
       <button
