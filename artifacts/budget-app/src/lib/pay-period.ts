@@ -177,14 +177,22 @@ export function computePayPeriod(
   const today = startOfDay(new Date());
 
   if (!nextPayDate) {
+    // No pay date configured — fall back to the current calendar month so the
+    // expense query always covers a meaningful window and the dashboard is useful
+    // even before the user finishes income setup.
+    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+    const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 1);
     const approxDays = getIntervalDays(frequency, customDays);
+    const daysInMonth = Math.max(1, daysBetween(monthStart, monthEnd));
+    const daysElapsed = Math.max(0, Math.min(daysInMonth, daysBetween(monthStart, today)));
+    const daysRemaining = Math.max(0, daysBetween(today, monthEnd));
     return {
-      start: today,
-      end: today,
-      nextPayDate: today,
-      daysInPeriod: approxDays,
-      daysElapsed: 0,
-      daysRemaining: 0,
+      start: monthStart,
+      end: monthEnd,
+      nextPayDate: monthEnd,
+      daysInPeriod: daysInMonth,
+      daysElapsed,
+      daysRemaining,
       periodIncome: incomeAmount,
     };
   }
