@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/table";
 import { UserRound, Shield } from "lucide-react";
 import { UserAIControlButton } from "./user-ai-controls";
+import { CreateUserButton } from "./create-user-button";
 
 export const metadata: Metadata = {
   title: "Users | Settings | Yosan AI",
@@ -48,12 +49,15 @@ export default async function UsersPage() {
   return (
     <div className="space-y-6 max-w-3xl">
       <Card className="border-border">
-        <CardHeader>
-          <CardTitle>Users</CardTitle>
-          <CardDescription>
-            Manage who has access to this instance. {users.length} user
-            {users.length !== 1 ? "s" : ""} registered.
-          </CardDescription>
+        <CardHeader className="flex flex-row items-start justify-between gap-4">
+          <div>
+            <CardTitle>Users</CardTitle>
+            <CardDescription>
+              Manage who has access to this instance. {users.length} user
+              {users.length !== 1 ? "s" : ""} registered.
+            </CardDescription>
+          </div>
+          <CreateUserButton />
         </CardHeader>
         <CardContent>
           <Table>
