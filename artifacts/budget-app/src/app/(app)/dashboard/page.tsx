@@ -190,6 +190,11 @@ export default async function DashboardPage() {
             status={safeToSpend.status}
             currency={budget.currency}
             daysRemaining={safeToSpend.daysRemaining}
+            budgetRemainingFraction={(() => {
+              const totalSpendable = safeToSpend.periodIncome - savingsReserve - upcomingTotal;
+              if (totalSpendable <= 0) return 0;
+              return Math.max(0, Math.min(1, (totalSpendable - spentThisPeriod) / totalSpendable));
+            })()}
           />
         </DashboardItem>
       )}

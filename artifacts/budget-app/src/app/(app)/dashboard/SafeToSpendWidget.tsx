@@ -10,6 +10,8 @@ interface SafeToSpendWidgetProps {
   status: SpendStatus;
   currency: string;
   daysRemaining: number;
+  /** 0–1: proportion of the spendable budget still remaining. Drives the arc ring. */
+  budgetRemainingFraction: number;
 }
 
 const RING_R = 42;
@@ -19,7 +21,6 @@ const statusConfig = {
   "on-track": {
     label: "Looking good",
     subLabel: "You're on track — keep it up",
-    healthFraction: 0.78,
     colorVar: "--status-healthy-hsl",
     bgVar: "--status-healthy-bg",
     borderVar: "--status-healthy-border",
@@ -29,7 +30,6 @@ const statusConfig = {
   caution: {
     label: "Worth watching",
     subLabel: "A little tighter than usual — worth keeping an eye on",
-    healthFraction: 0.42,
     colorVar: "--status-caution-hsl",
     bgVar: "--status-caution-bg",
     borderVar: "--status-caution-border",
@@ -39,7 +39,6 @@ const statusConfig = {
   "at-risk": {
     label: "Let's look at this",
     subLabel: "Budget is stretched — let's review together",
-    healthFraction: 0.12,
     colorVar: "--status-risk-hsl",
     bgVar: "--status-risk-bg",
     borderVar: "--status-risk-border",
@@ -53,6 +52,7 @@ export default function SafeToSpendWidget({
   status,
   currency,
   daysRemaining,
+  budgetRemainingFraction,
 }: SafeToSpendWidgetProps) {
   const spring = useSpring(0, { stiffness: 80, damping: 20 });
   const display = useTransform(spring, (v) =>
@@ -72,14 +72,15 @@ export default function SafeToSpendWidget({
   }, [amount, spring]);
 
   const cfg = statusConfig[status];
-  const dashOffset = CIRCUMFERENCE * (1 - cfg.healthFraction);
+  const clamped = Math.max(0, Math.min(1, budgetRemainingFraction));
+  const dashOffset = CIRCUMFERENCE * (1 - clamped);
 
   return (
     <motion.div
       key={status}
       initial={{ opacity: 0, y: 8, scale: 0.98 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
-      transition={{ duration: 0.35, ease: [0.25, 0.46, 0.45, 0.94] }}
+      transition={{ duration: 0.35, ease: [0.25, 0.46, 0.45, 0.94] as [number, number, number, number] }}
       style={{
         background: `var(${cfg.bgVar})`,
         borderColor: `var(${cfg.borderVar})`,
@@ -87,7 +88,7 @@ export default function SafeToSpendWidget({
       }}
       className="rounded-2xl border p-5 sm:p-6 flex gap-5 items-center"
     >
-      {/* Arc ring */}
+      {/* Arc ring — fills proportionally to budget remaining */}
       <div className="relative flex-shrink-0 w-[104px] h-[104px]">
         <svg viewBox="0 0 104 104" className="w-full h-full -rotate-90">
           {/* Track */}
@@ -100,7 +101,7 @@ export default function SafeToSpendWidget({
             strokeWidth={6}
             className="text-border opacity-30"
           />
-          {/* Fill */}
+          {/* Fill — driven by real budgetRemainingFraction */}
           <motion.circle
             cx={52}
             cy={52}
@@ -112,7 +113,7 @@ export default function SafeToSpendWidget({
             strokeDasharray={CIRCUMFERENCE}
             initial={{ strokeDashoffset: CIRCUMFERENCE }}
             animate={{ strokeDashoffset: dashOffset }}
-            transition={{ duration: 1.2, ease: [0.25, 0.46, 0.45, 0.94], delay: 0.1 }}
+            transition={{ duration: 1.2, ease: [0.25, 0.46, 0.45, 0.94] as [number, number, number, number], delay: 0.1 }}
           />
         </svg>
         {/* Center pulsing dot */}
@@ -158,6 +159,20 @@ export default function SafeToSpendWidget({
           {daysRemaining === 1
             ? "1 day remaining in this pay period"
             : `${daysRemaining} days remaining in this pay period`}
+        </p>
+
+        {/* Thin proportional bar — compact redundant indicator */}
+        <div className="mt-3 h-1 rounded-full bg-border overflow-hidden">
+          <motion.div
+            className="h-full rounded-full"
+            style={{ background: `hsl(var(${cfg.colorVar}))` }}
+            initial={{ width: 0 }}
+            animate={{ width: `${clamped * 100}%` }}
+            transition={{ duration: 1.0, ease: [0.25, 0.46, 0.45, 0.94] as [number, number, number, number], delay: 0.2 }}
+          />
+        </div>
+        <p className="text-xs text-muted-foreground mt-1">
+          {(clamped * 100).toFixed(0)}% of spendable budget remaining
         </p>
       </div>
     </motion.div>

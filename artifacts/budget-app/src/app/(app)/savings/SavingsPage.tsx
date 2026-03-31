@@ -319,6 +319,29 @@ export default function SavingsPage({ budgetId, currency }: Props) {
                           )}
                         </div>
                       </div>
+
+                      {/* Flat progress bar — kept alongside the circular ring */}
+                      <div className="space-y-1.5">
+                        <div className="h-2 rounded-full bg-muted overflow-hidden">
+                          <motion.div
+                            className="h-full rounded-full"
+                            style={{
+                              background:
+                                progress >= 80
+                                  ? "hsl(var(--status-healthy-hsl))"
+                                  : progress >= 50
+                                  ? "hsl(var(--status-caution-hsl))"
+                                  : "hsl(var(--primary))",
+                            }}
+                            initial={{ width: 0 }}
+                            animate={{ width: `${Math.min(progress, 100)}%` }}
+                            transition={{ duration: 0.8, ease: [0.25, 0.46, 0.45, 0.94] as [number, number, number, number], delay: 0.2 }}
+                          />
+                        </div>
+                        <p className="text-xs text-muted-foreground text-right">
+                          {progress.toFixed(0)}% complete
+                        </p>
+                      </div>
                     </CardContent>
                   </Card>
                 </motion.div>
