@@ -88,7 +88,15 @@ export async function GET(request: NextRequest) {
 
   console.log(`[gmail-auth] redirectUri: ${redirectUri}`);
   console.log(`[gmail-auth] scope: ${GMAIL_SCOPE}`);
-  console.log(`[gmail-auth] authUrl: ${authUrl}`);
+  // Log auth URL with client_id and state redacted (those contain sensitive/identifying info)
+  try {
+    const redacted = new URL(authUrl);
+    redacted.searchParams.set("client_id", "<redacted>");
+    redacted.searchParams.set("state", "<redacted>");
+    console.log(`[gmail-auth] authUrl (redacted): ${redacted.toString()}`);
+  } catch {
+    console.log("[gmail-auth] authUrl: <could not redact>");
+  }
 
   const response = NextResponse.redirect(authUrl);
   response.cookies.set(FLOW_COOKIE, flowToken, {
