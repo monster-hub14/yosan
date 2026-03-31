@@ -224,6 +224,7 @@ export function ReviewClient({ id }: ReviewClientProps) {
   }
 
   async function handleConfirm(duplicateResolution?: string) {
+    if (dateError) return;
     setConfirming(true);
     setDuplicateWarning(null);
     try {
