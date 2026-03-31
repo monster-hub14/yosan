@@ -57,18 +57,35 @@ export async function POST(request: NextRequest) {
     where: { userId: { in: userIds } },
   });
 
-  // Load each user's active budget (owner's first budget)
-  const budgets = await db.budget.findMany({
+  // Load each user's active budget.
+  // A user's "active" budget is the earliest-created budget they own OR belong to as a member.
+  // We query owned budgets first, then fill gaps via BudgetMembership for users who
+  // have no owned budget.
+  const ownedBudgets = await db.budget.findMany({
     where: { ownerId: { in: userIds } },
     select: { id: true, ownerId: true },
     orderBy: { createdAt: "asc" },
   });
 
-  // Map ownerId → first budget
   const budgetByUser = new Map<string, string>();
-  for (const b of budgets) {
+  for (const b of ownedBudgets) {
     if (!budgetByUser.has(b.ownerId)) {
       budgetByUser.set(b.ownerId, b.id);
+    }
+  }
+
+  // For users with no owned budget, fall back to their earliest membership budget
+  const usersWithoutBudget = userIds.filter((uid) => !budgetByUser.has(uid));
+  if (usersWithoutBudget.length > 0) {
+    const memberships = await db.budgetMembership.findMany({
+      where: { userId: { in: usersWithoutBudget } },
+      select: { userId: true, budgetId: true, budget: { select: { createdAt: true } } },
+      orderBy: { budget: { createdAt: "asc" } },
+    });
+    for (const m of memberships) {
+      if (m.budgetId && !budgetByUser.has(m.userId)) {
+        budgetByUser.set(m.userId, m.budgetId);
+      }
     }
   }
 

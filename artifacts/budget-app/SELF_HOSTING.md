@@ -87,7 +87,7 @@ TrueNAS SCALE uses Docker Compose under the hood for Custom Apps.
 | `DATABASE_URL` | Yes (set by Compose) | `file:/app/data/budget.db` | SQLite path — do not change unless you know what you're doing |
 | `JWT_SECRET` | **Yes** | — | Signs session tokens — use 32+ random characters |
 | `ENCRYPTION_KEY` | **Yes** | falls back to `JWT_SECRET` | AES-256 key for encrypting stored SMTP passwords and AI API keys |
-| `CRON_SECRET` | **Yes** | — | Bearer token that authenticates `/api/cron/alerts` requests |
+| `CRON_SECRET` | **Yes** | — | Bearer token that authenticates `/api/cron/alerts` and `/api/cron/gmail-sync` requests |
 | `PORT` | No | `24432` | HTTP port the app listens on |
 | `UPLOAD_DIR` | No | `/app/uploads` | Directory for uploaded receipt images |
 | `NODE_ENV` | No | `production` | Set by the Dockerfile — do not override |
@@ -205,6 +205,78 @@ curl -X POST http://localhost:24432/api/cron/alerts \
   -H "Authorization: Bearer YOUR_CRON_SECRET" \
   -H "Content-Type: application/json" \
   -d '{"type":"all"}'
+```
+
+---
+
+## Gmail Auto-Sync Scheduling
+
+If you enable Gmail integration, the app can automatically import receipts from your Gmail labels on a configurable schedule.
+
+### How it works
+
+- The `/api/cron/gmail-sync` endpoint checks all users with active Gmail connections.
+- Each user configures their **sync frequency** (30 min, 1 h, 6 h, 12 h, or 24 h) in **Settings → Gmail**.
+- The cron endpoint should be called frequently (every 15 minutes recommended); it skips users whose chosen interval hasn't elapsed yet.
+- AI extraction runs on every imported email: image/PDF attachments are processed for merchant, date, and total; text-only emails have their body analysed directly.
+
+### Authentication
+
+Same `CRON_SECRET` bearer token as alert cron:
+
+```
+Authorization: Bearer <CRON_SECRET>
+```
+
+### Recommended cron schedule
+
+Run every 15 minutes — the endpoint is lightweight and handles interval enforcement per user:
+
+```cron
+*/15 * * * *  curl -sf -X POST http://localhost:24432/api/cron/gmail-sync \
+                -H "Authorization: Bearer YOUR_CRON_SECRET"
+```
+
+### TrueNAS SCALE (System Settings → Advanced → Cron Jobs)
+
+1. Go to **System Settings → Advanced → Cron Jobs → Add**.
+2. Set **Command** to:
+   ```
+   curl -sf -X POST http://localhost:24432/api/cron/gmail-sync -H "Authorization: Bearer YOUR_CRON_SECRET"
+   ```
+3. Set **Schedule** to `*/15 * * * *` (every 15 minutes).
+4. Set **Run As User** to `root` or a user with `curl` access.
+
+### Docker Compose — sidecar cron container (optional)
+
+Add this service to your `docker-compose.yml` to run the sync automatically without a host cron:
+
+```yaml
+  gmail-sync-cron:
+    image: alpine:3
+    restart: unless-stopped
+    entrypoint: >
+      sh -c "while true; do
+        sleep 900 &&
+        wget -qO- --post-data='' --header='Authorization: Bearer ${CRON_SECRET}'
+          http://yosan:24432/api/cron/gmail-sync;
+      done"
+    environment:
+      - CRON_SECRET=${CRON_SECRET}
+    depends_on:
+      - yosan
+```
+
+### Manual trigger (testing)
+
+```bash
+curl -X POST http://localhost:24432/api/cron/gmail-sync \
+  -H "Authorization: Bearer YOUR_CRON_SECRET"
+```
+
+Response example:
+```json
+{"ok":true,"synced":1,"skipped":0,"failed":0,"imported":3,"usersProcessed":["u_abc"],"usersSkipped":[],"usersFailed":[]}
 ```
 
 ---
