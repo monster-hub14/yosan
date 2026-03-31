@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import {
   Loader2, Save, Mail, Eye, EyeOff, CheckCircle2, AlertCircle,
+  ArrowRight, Tag, RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +13,7 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
+import { GmailSettingsClient } from "../gmail/gmail-settings-client";
 
 interface OAuthConfig {
   clientId: string;
@@ -19,7 +21,38 @@ interface OAuthConfig {
   isConfigured: boolean;
 }
 
-export function GmailOAuthForm() {
+interface Budget {
+  id: string;
+  name: string;
+}
+
+interface Props {
+  budgets: Budget[];
+  defaultBudgetId?: string;
+}
+
+const STEPS = [
+  {
+    num: 1,
+    icon: Mail,
+    title: "Connect your Gmail account",
+    desc: "Authorize read-only access so Yosan AI can scan for receipt emails.",
+  },
+  {
+    num: 2,
+    icon: Tag,
+    title: "Choose receipt labels",
+    desc: 'Pick the Gmail labels (e.g. "Receipts", "INBOX") that contain your purchase emails.',
+  },
+  {
+    num: 3,
+    icon: RefreshCw,
+    title: "Sync and review",
+    desc: "Run a sync to import matching emails into your Pending Imports for review.",
+  },
+];
+
+export function GmailOAuthForm({ budgets, defaultBudgetId }: Props) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showSecret, setShowSecret] = useState(false);
@@ -73,7 +106,8 @@ export function GmailOAuthForm() {
   }
 
   return (
-    <div className="space-y-6 max-w-xl">
+    <div className="space-y-8 max-w-2xl">
+      {/* ── Section 1: Admin OAuth Credentials ── */}
       <Card className="border-border">
         <CardHeader>
           <div className="flex items-start justify-between gap-3">
@@ -84,7 +118,7 @@ export function GmailOAuthForm() {
               <div>
                 <CardTitle>Gmail OAuth Credentials</CardTitle>
                 <CardDescription>
-                  Instance-level Google OAuth app credentials. Users connect their own Gmail accounts once these are configured.
+                  Instance-level Google OAuth app credentials. Configure once — all users can then connect their own Gmail accounts.
                 </CardDescription>
               </div>
             </div>
@@ -101,15 +135,36 @@ export function GmailOAuthForm() {
             )}
           </div>
         </CardHeader>
-        <CardContent>
-          <div className="rounded-md bg-muted/40 border border-border px-4 py-3 mb-5 space-y-1 text-sm text-muted-foreground">
-            <p className="font-medium text-foreground">Setup instructions</p>
+        <CardContent className="space-y-5">
+          {/* Success callout — shown when configured */}
+          {config.isConfigured && (
+            <div className="flex gap-3 p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
+              <CheckCircle2 className="w-5 h-5 shrink-0 mt-0.5 text-emerald-600 dark:text-emerald-400" />
+              <div>
+                <p className="text-sm font-medium text-emerald-800 dark:text-emerald-300">
+                  Google OAuth is configured
+                </p>
+                <p className="text-sm text-emerald-700 dark:text-emerald-400 mt-0.5">
+                  Users on this instance can now connect their Gmail accounts for receipt import. Complete the steps below to set up your own account.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Setup instructions */}
+          <div className="rounded-md bg-muted/40 border border-border px-4 py-3 space-y-1 text-sm text-muted-foreground">
+            <p className="font-medium text-foreground">Google Cloud Console setup</p>
             <ol className="list-decimal ml-4 space-y-1 text-xs">
-              <li>Go to <span className="font-mono">console.cloud.google.com</span> → APIs &amp; Services → OAuth 2.0</li>
+              <li>Go to <span className="font-mono">console.cloud.google.com</span> → APIs &amp; Services → Credentials</li>
               <li>Create an OAuth 2.0 Client ID for a Web Application</li>
-              <li>Add <span className="font-mono">{typeof window !== "undefined" ? window.location.origin : ""}/api/settings/gmail/callback</span> as an Authorized Redirect URI</li>
+              <li>
+                Add <span className="font-mono break-all">{typeof window !== "undefined" ? window.location.origin : ""}/api/settings/gmail/callback</span> as an Authorized Redirect URI
+              </li>
+              <li>
+                Add <span className="font-mono break-all">{typeof window !== "undefined" ? window.location.origin : ""}</span> as an Authorized JavaScript Origin
+              </li>
               <li>Enable the Gmail API in your project</li>
-              <li>Paste the Client ID and Client Secret below</li>
+              <li>Paste the Client ID and Client Secret below and save</li>
             </ol>
           </div>
 
@@ -161,6 +216,45 @@ export function GmailOAuthForm() {
           </form>
         </CardContent>
       </Card>
+
+      {/* ── Section 2: User setup flow (shown only once OAuth is configured) ── */}
+      {config.isConfigured && (
+        <>
+          {/* Numbered step guide */}
+          <div>
+            <h2 className="text-base font-semibold mb-1">Next: set up your Gmail receipt import</h2>
+            <p className="text-sm text-muted-foreground mb-4">
+              OAuth is ready. Follow these three steps to start importing receipts from your inbox.
+            </p>
+            <ol className="space-y-3">
+              {STEPS.map((step) => (
+                <li key={step.num} className="flex gap-3">
+                  <div className="flex-none flex items-center justify-center w-7 h-7 rounded-full bg-primary/10 text-primary text-xs font-bold mt-0.5">
+                    {step.num}
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium leading-tight">{step.title}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{step.desc}</p>
+                  </div>
+                </li>
+              ))}
+            </ol>
+            <div className="flex items-center gap-1.5 mt-4 text-xs text-muted-foreground">
+              <ArrowRight className="w-3.5 h-3.5" />
+              Complete the steps using the panel below
+            </div>
+          </div>
+
+          {/* Full Gmail user settings embedded */}
+          <Suspense fallback={
+            <div className="flex justify-center py-8">
+              <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+            </div>
+          }>
+            <GmailSettingsClient budgets={budgets} defaultBudgetId={defaultBudgetId} />
+          </Suspense>
+        </>
+      )}
     </div>
   );
 }
