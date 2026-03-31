@@ -1,0 +1,100 @@
+There is a database schema drift / migration issue in the SMTP settings feature.
+
+Current runtime error:
+The column `main.EmailConfig.lastTestedAt` does not exist in the current database.
+GET /api/settings/email 500
+
+What this means:
+The application code and Prisma client now expect the EmailConfig table to have the new columns:
+
+* lastTestedAt
+* lastTestOk
+* lastTestError
+
+But the actual SQLite database file being used at runtime was not migrated successfully, or the app is pointing at a different SQLite file than the one Prisma migrated.
+
+Fix this properly.
+
+Requirements:
+
+1. Verify the Prisma schema and migration
+   Confirm that EmailConfig in prisma/schema.prisma includes:
+
+* lastTestedAt DateTime?
+* lastTestOk Boolean?
+* lastTestError String?
+
+If not, add them and generate a migration.
+
+2. Apply the migration to the actual runtime database
+   Make sure the migration is being applied to the same SQLite database file the app is using at runtime.
+
+Check for mismatches between:
+
+* DATABASE_URL in .env
+* Prisma config
+* Docker volume path
+* local dev path
+* any seed/dev fallback path
+
+This is likely one of:
+
+* migration was created but not applied
+* Prisma client was regenerated but DB file was not updated
+* app is using a different SQLite file than Prisma migrate updated
+* persistent Docker volume is still holding an old schema
+
+3. Add a startup/database health check
+   On app startup, log:
+
+* resolved DATABASE_URL
+* resolved SQLite path
+* whether Prisma can query EmailConfig successfully
+
+Do not log secrets.
+
+4. Fix the GET /api/settings/email route to fail gracefully
+   Even if a migration is missing, the route should not explode into an unhelpful 500 without context.
+
+Wrap the route in try/catch and return JSON like:
+{
+"ok": false,
+"error": "Database schema is out of date",
+"errorCode": "schema_out_of_date"
+}
+
+Also log the Prisma error message on the server.
+
+5. Add migration instructions for local and Docker environments
+   Document the exact commands needed for both:
+
+* local dev
+* Docker / TrueNAS
+
+Include:
+
+* prisma generate
+* prisma migrate deploy (or appropriate production migration command)
+
+6. Investigate volume persistence
+   If Docker/TrueNAS is mounting an older SQLite file, do not silently assume the migration ran.
+   Check whether:
+
+* the old DB file is preserved in the mounted volume
+* migrations are skipped at container start
+* the container image has newer code than the persistent DB schema
+
+7. Ensure deployment startup runs migrations
+   For self-hosted deployment, the app should either:
+
+* run Prisma migrations on startup safely
+  or
+* clearly fail with a migration-needed message
+
+Do not leave the app in a half-upgraded state.
+
+Expected result:
+
+* GET /api/settings/email no longer errors on missing EmailConfig.lastTestedAt
+* Prisma schema, Prisma client, and SQLite database are in sync
+* local dev and Docker/TrueNAS both use the same migrated schema
