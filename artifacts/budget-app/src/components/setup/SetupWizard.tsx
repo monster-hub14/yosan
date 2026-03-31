@@ -237,8 +237,8 @@ export default function SetupWizard() {
   return (
     <div className="space-y-6">
       <div className="text-center space-y-2">
-        <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-primary/10 text-primary mx-auto">
-          <Wallet className="w-6 h-6" />
+        <div className="flex items-center justify-center mx-auto">
+          <img src="/logo.png" alt="Budget Logo" className="w-24 h-24" />
         </div>
         <h1 className="text-2xl font-bold">Welcome to Budget</h1>
         <p className="text-muted-foreground text-sm">

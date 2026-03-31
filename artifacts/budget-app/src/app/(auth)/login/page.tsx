@@ -1,7 +1,6 @@
 import { Metadata } from "next";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Wallet } from "lucide-react";
 import { db } from "@/lib/db";
 import { LoginForm } from "./login-form";
 
@@ -28,8 +27,8 @@ export default async function LoginPage() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col items-center gap-3 text-center">
-        <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-primary/10 text-primary">
-          <Wallet className="w-6 h-6" />
+        <div className="flex items-center justify-center">
+          <img src="/logo.png" alt="Budget Logo" className="w-24 h-24" />
         </div>
         <div>
           <h1 className="text-2xl font-bold text-foreground">Budget</h1>
