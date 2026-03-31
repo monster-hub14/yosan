@@ -186,7 +186,8 @@ export default async function DashboardPage() {
       {safeToSpend && (
         <DashboardItem>
           <SafeToSpendWidget
-            amount={safeToSpend.amount}
+            amount={safeToSpend.remainingBalance}
+            dailyRate={safeToSpend.amount}
             status={safeToSpend.status}
             currency={budget.currency}
             daysRemaining={safeToSpend.daysRemaining}

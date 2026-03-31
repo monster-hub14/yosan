@@ -6,7 +6,10 @@ import { cn } from "@/lib/utils";
 import type { SpendStatus } from "@/lib/safe-to-spend";
 
 interface SafeToSpendWidgetProps {
+  /** Total remaining safe budget for the period (hero display value). */
   amount: number;
+  /** Per-day rate — shown as secondary breakdown text. */
+  dailyRate: number;
   status: SpendStatus;
   currency: string;
   daysRemaining: number;
@@ -47,8 +50,18 @@ const statusConfig = {
   },
 } as const;
 
+function formatCurrency(value: number, currency: string) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(Math.abs(value));
+}
+
 export default function SafeToSpendWidget({
   amount,
+  dailyRate,
   status,
   currency,
   daysRemaining,
@@ -74,6 +87,12 @@ export default function SafeToSpendWidget({
   const cfg = statusConfig[status];
   const clamped = Math.max(0, Math.min(1, budgetRemainingFraction));
   const dashOffset = CIRCUMFERENCE * (1 - clamped);
+
+  const dailyRateFormatted = formatCurrency(dailyRate, currency);
+  const dailyLabel =
+    daysRemaining === 1
+      ? `${amount < 0 ? "−" : ""}${dailyRateFormatted}/day · 1 day remaining`
+      : `${amount < 0 ? "−" : ""}${dailyRateFormatted}/day · ${daysRemaining} days remaining`;
 
   return (
     <motion.div
@@ -129,7 +148,7 @@ export default function SafeToSpendWidget({
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-2">
           <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-            Safe to spend today
+            Safe to spend this period
           </p>
           <span
             className="flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full"
@@ -149,16 +168,14 @@ export default function SafeToSpendWidget({
         >
           {amount < 0 && <span>−</span>}
           <motion.span>{display}</motion.span>
-          <span className="text-lg sm:text-xl font-semibold text-muted-foreground ml-1">/day</span>
         </div>
+
+        <p className="text-xs text-muted-foreground mt-1">
+          {dailyLabel}
+        </p>
 
         <p className="text-sm text-muted-foreground mt-2">
           {cfg.subLabel}
-        </p>
-        <p className="text-xs text-muted-foreground mt-0.5">
-          {daysRemaining === 1
-            ? "1 day remaining in this pay period"
-            : `${daysRemaining} days remaining in this pay period`}
         </p>
 
         {/* Thin proportional bar — compact redundant indicator */}
