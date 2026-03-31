@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { execSync } from "child_process";
 import { db } from "@/lib/db";
 import { encryptIfPlaintext } from "@/lib/encryption";
 
@@ -34,6 +35,46 @@ export async function checkStartup(): Promise<void> {
   const dbUrl = process.env.DATABASE_URL;
   if (!dbUrl) {
     console.error("[startup] FATAL: DATABASE_URL is not set.");
+    process.exit(1);
+  }
+
+  // Log resolved database path (no secrets exposed — SQLite URLs contain only a file path)
+  const resolvedDbPath = dbUrl.startsWith("file:")
+    ? path.resolve(
+        process.cwd(),
+        "prisma",
+        dbUrl.replace(/^file:(\/\/)?/, "")
+      )
+    : "(non-file datasource)";
+  console.log(`[startup] DATABASE_URL: ${dbUrl}`);
+  console.log(`[startup] Resolved SQLite path (approx): ${resolvedDbPath}`);
+
+  // Apply any pending Prisma migrations before the app starts serving requests.
+  // In development this is a fast no-op when nothing is pending.
+  // In Docker / TrueNAS this ensures new schema columns land on first boot after upgrade.
+  try {
+    console.log("[startup] Running prisma migrate deploy...");
+    execSync("node_modules/.bin/prisma migrate deploy", {
+      cwd: process.cwd(),
+      stdio: "inherit",
+      timeout: 30_000,
+    });
+    console.log("[startup] Migrations applied successfully.");
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[startup] FATAL: prisma migrate deploy failed:", msg);
+    console.error("[startup] The database may be locked or the migration files may be corrupt.");
+    process.exit(1);
+  }
+
+  // EmailConfig schema health check — confirms the critical migration landed correctly
+  try {
+    const emailCfg = await db.emailConfig.findFirst({ select: { id: true } });
+    console.log(`[startup] EmailConfig schema OK (row: ${emailCfg?.id ?? "none"})`);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[startup] FATAL: EmailConfig schema check failed:", msg);
+    console.error("[startup] The database schema is out of date. Run: pnpm db:migrate:deploy");
     process.exit(1);
   }
 

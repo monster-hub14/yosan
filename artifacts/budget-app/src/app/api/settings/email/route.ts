@@ -50,9 +50,15 @@ export async function GET(request: NextRequest) {
       config: config ? normalizeConfig(config) : null,
     });
   } catch (err) {
-    console.error("[email/settings] GET: unexpected error:", err instanceof Error ? err.message : String(err));
+    const msg = err instanceof Error ? err.message : String(err);
+    const isSchemaError =
+      (err as { code?: string }).code === "P2022" ||
+      msg.includes("does not exist in the current database");
+    console.error(`[email/settings] GET: ${isSchemaError ? "Schema drift" : "Unexpected error"}:`, msg);
     return NextResponse.json(
-      { ok: false, error: "Internal server error", errorCode: "internal_error" },
+      isSchemaError
+        ? { ok: false, error: "Database schema is out of date — run migrations", errorCode: "schema_out_of_date" }
+        : { ok: false, error: "Internal server error", errorCode: "internal_error" },
       { status: 500 }
     );
   }
@@ -131,9 +137,15 @@ export async function PUT(request: NextRequest) {
       config: normalizeConfig(config),
     });
   } catch (err) {
-    console.error("[email/settings] PUT: unexpected error:", err instanceof Error ? err.message : String(err));
+    const msg = err instanceof Error ? err.message : String(err);
+    const isSchemaError =
+      (err as { code?: string }).code === "P2022" ||
+      msg.includes("does not exist in the current database");
+    console.error(`[email/settings] PUT: ${isSchemaError ? "Schema drift" : "Unexpected error"}:`, msg);
     return NextResponse.json(
-      { ok: false, error: "Internal server error", errorCode: "internal_error" },
+      isSchemaError
+        ? { ok: false, error: "Database schema is out of date — run migrations", errorCode: "schema_out_of_date" }
+        : { ok: false, error: "Internal server error", errorCode: "internal_error" },
       { status: 500 }
     );
   }

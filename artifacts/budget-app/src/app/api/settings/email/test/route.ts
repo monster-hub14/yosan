@@ -85,9 +85,15 @@ export async function POST(request: NextRequest) {
       lastTestedAt: now.toISOString(),
     });
   } catch (err) {
-    console.error("[email/test] POST: unexpected error:", err instanceof Error ? err.message : String(err));
+    const msg = err instanceof Error ? err.message : String(err);
+    const isSchemaError =
+      (err as { code?: string }).code === "P2022" ||
+      msg.includes("does not exist in the current database");
+    console.error(`[email/test] POST: ${isSchemaError ? "Schema drift" : "Unexpected error"}:`, msg);
     return NextResponse.json(
-      { ok: false, error: "Internal server error", errorCode: "internal_error" },
+      isSchemaError
+        ? { ok: false, error: "Database schema is out of date — run migrations", errorCode: "schema_out_of_date" }
+        : { ok: false, error: "Internal server error", errorCode: "internal_error" },
       { status: 500 }
     );
   }
