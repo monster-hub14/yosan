@@ -44,9 +44,10 @@ interface Budget {
 
 interface Props {
   budgets: Budget[];
+  defaultBudgetId?: string;
 }
 
-export function GmailSettingsClient({ budgets }: Props) {
+export function GmailSettingsClient({ budgets, defaultBudgetId }: Props) {
   const searchParams = useSearchParams();
 
   const [loadingStatus, setLoadingStatus] = useState(true);
@@ -59,7 +60,7 @@ export function GmailSettingsClient({ budgets }: Props) {
   const [savingLabels, setSavingLabels] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [selectedBudgetId, setSelectedBudgetId] = useState<string>(
-    budgets[0]?.id ?? ""
+    defaultBudgetId ?? budgets[0]?.id ?? ""
   );
 
   const fetchStatus = useCallback(async () => {
