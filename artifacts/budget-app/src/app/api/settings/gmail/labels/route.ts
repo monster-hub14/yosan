@@ -124,6 +124,8 @@ export async function GET(request: NextRequest) {
   }
 }
 
+const VALID_SYNC_INTERVALS = new Set([30, 60, 360, 720, 1440]);
+
 export async function POST(request: NextRequest) {
   const session = await requireAuth(request);
   if (!isSessionPayload(session)) return session;
@@ -133,6 +135,7 @@ export async function POST(request: NextRequest) {
     labelNames: Record<string, string>;
     syncCutoffDate?: string | null;
     maxPerSync?: number;
+    syncIntervalMinutes?: number;
   };
   try {
     body = await request.json();
@@ -140,7 +143,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, error: "Invalid request body" }, { status: 400 });
   }
 
-  const { labelIds, labelNames, syncCutoffDate, maxPerSync } = body;
+  const { labelIds, labelNames, syncCutoffDate, maxPerSync, syncIntervalMinutes } = body;
 
   if (!Array.isArray(labelIds) || labelIds.length === 0) {
     return NextResponse.json(
@@ -155,6 +158,11 @@ export async function POST(request: NextRequest) {
 
   const cutoffDate = syncCutoffDate ? new Date(syncCutoffDate) : null;
 
+  const syncIntervalVal =
+    typeof syncIntervalMinutes === "number" && VALID_SYNC_INTERVALS.has(syncIntervalMinutes)
+      ? syncIntervalMinutes
+      : 60;
+
   await db.gmailLabelConfig.upsert({
     where: { userId: session.userId },
     create: {
@@ -163,12 +171,14 @@ export async function POST(request: NextRequest) {
       selectedLabelNames: JSON.stringify(labelNames ?? {}),
       syncCutoffDate: cutoffDate,
       maxPerSync: maxPerSyncVal,
+      syncIntervalMinutes: syncIntervalVal,
     },
     update: {
       selectedLabelIds: JSON.stringify(labelIds),
       selectedLabelNames: JSON.stringify(labelNames ?? {}),
       syncCutoffDate: cutoffDate,
       maxPerSync: maxPerSyncVal,
+      syncIntervalMinutes: syncIntervalVal,
     },
   });
 

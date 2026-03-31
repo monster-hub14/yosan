@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   Loader2, Mail, CheckCircle2, AlertCircle, RefreshCw, LogOut,
-  Tag, Calendar, Hash, ArrowRight, Info, RotateCcw, ExternalLink,
+  Tag, Calendar, Hash, ArrowRight, Info, RotateCcw, ExternalLink, Clock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -19,6 +19,14 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 
+const SYNC_INTERVAL_OPTIONS = [
+  { value: 30,   label: "Every 30 minutes" },
+  { value: 60,   label: "Every hour" },
+  { value: 360,  label: "Every 6 hours" },
+  { value: 720,  label: "Every 12 hours" },
+  { value: 1440, label: "Every 24 hours" },
+] as const;
+
 interface GmailStatus {
   oauthConfigured: boolean;
   status: "not_connected" | "connected" | "revoked";
@@ -30,6 +38,7 @@ interface GmailStatus {
   lastSyncError: string | null;
   syncCutoffDate: string | null;
   maxPerSync: number;
+  syncIntervalMinutes: number;
 }
 
 interface GmailLabel {
@@ -58,6 +67,7 @@ export function GmailSettingsClient({ budgets, defaultBudgetId }: Props) {
   const [selectedLabelIds, setSelectedLabelIds] = useState<string[]>([]);
   const [syncCutoffDate, setSyncCutoffDate] = useState("");
   const [maxPerSync, setMaxPerSync] = useState(50);
+  const [syncIntervalMinutes, setSyncIntervalMinutes] = useState(60);
   const [savingLabels, setSavingLabels] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [selectedBudgetId, setSelectedBudgetId] = useState<string>(
@@ -71,6 +81,7 @@ export function GmailSettingsClient({ budgets, defaultBudgetId }: Props) {
       setStatus(data as GmailStatus & { ok: boolean });
       setSelectedLabelIds(data.selectedLabelIds ?? []);
       setMaxPerSync(data.maxPerSync ?? 50);
+      setSyncIntervalMinutes(data.syncIntervalMinutes ?? 60);
       if (data.syncCutoffDate) {
         setSyncCutoffDate(data.syncCutoffDate.slice(0, 10));
       }
@@ -94,7 +105,6 @@ export function GmailSettingsClient({ budgets, defaultBudgetId }: Props) {
     const left = Math.round(window.screenX + (window.outerWidth - width) / 2);
     const top = Math.round(window.screenY + (window.outerHeight - height) / 2);
 
-    // Build an absolute auth URL so it resolves correctly in all contexts.
     const authUrl = new URL("/api/settings/gmail/auth", window.location.href).href;
 
     const popup = window.open(
@@ -104,15 +114,10 @@ export function GmailSettingsClient({ budgets, defaultBudgetId }: Props) {
     );
 
     if (!popup) {
-      // Popup blocked by the browser — do NOT navigate the current tab.
-      toast.error(
-        "Popups blocked — please allow popups for this page and try again."
-      );
+      toast.error("Popups blocked — please allow popups for this page and try again.");
       return;
     }
 
-    // BroadcastChannel lets the relay page notify us without depending on
-    // window.opener — it works whether the window opened as a popup or a tab.
     const channel = new BroadcastChannel("gmail_oauth_complete");
 
     channel.onmessage = (event: MessageEvent) => {
@@ -127,7 +132,6 @@ export function GmailSettingsClient({ budgets, defaultBudgetId }: Props) {
       }
     };
 
-    // Clean up channel if the popup/tab is closed before OAuth completes.
     const pollClose = setInterval(() => {
       if (popup.closed) {
         clearInterval(pollClose);
@@ -193,6 +197,7 @@ export function GmailSettingsClient({ budgets, defaultBudgetId }: Props) {
           labelNames,
           syncCutoffDate: syncCutoffDate || null,
           maxPerSync,
+          syncIntervalMinutes,
         }),
       });
       const data = await res.json();
@@ -260,6 +265,10 @@ export function GmailSettingsClient({ budgets, defaultBudgetId }: Props) {
 
   const isConnected = status.status === "connected";
   const isRevoked = status.status === "revoked";
+
+  const currentIntervalLabel =
+    SYNC_INTERVAL_OPTIONS.find((o) => o.value === (status.syncIntervalMinutes ?? 60))?.label
+    ?? "Every hour";
 
   return (
     <div className="space-y-5 max-w-2xl">
@@ -455,6 +464,33 @@ export function GmailSettingsClient({ budgets, defaultBudgetId }: Props) {
               </div>
             </div>
 
+            {/* Auto-sync frequency */}
+            <div className="space-y-1.5">
+              <Label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Clock className="w-3.5 h-3.5" />
+                Auto-sync frequency
+              </Label>
+              <Select
+                value={String(syncIntervalMinutes)}
+                onValueChange={(v) => setSyncIntervalMinutes(Number(v))}
+              >
+                <SelectTrigger className="text-sm">
+                  <SelectValue placeholder="Select frequency" />
+                </SelectTrigger>
+                <SelectContent>
+                  {SYNC_INTERVAL_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={String(opt.value)}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Used by the cron scheduler. The cron job should run every 15 minutes;
+                this setting controls how often your inbox is actually checked.
+              </p>
+            </div>
+
             <Button
               size="sm"
               onClick={handleSaveLabels}
@@ -475,13 +511,25 @@ export function GmailSettingsClient({ budgets, defaultBudgetId }: Props) {
           <CardHeader>
             <div className="flex items-center gap-2">
               <RefreshCw className="w-4 h-4 text-muted-foreground" />
-              <CardTitle className="text-base">Sync now</CardTitle>
+              <CardTitle className="text-base">Sync</CardTitle>
             </div>
             <CardDescription>
               Fetch new emails from your selected labels and add them to your receipt inbox.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* Auto-sync status */}
+            <div className="flex items-center gap-2 text-sm p-3 rounded-md bg-muted/40 border border-border">
+              <Clock className="w-4 h-4 shrink-0 text-muted-foreground" />
+              <div>
+                <span className="font-medium">Auto-sync:</span>
+                <span className="text-muted-foreground ml-1.5">{currentIntervalLabel}</span>
+                <span className="text-muted-foreground ml-1">
+                  via cron (<code className="text-xs bg-background px-1 rounded">POST /api/cron/gmail-sync</code>)
+                </span>
+              </div>
+            </div>
+
             {status.lastSyncAt && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <RotateCcw className="w-3.5 h-3.5" />
@@ -526,15 +574,16 @@ export function GmailSettingsClient({ budgets, defaultBudgetId }: Props) {
                 ) : (
                   <RefreshCw className="w-4 h-4 mr-2" />
                 )}
-                Sync inbox
+                Sync now
               </Button>
             </div>
 
             <div className="flex gap-1.5 p-3 rounded-md bg-muted/40 border border-border text-xs text-muted-foreground">
               <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" />
               <p>
-                All imported emails are added as pending imports for your review. Nothing is
-                automatically added to your budget.
+                All imported emails are added as pending imports for your review. AI will
+                automatically extract the merchant, date, and total from each receipt. Nothing
+                is automatically added to your budget.
               </p>
             </div>
           </CardContent>

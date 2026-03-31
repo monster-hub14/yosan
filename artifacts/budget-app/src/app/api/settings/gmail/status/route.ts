@@ -38,5 +38,6 @@ export async function GET(request: NextRequest) {
     lastSyncError: labelCfg?.lastSyncError ?? null,
     syncCutoffDate: labelCfg?.syncCutoffDate?.toISOString() ?? null,
     maxPerSync: labelCfg?.maxPerSync ?? 50,
+    syncIntervalMinutes: labelCfg?.syncIntervalMinutes ?? 60,
   });
 }

@@ -565,14 +565,15 @@ model GmailConnection {
 }
 
 model GmailLabelConfig {
-  id                 String    @id @default(cuid())
-  userId             String    @unique
-  selectedLabelIds   String    @default("[]")
-  selectedLabelNames String    @default("{}")
-  lastSyncAt         DateTime?
-  lastSyncError      String?
-  syncCutoffDate     DateTime?
-  maxPerSync         Int       @default(50)
+  id                  String    @id @default(cuid())
+  userId              String    @unique
+  selectedLabelIds    String    @default("[]")
+  selectedLabelNames  String    @default("{}")
+  lastSyncAt          DateTime?
+  lastSyncError       String?
+  syncCutoffDate      DateTime?
+  maxPerSync          Int       @default(50)
+  syncIntervalMinutes Int       @default(60)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

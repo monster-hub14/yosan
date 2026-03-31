@@ -1,22 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth, isSessionPayload, requireBudgetWrite } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
-import {
-  fetchMessageIds,
-  fetchMessageDetail,
-  downloadAttachment,
-  GmailRevokedError,
-} from "@/lib/gmail";
-import fs from "fs";
-import path from "path";
-import { randomUUID } from "crypto";
-
-const MAX_ATTACHMENT_SIZE = 20 * 1024 * 1024;
-
-function getUploadDir(budgetId: string): string {
-  const base = process.env.UPLOAD_DIR || path.join(process.cwd(), "uploads");
-  return path.join(base, budgetId);
-}
+import { GmailRevokedError } from "@/lib/gmail";
+import { runGmailSync } from "@/lib/gmail-sync";
 
 export async function POST(
   request: NextRequest,
@@ -63,104 +49,16 @@ export async function POST(
   }
 
   try {
-    const messageIds = await fetchMessageIds(session.userId, selectedLabelIds, {
-      maxResults: labelCfg.maxPerSync,
-      cutoffDate: labelCfg.syncCutoffDate ?? undefined,
+    const result = await runGmailSync(session.userId, budgetId, {
+      selectedLabelIds,
+      maxPerSync: labelCfg.maxPerSync,
+      syncCutoffDate: labelCfg.syncCutoffDate ?? undefined,
+      uploadedById: session.userId,
     });
-
-    if (messageIds.length === 0) {
-      await db.gmailLabelConfig.update({
-        where: { userId: session.userId },
-        data: { lastSyncAt: new Date(), lastSyncError: null },
-      });
-      return NextResponse.json({ ok: true, imported: 0, skipped: 0 });
-    }
-
-    const existingImports = await db.pendingImport.findMany({
-      where: {
-        budgetId,
-        gmailMessageId: { in: messageIds },
-      },
-      select: { gmailMessageId: true },
-    });
-
-    const alreadyImported = new Set(
-      existingImports.map((i) => i.gmailMessageId).filter(Boolean) as string[]
-    );
-
-    const newIds = messageIds.filter((id) => !alreadyImported.has(id));
-    let imported = 0;
-    let failed = 0;
-    const skipped = messageIds.length - newIds.length;
-
-    const uploadDir = getUploadDir(budgetId);
-    fs.mkdirSync(uploadDir, { recursive: true });
-
-    for (const msgId of newIds) {
-      try {
-        const detail = await fetchMessageDetail(session.userId, msgId);
-
-        // GmailRevokedError from detail/attachment fetch must propagate out of loop
-        // (it is not swallowed — only non-revoked errors are caught per-message)
-
-        const storedAttachments: {
-          originalFilename: string;
-          storedFilename: string;
-          mimeType: string;
-          size: number;
-        }[] = [];
-
-        for (const att of detail.attachments) {
-          if (att.size > MAX_ATTACHMENT_SIZE) continue;
-          try {
-            const buf = await downloadAttachment(session.userId, msgId, att.attachmentId);
-            const ext = path.extname(att.filename) || ".bin";
-            const storedFilename = `gmail-${Date.now()}-${randomUUID()}${ext}`;
-            const filePath = path.join(uploadDir, storedFilename);
-            fs.writeFileSync(filePath, buf);
-            storedAttachments.push({
-              originalFilename: att.filename,
-              storedFilename,
-              mimeType: att.mimeType,
-              size: att.size,
-            });
-          } catch (attErr) {
-            if (attErr instanceof GmailRevokedError) throw attErr;
-            // Skip individual attachment download failures silently
-          }
-        }
-
-        const importData = {
-          source: "gmail",
-          sender: detail.sender,
-          subject: detail.subject,
-          receivedAt: detail.receivedAt.toISOString(),
-          textBody: detail.textBody.slice(0, 8000),
-          htmlBody: detail.htmlBody.slice(0, 20000),
-          attachments: storedAttachments,
-        };
-
-        await db.pendingImport.create({
-          data: {
-            budgetId,
-            userId: session.userId,
-            status: "NEEDS_REVIEW",
-            gmailMessageId: msgId,
-            data: JSON.stringify(importData),
-          },
-        });
-
-        imported++;
-      } catch (msgErr) {
-        if (msgErr instanceof GmailRevokedError) throw msgErr; // propagate revoke
-        console.error(`[gmail/sync] Failed to import message ${msgId}:`, msgErr);
-        failed++;
-      }
-    }
 
     const partialError =
-      failed > 0
-        ? `${failed} of ${newIds.length} messages could not be imported`
+      result.failed > 0
+        ? `${result.failed} message${result.failed !== 1 ? "s" : ""} could not be imported`
         : null;
 
     await db.gmailLabelConfig.update({
@@ -173,9 +71,9 @@ export async function POST(
 
     return NextResponse.json({
       ok: true,
-      imported,
-      skipped,
-      failed,
+      imported: result.imported,
+      skipped: result.skipped,
+      failed: result.failed,
       ...(partialError ? { warning: partialError } : {}),
     });
   } catch (err) {
