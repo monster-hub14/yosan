@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, Search, Filter, ChevronDown, Trash2, Pencil, TrendingDown, Loader2, RefreshCw, Wallet } from "lucide-react";
+import { Plus, Search, Filter, Trash2, Pencil, TrendingDown, Loader2, Wallet, CalendarRange, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -44,6 +44,17 @@ function formatDate(dateStr: string) {
   return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
 }
 
+function formatPeriodLabel(start: string, end: string): string {
+  const s = new Date(start);
+  const e = new Date(end);
+  if (s.getMonth() === e.getMonth() && s.getFullYear() === e.getFullYear()) {
+    return `${s.toLocaleDateString("en-US", { month: "short" })} ${s.getDate()}–${e.getDate()}, ${e.getFullYear()}`;
+  }
+  const sStr = s.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  const eStr = e.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return `${sStr} – ${eStr}`;
+}
+
 function groupByDate(expenses: Expense[]) {
   const groups = new Map<string, Expense[]>();
   for (const e of expenses) {
@@ -78,8 +89,9 @@ export function ExpensesClient({ budgetId, initialCategories }: ExpensesClientPr
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [showAll, setShowAll] = useState(false);
+  const [activePeriod, setActivePeriod] = useState<{ start: string; end: string } | null>(null);
 
-  // Support ?add=1 to auto-open the "add expense" modal (e.g. from dashboard CTA)
   const [addOpen, setAddOpen] = useState(() => searchParams.get("add") === "1");
   const [editExpense, setEditExpense] = useState<Expense | null>(null);
   const [deleteExpense, setDeleteExpense] = useState<Expense | null>(null);
@@ -88,6 +100,9 @@ export function ExpensesClient({ budgetId, initialCategories }: ExpensesClientPr
 
   const flatCategories = initialCategories;
 
+  const hasCustomDates = !!(dateFrom || dateTo);
+  const isPeriodFiltered = !showAll && !hasCustomDates;
+
   const load = useCallback(() => {
     setLoading(true);
     const params = new URLSearchParams({ page: String(page), limit: "50" });
@@ -95,8 +110,7 @@ export function ExpensesClient({ budgetId, initialCategories }: ExpensesClientPr
     if (categoryFilter) params.set("categoryId", categoryFilter);
     if (dateFrom) params.set("dateFrom", dateFrom);
     if (dateTo) params.set("dateTo", dateTo);
-    // When user explicitly sets date filters, opt into full history; otherwise default to active period
-    if (dateFrom || dateTo) params.set("all", "true");
+    if (showAll || dateFrom || dateTo) params.set("all", "true");
 
     fetch(`/api/budgets/${budgetId}/expenses?${params}`)
       .then((r) => r.json())
@@ -104,10 +118,13 @@ export function ExpensesClient({ budgetId, initialCategories }: ExpensesClientPr
         setExpenses(data.expenses ?? []);
         setTotal(data.total ?? 0);
         setPages(data.pages ?? 1);
+        if (data.periodStart && data.periodEnd && isPeriodFiltered) {
+          setActivePeriod({ start: data.periodStart, end: data.periodEnd });
+        }
       })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [budgetId, page, search, categoryFilter, dateFrom, dateTo]);
+  }, [budgetId, page, search, categoryFilter, dateFrom, dateTo, showAll, isPeriodFiltered]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -129,13 +146,14 @@ export function ExpensesClient({ budgetId, initialCategories }: ExpensesClientPr
     setAddOpen(false);
     setEditExpense(null);
     if (safeToSpend) setLastSafeToSpend(safeToSpend);
-    // Invalidate Next.js server cache so dashboard shows fresh data on next visit
     router.refresh();
     load();
   };
 
   const grouped = groupByDate(expenses);
   const allTotal = expenses.reduce((s, e) => s + e.amount, 0);
+
+  const periodLabel = activePeriod ? formatPeriodLabel(activePeriod.start, activePeriod.end) : null;
 
   return (
     <div className="space-y-6">
@@ -152,6 +170,61 @@ export function ExpensesClient({ budgetId, initialCategories }: ExpensesClientPr
           <Plus className="h-4 w-4 mr-2" /> Add Expense
         </Button>
       </div>
+
+      {/* Period filter indicator */}
+      <AnimatePresence mode="wait">
+        {isPeriodFiltered && periodLabel && (
+          <motion.div
+            key="period-badge"
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            className="flex items-center gap-2 text-sm text-muted-foreground"
+          >
+            <CalendarRange className="w-4 h-4 shrink-0" />
+            <span>Showing <span className="font-medium text-foreground">{periodLabel}</span></span>
+            <button
+              onClick={() => { setShowAll(true); setPage(1); }}
+              className="ml-1 text-primary underline-offset-2 hover:underline font-medium"
+            >
+              Show all
+            </button>
+          </motion.div>
+        )}
+        {showAll && !hasCustomDates && (
+          <motion.div
+            key="all-badge"
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            className="flex items-center gap-2 text-sm"
+          >
+            <Badge variant="secondary" className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium">
+              <CalendarRange className="w-3.5 h-3.5" />
+              All time
+              <button
+                onClick={() => { setShowAll(false); setPage(1); }}
+                className="ml-0.5 hover:text-foreground text-muted-foreground"
+                aria-label="Back to current period"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </Badge>
+            <span className="text-muted-foreground text-xs">
+              {periodLabel && (
+                <>
+                  <button
+                    onClick={() => { setShowAll(false); setPage(1); }}
+                    className="hover:underline underline-offset-2"
+                  >
+                    Back to {periodLabel}
+                  </button>
+                </>
+              )}
+            </span>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Safe-to-spend live update banner */}
       <AnimatePresence>
@@ -272,10 +345,25 @@ export function ExpensesClient({ budgetId, initialCategories }: ExpensesClientPr
           <div>
             <p className="font-medium text-muted-foreground">No expenses found</p>
             <p className="text-sm text-muted-foreground/70 mt-1">
-              {search || categoryFilter || dateFrom || dateTo ? "Try adjusting your filters" : "Add your first expense to get started"}
+              {search || categoryFilter || dateFrom || dateTo
+                ? "Try adjusting your filters"
+                : isPeriodFiltered && periodLabel
+                  ? `No expenses recorded for ${periodLabel}`
+                  : "Add your first expense to get started"}
             </p>
           </div>
-          {!search && !categoryFilter && !dateFrom && !dateTo && (
+          {isPeriodFiltered && !search && !categoryFilter && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => { setShowAll(true); setPage(1); }}
+              className="gap-1.5"
+            >
+              <CalendarRange className="h-4 w-4" />
+              Show all expenses
+            </Button>
+          )}
+          {!isPeriodFiltered && !search && !categoryFilter && !dateFrom && !dateTo && (
             <Button variant="outline" size="sm" onClick={() => setAddOpen(true)}>
               <Plus className="h-4 w-4 mr-1.5" /> Add Expense
             </Button>
@@ -301,7 +389,6 @@ export function ExpensesClient({ budgetId, initialCategories }: ExpensesClientPr
                     exit={{ opacity: 0, x: 8 }}
                     className="group flex items-center gap-3 p-3 rounded-xl border border-border bg-card hover:border-primary/20 transition-colors"
                   >
-                    {/* Color dot */}
                     <div
                       className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 text-white font-semibold text-sm"
                       style={{ backgroundColor: expense.category?.color ?? "#6b7280" }}
@@ -309,7 +396,6 @@ export function ExpensesClient({ budgetId, initialCategories }: ExpensesClientPr
                       {(expense.merchant ?? expense.description ?? "?").charAt(0).toUpperCase()}
                     </div>
 
-                    {/* Info */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="font-medium truncate text-sm">
@@ -330,12 +416,10 @@ export function ExpensesClient({ budgetId, initialCategories }: ExpensesClientPr
                       )}
                     </div>
 
-                    {/* Amount */}
                     <span className="font-semibold tabular-nums text-sm shrink-0">
                       ${expense.amount.toFixed(2)}
                     </span>
 
-                    {/* Actions */}
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                       <Button
                         variant="ghost"
@@ -360,7 +444,6 @@ export function ExpensesClient({ budgetId, initialCategories }: ExpensesClientPr
             </div>
           ))}
 
-          {/* Pagination */}
           {pages > 1 && (
             <div className="flex items-center justify-center gap-3 pt-4">
               <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
@@ -375,7 +458,6 @@ export function ExpensesClient({ budgetId, initialCategories }: ExpensesClientPr
         </div>
       )}
 
-      {/* Modals */}
       <ExpenseFormModal
         open={addOpen}
         onClose={() => setAddOpen(false)}
