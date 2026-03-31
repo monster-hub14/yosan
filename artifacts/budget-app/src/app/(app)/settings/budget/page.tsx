@@ -120,8 +120,10 @@ export default async function BudgetSettingsPage() {
       <AdditionalNotificationEmailsPanel
         budgetId={budget.id}
         initialEmails={(() => {
-          try { return JSON.parse(budget.additionalNotificationEmails) as string[]; }
-          catch { return []; }
+          try {
+            const parsed: unknown = JSON.parse(budget.additionalNotificationEmails);
+            return Array.isArray(parsed) ? (parsed as string[]) : [];
+          } catch { return []; }
         })()}
       />
     </div>

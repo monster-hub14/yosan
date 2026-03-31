@@ -85,8 +85,10 @@ export async function POST(request: NextRequest) {
 
     // Parse additional notification email addresses (budget-level, no account required)
     const extraEmails: string[] = (() => {
-      try { return JSON.parse(budget.additionalNotificationEmails) as string[]; }
-      catch { return []; }
+      try {
+        const parsed: unknown = JSON.parse(budget.additionalNotificationEmails);
+        return Array.isArray(parsed) ? (parsed as string[]) : [];
+      } catch { return []; }
     })();
 
     // Load per-user notification configs for bill reminder lead time + notification email
