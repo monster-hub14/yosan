@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuth, isSessionPayload, requireBudgetRead } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import { getActivePeriodBounds } from "@/lib/active-period";
-import { computePayPeriod } from "@/lib/pay-period";
+import { computePayPeriod, getPayDatesInRange } from "@/lib/pay-period";
 import type { PayFrequency } from "@prisma/client";
 
 interface Params { params: Promise<{ id: string }> }
@@ -198,12 +198,20 @@ export async function GET(request: NextRequest, { params }: Params) {
     };
   });
 
-  // Income: sum of IncomeEntry in range
-  const incomeAgg = await db.incomeEntry.aggregate({
-    where: { budgetId, date: { gte: startDate, lte: endDate } },
+  // Projected income: count pay dates that fall in [startDate, endDate] for each active source
+  const projectedIncome = (budget?.incomeSources ?? []).reduce((sum, src) => {
+    const payDates = getPayDatesInRange(src.frequency, src.nextPayDate, startDate, endDate, src.customDays);
+    return sum + payDates.length * src.amount;
+  }, 0);
+
+  // Additional logged income: manual IncomeEntry records NOT linked to an income source
+  // (e.g. bonuses, side income, one-off payments). Entries WITH an incomeSourceId are
+  // already covered by the projected figure above, so we skip them to avoid double-counting.
+  const additionalIncomeAgg = await db.incomeEntry.aggregate({
+    where: { budgetId, date: { gte: startDate, lte: endDate }, incomeSourceId: null },
     _sum: { amount: true },
   });
-  const income = incomeAgg._sum.amount ?? 0;
+  const income = projectedIncome + (additionalIncomeAgg._sum.amount ?? 0);
 
   const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
   const net = income - totalExpenses;

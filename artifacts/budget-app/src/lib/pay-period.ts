@@ -218,6 +218,47 @@ export function computePayPeriod(
   };
 }
 
+/**
+ * Returns all scheduled pay dates that fall within [startDate, endDate] (inclusive).
+ *
+ * Algorithm:
+ *  1. Starting from `nextPayDateAnchor`, rewind the anchor to just before `startDate`
+ *     using the calendar-aware retreat logic.
+ *  2. Walk forward, collecting every pay date that lands in [startDate, endDate].
+ *
+ * This correctly handles anchors that are far in the past or future.
+ * Safety limit of 5 000 iterations (covers >90 years of weekly pay).
+ */
+export function getPayDatesInRange(
+  frequency: PayFrequency,
+  nextPayDateAnchor: Date | null | undefined,
+  startDate: Date,
+  endDate: Date,
+  customDays?: number | null
+): Date[] {
+  if (!nextPayDateAnchor) return [];
+
+  const start = startOfDay(new Date(startDate));
+  const end = startOfDay(new Date(endDate));
+  let anchor = startOfDay(new Date(nextPayDateAnchor));
+
+  // Rewind anchor until it is strictly before startDate
+  for (let i = 0; i < 5000 && anchor >= start; i++) {
+    anchor = retreatByFrequency(anchor, frequency, customDays);
+  }
+
+  // Walk forward, collecting pay dates that land in [start, end]
+  const results: Date[] = [];
+  let cur = anchor;
+  for (let i = 0; i < 5000; i++) {
+    cur = advanceByFrequency(cur, frequency, customDays);
+    const curDay = startOfDay(cur);
+    if (curDay > end) break;
+    if (curDay >= start) results.push(new Date(cur));
+  }
+  return results;
+}
+
 export function monthlyToPerPeriod(
   monthlyAmount: number,
   frequency: PayFrequency,
