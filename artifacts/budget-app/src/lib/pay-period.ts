@@ -85,7 +85,7 @@ function prevSemiMonthlyBefore(from: Date): Date {
 /**
  * Advance `anchor` by one pay interval (calendar-aware for monthly+).
  */
-function advanceByFrequency(date: Date, frequency: PayFrequency, customDays?: number | null): Date {
+export function advanceByFrequency(date: Date, frequency: PayFrequency, customDays?: number | null): Date {
   switch (frequency) {
     case "WEEKLY":      return addDays(date, 7);
     case "BIWEEKLY":    return addDays(date, 14);
@@ -101,7 +101,7 @@ function advanceByFrequency(date: Date, frequency: PayFrequency, customDays?: nu
 /**
  * Move `date` back by one pay interval (calendar-aware).
  */
-function retreatByFrequency(date: Date, frequency: PayFrequency, customDays?: number | null): Date {
+export function retreatByFrequency(date: Date, frequency: PayFrequency, customDays?: number | null): Date {
   switch (frequency) {
     case "WEEKLY":      return addDays(date, -7);
     case "BIWEEKLY":    return addDays(date, -14);

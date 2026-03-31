@@ -204,14 +204,14 @@ export async function GET(request: NextRequest, { params }: Params) {
     return sum + payDates.length * src.amount;
   }, 0);
 
-  // Additional logged income: manual IncomeEntry records NOT linked to an income source
-  // (e.g. bonuses, side income, one-off payments). Entries WITH an incomeSourceId are
-  // already covered by the projected figure above, so we skip them to avoid double-counting.
-  const additionalIncomeAgg = await db.incomeEntry.aggregate({
-    where: { budgetId, date: { gte: startDate, lte: endDate }, incomeSourceId: null },
+  // All logged income entries in range (bonuses, side income, manually logged paychecks, etc.)
+  const loggedIncomeAgg = await db.incomeEntry.aggregate({
+    where: { budgetId, date: { gte: startDate, lte: endDate } },
     _sum: { amount: true },
   });
-  const income = projectedIncome + (additionalIncomeAgg._sum.amount ?? 0);
+  // Total income = projected (from pay schedule) + all logged entries.
+  // This ensures both schedule-based income and any manually recorded amounts are captured.
+  const income = projectedIncome + (loggedIncomeAgg._sum.amount ?? 0);
 
   const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
   const net = income - totalExpenses;
