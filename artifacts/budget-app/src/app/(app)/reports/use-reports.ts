@@ -27,9 +27,16 @@ export interface PeriodBounds {
   end: string;
 }
 
+export interface TimeSeriesPoint {
+  key: string;
+  label: string;
+  amount: number;
+}
+
 export interface ReportsData {
   summary: ReportSummary;
   expenseRows: ExpenseRow[];
+  timeSeries: TimeSeriesPoint[];
   payPeriod: PeriodBounds | null;
   lastPayPeriod: PeriodBounds | null;
   dateRange: PeriodBounds;
@@ -132,68 +139,6 @@ export function buildSubcategoryGroups(rows: ExpenseRow[], topN = 10): Subcatego
   return result;
 }
 
-export interface TimeSeriesPoint {
-  label: string;
-  amount: number;
-}
-
-export function buildTimeSeries(rows: ExpenseRow[], start: string, end: string): TimeSeriesPoint[] {
-  const s = new Date(start);
-  const e = new Date(end);
-  const days = Math.round((e.getTime() - s.getTime()) / 86400000);
-
-  if (days <= 14) {
-    const map = new Map<string, number>();
-    for (const row of rows) {
-      const key = row.date.slice(0, 10);
-      map.set(key, (map.get(key) ?? 0) + row.amount);
-    }
-    const result: TimeSeriesPoint[] = [];
-    const cur = new Date(s);
-    cur.setHours(0, 0, 0, 0);
-    const endDay = new Date(e);
-    endDay.setHours(23, 59, 59, 999);
-    while (cur <= endDay) {
-      const key = cur.toISOString().slice(0, 10);
-      const label = cur.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-      result.push({ label, amount: map.get(key) ?? 0 });
-      cur.setDate(cur.getDate() + 1);
-    }
-    return result;
-  } else if (days <= 90) {
-    const map = new Map<string, number>();
-    for (const row of rows) {
-      const d = new Date(row.date);
-      const dow = d.getDay();
-      const weekStart = new Date(d);
-      weekStart.setDate(d.getDate() - dow);
-      const key = weekStart.toISOString().slice(0, 10);
-      map.set(key, (map.get(key) ?? 0) + row.amount);
-    }
-    return Array.from(map.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([key, amount]) => {
-        const d = new Date(key);
-        const label = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-        return { label, amount };
-      });
-  } else {
-    const map = new Map<string, number>();
-    for (const row of rows) {
-      const d = new Date(row.date);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-      map.set(key, (map.get(key) ?? 0) + row.amount);
-    }
-    return Array.from(map.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([key, amount]) => {
-        const [yr, mo] = key.split("-");
-        const d = new Date(Number(yr), Number(mo) - 1, 1);
-        const label = d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
-        return { label, amount };
-      });
-  }
-}
 
 export function fmtCurrency(amount: number, currency = "USD"): string {
   return new Intl.NumberFormat("en-US", { style: "currency", currency, maximumFractionDigits: 2 }).format(amount);

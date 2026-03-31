@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { Loader2 } from "lucide-react";
-import { useReports, buildSubcategoryGroups, buildTimeSeries } from "./use-reports";
+import { useReports, buildSubcategoryGroups } from "./use-reports";
 import { DateRangeBar } from "./date-range-bar";
 import { SummaryCards } from "./summary-cards";
 import { OverviewChart } from "./overview-chart";
@@ -38,13 +38,7 @@ export function ReportsClient({ budgetId }: ReportsClientProps) {
     [data]
   );
 
-  const timeSeries = useMemo(
-    () =>
-      data
-        ? buildTimeSeries(data.expenseRows, data.dateRange.start, data.dateRange.end)
-        : [],
-    [data]
-  );
+  const timeSeries = data?.timeSeries ?? [];
 
   return (
     <div className="space-y-6">

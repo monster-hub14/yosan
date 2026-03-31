@@ -7,7 +7,11 @@ import type { PayFrequency } from "@prisma/client";
 
 interface Params { params: Promise<{ id: string }> }
 
-function getPreviousPeriodStart(currentStart: Date, frequency: PayFrequency, customDays?: number | null): Date {
+function getPreviousPeriodStart(
+  currentStart: Date,
+  frequency: PayFrequency,
+  customDays?: number | null
+): Date {
   const d = new Date(currentStart);
   switch (frequency) {
     case "WEEKLY": d.setDate(d.getDate() - 7); break;
@@ -25,6 +29,77 @@ function getPreviousPeriodStart(currentStart: Date, frequency: PayFrequency, cus
   return d;
 }
 
+interface TimeSeriesPoint {
+  key: string;
+  label: string;
+  amount: number;
+}
+
+function buildTimeSeries(
+  expenses: Array<{ date: Date; amount: number }>,
+  startDate: Date,
+  endDate: Date
+): TimeSeriesPoint[] {
+  const ms = endDate.getTime() - startDate.getTime();
+  const days = Math.round(ms / 86400000);
+
+  if (days <= 14) {
+    const map = new Map<string, number>();
+    for (const e of expenses) {
+      const key = e.date.toISOString().slice(0, 10);
+      map.set(key, (map.get(key) ?? 0) + e.amount);
+    }
+    const result: TimeSeriesPoint[] = [];
+    const cur = new Date(startDate);
+    cur.setHours(0, 0, 0, 0);
+    const end = new Date(endDate);
+    end.setHours(23, 59, 59, 999);
+    while (cur <= end) {
+      const key = cur.toISOString().slice(0, 10);
+      const [yr, mo, da] = key.split("-");
+      const d = new Date(Number(yr), Number(mo) - 1, Number(da));
+      const label = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+      result.push({ key, label, amount: map.get(key) ?? 0 });
+      cur.setDate(cur.getDate() + 1);
+    }
+    return result;
+  } else if (days <= 90) {
+    const map = new Map<string, number>();
+    for (const e of expenses) {
+      const d = new Date(e.date);
+      const dow = d.getDay();
+      const weekStart = new Date(d);
+      weekStart.setDate(d.getDate() - dow);
+      weekStart.setHours(0, 0, 0, 0);
+      const key = weekStart.toISOString().slice(0, 10);
+      map.set(key, (map.get(key) ?? 0) + e.amount);
+    }
+    return Array.from(map.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, amount]) => {
+        const [yr, mo, da] = key.split("-");
+        const d = new Date(Number(yr), Number(mo) - 1, Number(da));
+        const label = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+        return { key, label, amount };
+      });
+  } else {
+    const map = new Map<string, number>();
+    for (const e of expenses) {
+      const d = new Date(e.date);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      map.set(key, (map.get(key) ?? 0) + e.amount);
+    }
+    return Array.from(map.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, amount]) => {
+        const [yr, mo] = key.split("-");
+        const d = new Date(Number(yr), Number(mo) - 1, 1);
+        const label = d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+        return { key, label, amount };
+      });
+  }
+}
+
 export async function GET(request: NextRequest, { params }: Params) {
   const session = await requireAuth(request);
   if (!isSessionPayload(session)) return session;
@@ -37,13 +112,19 @@ export async function GET(request: NextRequest, { params }: Params) {
   const startRaw = searchParams.get("start");
   const endRaw = searchParams.get("end");
 
-  // Determine effective date range
   let startDate: Date;
   let endDate: Date;
 
   if (startRaw && endRaw) {
     startDate = new Date(startRaw + "T00:00:00");
     endDate = new Date(endRaw + "T23:59:59");
+
+    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+      return NextResponse.json({ error: "Invalid date format. Use YYYY-MM-DD." }, { status: 400 });
+    }
+    if (startDate > endDate) {
+      return NextResponse.json({ error: "start must be before or equal to end." }, { status: 400 });
+    }
   } else {
     const bounds = await getActivePeriodBounds(budgetId);
     startDate = bounds.start;
@@ -63,8 +144,12 @@ export async function GET(request: NextRequest, { params }: Params) {
     const src = budget.incomeSources[0];
     const pp = computePayPeriod(src.frequency, src.nextPayDate, src.amount, src.customDays);
     payPeriod = { start: pp.start.toISOString(), end: pp.end.toISOString() };
+
     const lastStart = getPreviousPeriodStart(pp.start, src.frequency, src.customDays);
-    lastPayPeriod = { start: lastStart.toISOString(), end: pp.start.toISOString() };
+    // End of last period is one calendar day before current period start (non-overlapping)
+    const lastEnd = new Date(pp.start);
+    lastEnd.setDate(lastEnd.getDate() - 1);
+    lastPayPeriod = { start: lastStart.toISOString(), end: lastEnd.toISOString() };
   }
 
   // Fetch all expenses in range with category info
@@ -113,15 +198,21 @@ export async function GET(request: NextRequest, { params }: Params) {
   });
   const income = incomeAgg._sum.amount ?? 0;
 
-  // Expense total
   const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
-
   const net = income - totalExpenses;
   const saved = Math.max(0, net);
+
+  // Server-side adaptive time-series aggregation
+  const timeSeries = buildTimeSeries(
+    expenses.map(e => ({ date: e.date, amount: e.amount })),
+    startDate,
+    endDate
+  );
 
   return NextResponse.json({
     summary: { income, expenses: totalExpenses, net, saved },
     expenseRows,
+    timeSeries,
     payPeriod,
     lastPayPeriod,
     dateRange: {
