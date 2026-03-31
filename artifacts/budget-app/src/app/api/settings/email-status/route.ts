@@ -14,11 +14,21 @@ export async function GET(request: NextRequest) {
 
   const config = await db.emailConfig.findUnique({
     where: { id: "singleton" },
-    select: { isEnabled: true, fromName: true },
+    select: {
+      isEnabled: true,
+      fromName: true,
+      smtpHost: true,
+      smtpPort: true,
+      lastTestOk: true,
+    },
   });
+
+  const smtpConfigured = !!(config?.smtpHost && config?.smtpPort && config.smtpPort > 0);
 
   return NextResponse.json({
     isEnabled: config?.isEnabled ?? false,
     fromName: config?.fromName ?? "Yosan AI",
+    smtpConfigured,
+    lastTestOk: config?.lastTestOk ?? null,
   });
 }

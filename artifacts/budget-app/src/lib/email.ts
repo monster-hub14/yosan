@@ -6,7 +6,7 @@
 import { db } from "@/lib/db";
 import { decrypt } from "@/lib/encryption";
 
-interface EmailConfig {
+interface ResolvedEmailConfig {
   host: string;
   port: number;
   user: string | null;
@@ -14,22 +14,59 @@ interface EmailConfig {
   fromAddress: string;
   fromName: string;
   secure: boolean;
-  requireTls?: boolean;
+  requireTls: boolean;
 }
 
-async function getEmailConfig(): Promise<EmailConfig | null> {
+/**
+ * Resolve sender address with the defined fallback chain:
+ *   1. override fromAddress (if explicitly set by admin)
+ *   2. smtpUser (login email doubles as sender)
+ *   3. noreply@localhost
+ */
+function resolveSenderAddress(fromAddress: string | null, smtpUser: string | null): string {
+  if (fromAddress && fromAddress.trim()) return fromAddress.trim();
+  if (smtpUser && smtpUser.trim()) return smtpUser.trim();
+  return "noreply@localhost";
+}
+
+/**
+ * "Configured" means required transport fields are present.
+ * fromAddress is NOT required; it has a fallback chain.
+ */
+function isTransportConfigured(host: string | null, port: number | null): boolean {
+  return !!(host && host.trim() && port && port > 0);
+}
+
+async function getEmailConfig(): Promise<ResolvedEmailConfig | null> {
   const config = await db.emailConfig.findUnique({ where: { id: "singleton" } });
-  if (!config || !config.isEnabled || !config.smtpHost || !config.fromAddress) return null;
 
-  const decryptedPass = config.smtpPass ? (() => { try { return decrypt(config.smtpPass!); } catch { return null; } })() : null;
+  if (!config || !config.isEnabled || !isTransportConfigured(config.smtpHost, config.smtpPort)) {
+    console.log(
+      `[email] getEmailConfig: not available — enabled=${config?.isEnabled ?? false}, host=${config?.smtpHost ?? "(none)"}`
+    );
+    return null;
+  }
 
-  const enc = (config as { smtpEncryption?: string }).smtpEncryption ?? "STARTTLS";
+  const decryptedPass = config.smtpPass
+    ? (() => {
+        try { return decrypt(config.smtpPass!); }
+        catch { console.error("[email] getEmailConfig: failed to decrypt SMTP password"); return null; }
+      })()
+    : null;
+
+  const enc = config.smtpEncryption ?? "STARTTLS";
+  const fromAddress = resolveSenderAddress(config.fromAddress, config.smtpUser);
+
+  console.log(
+    `[email] getEmailConfig: host=${config.smtpHost} port=${config.smtpPort} enc=${enc} user=${config.smtpUser ?? "(none)"} from=${fromAddress}`
+  );
+
   return {
-    host: config.smtpHost,
+    host: config.smtpHost!,
     port: config.smtpPort,
     user: config.smtpUser ?? null,
     pass: decryptedPass,
-    fromAddress: config.fromAddress,
+    fromAddress,
     fromName: config.fromName || "Yosan AI",
     secure: enc === "TLS",
     requireTls: enc === "STARTTLS",
@@ -46,7 +83,7 @@ export interface SendMailOptions {
 export async function sendMail(options: SendMailOptions): Promise<{ ok: boolean; error?: string }> {
   const config = await getEmailConfig();
   if (!config) {
-    console.log("[email] SMTP not configured or disabled — skipping send");
+    console.log("[email] sendMail: SMTP not configured or disabled — skipping send");
     return { ok: false, error: "SMTP not configured" };
   }
 
@@ -68,73 +105,173 @@ export async function sendMail(options: SendMailOptions): Promise<{ ok: boolean;
       text: options.text ?? options.html.replace(/<[^>]+>/g, ""),
     });
 
+    console.log(`[email] sendMail: delivered to=${options.to} subject="${options.subject}"`);
     return { ok: true };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.error("[email] Send failed:", msg);
+    console.error("[email] sendMail: failed:", msg);
     return { ok: false, error: msg };
   }
 }
 
-export async function testEmailConfig(config: {
+export interface TestEmailParams {
   host: string;
   port: number;
   smtpEncryption?: string;
   user?: string;
+  /** Plaintext password — never log this */
   pass?: string;
-  fromAddress: string;
-  fromName: string;
+  /** Optional override sender address */
+  fromAddress?: string | null;
+  fromName?: string;
   toAddress: string;
-}): Promise<{ ok: boolean; error?: string }> {
+}
+
+/**
+ * Classify nodemailer error into a short code for UI display.
+ */
+function classifySmtpError(err: unknown): { errorCode: string; error: string } {
+  const msg = err instanceof Error ? err.message : String(err);
+  const m = msg.toLowerCase();
+  if (m.includes("auth") || m.includes("535") || m.includes("534") || m.includes("username") || m.includes("password") || m.includes("credentials")) {
+    return { errorCode: "auth_failed", error: "Authentication failed — check your username and password" };
+  }
+  if (m.includes("getaddrinfo") || m.includes("enotfound") || m.includes("econnrefused") || m.includes("connect")) {
+    return { errorCode: "bad_host", error: "Cannot connect to SMTP server — check host and port" };
+  }
+  if (m.includes("tls") || m.includes("ssl") || m.includes("starttls") || m.includes("wrong version") || m.includes("unsupported protocol")) {
+    return { errorCode: "tls_mismatch", error: "TLS/encryption mismatch — try a different encryption setting" };
+  }
+  if (m.includes("timeout") || m.includes("etimedout")) {
+    return { errorCode: "timeout", error: "Connection timed out — check host, port and firewall rules" };
+  }
+  if (m.includes("sender") || m.includes("from") || m.includes("550") || m.includes("553")) {
+    return { errorCode: "sender_rejected", error: "Sender address was rejected — check your from address" };
+  }
+  return { errorCode: "send_failed", error: msg };
+}
+
+export async function testEmailConfig(params: TestEmailParams): Promise<{ ok: boolean; error?: string; errorCode?: string }> {
+  const enc = params.smtpEncryption ?? (params.port === 465 ? "TLS" : "STARTTLS");
+  const fromAddress = resolveSenderAddress(params.fromAddress ?? null, params.user ?? null);
+  const fromName = params.fromName || "Yosan AI";
+
+  console.log(
+    `[email] testEmailConfig: host=${params.host} port=${params.port} enc=${enc} user=${params.user ?? "(none)"} from=${fromAddress} to=${params.toAddress}`
+  );
+
   try {
-    const enc = config.smtpEncryption ?? (config.port === 465 ? "TLS" : "STARTTLS");
     const nodemailer = await import("nodemailer");
     const transporter = nodemailer.createTransport({
-      host: config.host,
-      port: config.port,
+      host: params.host,
+      port: params.port,
       secure: enc === "TLS",
       requireTLS: enc === "STARTTLS",
-      auth: config.user && config.pass ? { user: config.user, pass: config.pass } : undefined,
+      auth: params.user && params.pass ? { user: params.user, pass: params.pass } : undefined,
     });
 
     await transporter.verify();
     await transporter.sendMail({
-      from: `"${config.fromName}" <${config.fromAddress}>`,
-      to: config.toAddress,
+      from: `"${fromName}" <${fromAddress}>`,
+      to: params.toAddress,
       subject: "Yosan AI — Test Email",
-      html: `<p>This is a test email from Yosan AI. SMTP configuration is working correctly.</p>`,
+      html: testEmailHtml(fromAddress),
     });
 
+    console.log(`[email] testEmailConfig: success — delivered to=${params.toAddress}`);
     return { ok: true };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    const classified = classifySmtpError(err);
+    console.error(`[email] testEmailConfig: failed errorCode=${classified.errorCode} error=${classified.error}`);
+    return { ok: false, ...classified };
   }
 }
 
 // ---- Email templates ----
 
-function baseTemplate(title: string, body: string): string {
+/**
+ * Branded base template for all Yosan AI emails.
+ * Renders correctly with or without a logo image.
+ * @param title  Card header title
+ * @param body   HTML body content
+ * @param logoUrl Optional absolute URL to the app logo image
+ */
+function baseTemplate(title: string, body: string, logoUrl?: string): string {
+  const logoHtml = logoUrl
+    ? `<img src="${logoUrl}" alt="Yosan AI" height="32" style="height:32px;width:auto;display:block;margin-bottom:8px" />`
+    : "";
   return `<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#f4f4f4;font-family:system-ui,sans-serif">
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f4;padding:24px 0">
-<tr><td align="center">
-<table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:8px;overflow:hidden;max-width:600px">
-<tr><td style="background:#2563eb;padding:24px 32px">
-<h1 style="margin:0;color:#ffffff;font-size:20px;font-weight:600">${title}</h1>
-</td></tr>
-<tr><td style="padding:32px;color:#1a1a1a;font-size:15px;line-height:1.6">
-${body}
-</td></tr>
-<tr><td style="padding:16px 32px;background:#f8f8f8;color:#888;font-size:12px;border-top:1px solid #eee">
-Sent by Yosan AI &mdash; <a href="#" style="color:#2563eb">Manage notification preferences</a>
-</td></tr>
-</table>
-</td></tr>
-</table>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${title}</title>
+</head>
+<body style="margin:0;padding:0;background:#f0f2f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif">
+  <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background:#f0f2f5;padding:40px 0">
+    <tr>
+      <td align="center">
+        <!-- Logo / app name above card -->
+        <table width="560" cellpadding="0" cellspacing="0" role="presentation" style="max-width:560px">
+          <tr>
+            <td style="padding:0 0 16px 0">
+              ${logoHtml}
+              <span style="color:#6b7280;font-size:13px;font-weight:500;letter-spacing:0.04em;text-transform:uppercase">Yosan AI</span>
+            </td>
+          </tr>
+        </table>
+
+        <!-- Card -->
+        <table width="560" cellpadding="0" cellspacing="0" role="presentation"
+               style="background:#ffffff;border-radius:10px;overflow:hidden;max-width:560px;box-shadow:0 1px 3px rgba(0,0,0,0.08)">
+
+          <!-- Card header -->
+          <tr>
+            <td style="background:#1d4ed8;padding:24px 32px">
+              <h1 style="margin:0;color:#ffffff;font-size:18px;font-weight:600;letter-spacing:-0.01em">${title}</h1>
+            </td>
+          </tr>
+
+          <!-- Card body -->
+          <tr>
+            <td style="padding:28px 32px;color:#111827;font-size:15px;line-height:1.65">
+              ${body}
+            </td>
+          </tr>
+
+          <!-- Card footer -->
+          <tr>
+            <td style="padding:16px 32px;background:#f9fafb;border-top:1px solid #e5e7eb;color:#9ca3af;font-size:12px;line-height:1.5">
+              Sent by <strong style="color:#6b7280">Yosan AI</strong> &mdash; self-hosted budget tracker.
+              This is an automated message.
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
 </body>
 </html>`;
+}
+
+function testEmailHtml(senderAddress: string): string {
+  return baseTemplate(
+    "SMTP Configuration Test",
+    `<p style="margin:0 0 16px">Your Yosan AI instance can send email.</p>
+    <table cellpadding="0" cellspacing="0" role="presentation"
+           style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:6px;padding:16px 20px;width:100%;margin:0 0 16px">
+      <tr>
+        <td style="color:#0369a1;font-size:14px">
+          <strong>SMTP is working correctly.</strong><br />
+          Alerts, reminders, and summaries will be delivered from
+          <span style="font-family:monospace;background:#e0f2fe;padding:2px 6px;border-radius:4px">${senderAddress}</span>.
+        </td>
+      </tr>
+    </table>
+    <p style="margin:0;color:#6b7280;font-size:13px">
+      You can close this tab and return to settings. If you did not initiate this test, no action is needed.
+    </p>`
+  );
 }
 
 export function overspendingAlertEmail(params: {
@@ -152,12 +289,12 @@ export function overspendingAlertEmail(params: {
     html: baseTemplate("Spending Alert", `
       <p>Hi ${params.userName},</p>
       <p>You've exceeded your budget for <strong>${params.categoryName}</strong> in <em>${params.budgetName}</em>.</p>
-      <table style="margin:16px 0;background:#fff4f4;border-radius:6px;padding:16px;width:100%">
-        <tr><td style="color:#888;font-size:13px">Spent</td><td style="font-weight:700;font-size:18px;color:#dc2626">${fmt(params.spent)}</td></tr>
-        <tr><td style="color:#888;font-size:13px">Budget</td><td style="font-weight:600">${fmt(params.target)}</td></tr>
-        <tr><td style="color:#888;font-size:13px">Over by</td><td style="color:#dc2626;font-weight:600">${fmt(params.spent - params.target)}</td></tr>
+      <table cellpadding="0" cellspacing="0" role="presentation" style="margin:16px 0;background:#fef2f2;border-radius:6px;padding:16px;width:100%">
+        <tr><td style="color:#6b7280;font-size:13px;padding:3px 0">Spent</td><td style="font-weight:700;font-size:18px;color:#dc2626;text-align:right">${fmt(params.spent)}</td></tr>
+        <tr><td style="color:#6b7280;font-size:13px;padding:3px 0">Budget</td><td style="font-weight:600;text-align:right">${fmt(params.target)}</td></tr>
+        <tr><td style="color:#6b7280;font-size:13px;padding:3px 0">Over by</td><td style="color:#dc2626;font-weight:600;text-align:right">${fmt(params.spent - params.target)}</td></tr>
       </table>
-      <p>Consider reviewing this category's spending before the end of your pay period.</p>
+      <p style="color:#6b7280;font-size:14px">Consider reviewing this category's spending before the end of your pay period.</p>
     `),
   };
 }
@@ -174,18 +311,18 @@ export function weeklySummaryEmail(params: {
   const fmt = (n: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: params.currency }).format(n);
   const statusIcon = params.status === "on-track" ? "✅" : params.status === "at-risk" ? "⚠️" : "🔴";
   const catRows = params.topCategories.slice(0, 5)
-    .map((c) => `<tr><td style="padding:4px 0">${c.name}</td><td style="text-align:right;font-weight:600">${fmt(c.amount)}</td></tr>`)
+    .map((c) => `<tr><td style="padding:4px 0;font-size:14px">${c.name}</td><td style="text-align:right;font-weight:600;font-size:14px">${fmt(c.amount)}</td></tr>`)
     .join("");
 
   return {
     subject: `${statusIcon} Weekly Budget Summary — ${params.budgetName}`,
     html: baseTemplate("Weekly Budget Summary", `
       <p>Hi ${params.userName}, here's your weekly spending summary for <em>${params.budgetName}</em>.</p>
-      <table style="margin:16px 0;background:#f8faff;border-radius:6px;padding:16px;width:100%">
-        <tr><td style="color:#888;font-size:13px">Total spent</td><td style="font-weight:700;font-size:20px">${fmt(params.totalSpent)}</td></tr>
-        <tr><td style="color:#888;font-size:13px">Period income</td><td style="font-weight:600">${fmt(params.totalIncome)}</td></tr>
+      <table cellpadding="0" cellspacing="0" role="presentation" style="margin:16px 0;background:#f8faff;border-radius:6px;padding:16px;width:100%">
+        <tr><td style="color:#6b7280;font-size:13px;padding:3px 0">Total spent</td><td style="font-weight:700;font-size:20px;text-align:right">${fmt(params.totalSpent)}</td></tr>
+        <tr><td style="color:#6b7280;font-size:13px;padding:3px 0">Period income</td><td style="font-weight:600;text-align:right">${fmt(params.totalIncome)}</td></tr>
       </table>
-      ${catRows ? `<h3 style="margin-top:24px;font-size:14px;text-transform:uppercase;letter-spacing:0.05em;color:#888">Top Categories</h3><table style="width:100%">${catRows}</table>` : ""}
+      ${catRows ? `<p style="font-size:12px;text-transform:uppercase;letter-spacing:0.05em;color:#9ca3af;font-weight:600;margin:20px 0 8px">Top Categories</p><table width="100%" cellpadding="0" cellspacing="0">${catRows}</table>` : ""}
     `),
   };
 }
@@ -204,10 +341,10 @@ export function upcomingBillEmail(params: {
     html: baseTemplate("Upcoming Bill Reminder", `
       <p>Hi ${params.userName},</p>
       <p>You have an upcoming recurring bill in <em>${params.budgetName}</em>.</p>
-      <table style="margin:16px 0;background:#f8faff;border-radius:6px;padding:16px;width:100%">
-        <tr><td style="color:#888;font-size:13px">Bill</td><td style="font-weight:700;font-size:18px">${params.billName}</td></tr>
-        <tr><td style="color:#888;font-size:13px">Amount</td><td style="font-weight:600">${fmt(params.amount)}</td></tr>
-        <tr><td style="color:#888;font-size:13px">Due date</td><td>${params.dueDate}</td></tr>
+      <table cellpadding="0" cellspacing="0" role="presentation" style="margin:16px 0;background:#f8faff;border-radius:6px;padding:16px;width:100%">
+        <tr><td style="color:#6b7280;font-size:13px;padding:3px 0">Bill</td><td style="font-weight:700;font-size:18px;text-align:right">${params.billName}</td></tr>
+        <tr><td style="color:#6b7280;font-size:13px;padding:3px 0">Amount</td><td style="font-weight:600;text-align:right">${fmt(params.amount)}</td></tr>
+        <tr><td style="color:#6b7280;font-size:13px;padding:3px 0">Due date</td><td style="text-align:right">${params.dueDate}</td></tr>
       </table>
     `),
   };
@@ -226,7 +363,7 @@ export function paydayReminderEmail(params: {
     html: baseTemplate("Payday Reminder", `
       <p>Hi ${params.userName},</p>
       <p>Your paycheck of <strong>${fmt(params.payAmount)}</strong> is expected tomorrow (${params.payDate}) in <em>${params.budgetName}</em>.</p>
-      <p>Great time to review your budget and plan your spending for the next pay period.</p>
+      <p style="color:#6b7280;font-size:14px">Great time to review your budget and plan your spending for the next pay period.</p>
     `),
   };
 }
@@ -244,11 +381,11 @@ export function deficitRiskEmail(params: {
     html: baseTemplate("Cash Flow Deficit Risk", `
       <p>Hi ${params.userName},</p>
       <p>Your cash flow forecast for <em>${params.budgetName}</em> shows a projected deficit within the next <strong>${params.withinDays} days</strong>.</p>
-      <table style="margin:16px 0;background:#fff4f4;border-radius:6px;padding:16px;width:100%">
-        <tr><td style="color:#888;font-size:13px">Projected shortfall</td><td style="font-weight:700;font-size:18px;color:#dc2626">${fmt(Math.abs(params.projectedDeficit))}</td></tr>
-        <tr><td style="color:#888;font-size:13px">Within</td><td style="font-weight:600">${params.withinDays} days</td></tr>
+      <table cellpadding="0" cellspacing="0" role="presentation" style="margin:16px 0;background:#fef2f2;border-radius:6px;padding:16px;width:100%">
+        <tr><td style="color:#6b7280;font-size:13px;padding:3px 0">Projected shortfall</td><td style="font-weight:700;font-size:18px;color:#dc2626;text-align:right">${fmt(Math.abs(params.projectedDeficit))}</td></tr>
+        <tr><td style="color:#6b7280;font-size:13px;padding:3px 0">Within</td><td style="font-weight:600;text-align:right">${params.withinDays} days</td></tr>
       </table>
-      <p>Review your upcoming bills and consider adjusting discretionary spending to avoid a negative balance.</p>
+      <p style="color:#6b7280;font-size:14px">Review your upcoming bills and consider adjusting discretionary spending to avoid a negative balance.</p>
     `),
   };
 }
@@ -268,12 +405,12 @@ export function savingsGoalRiskEmail(params: {
     html: baseTemplate("Savings Goal At Risk", `
       <p>Hi ${params.userName},</p>
       <p>Your savings goal <strong>${params.goalName}</strong> in <em>${params.budgetName}</em> is at risk of not being met based on current spending.</p>
-      <table style="margin:16px 0;background:#fffbf4;border-radius:6px;padding:16px;width:100%">
-        <tr><td style="color:#888;font-size:13px">Goal</td><td style="font-weight:700;font-size:18px">${fmt(params.targetAmount)}</td></tr>
-        <tr><td style="color:#888;font-size:13px">Progress</td><td style="font-weight:600">${fmt(params.currentAmount)} (${pct}%)</td></tr>
-        <tr><td style="color:#888;font-size:13px">Still needed</td><td style="color:#d97706;font-weight:600">${fmt(params.targetAmount - params.currentAmount)}</td></tr>
+      <table cellpadding="0" cellspacing="0" role="presentation" style="margin:16px 0;background:#fffbeb;border-radius:6px;padding:16px;width:100%">
+        <tr><td style="color:#6b7280;font-size:13px;padding:3px 0">Goal</td><td style="font-weight:700;font-size:18px;text-align:right">${fmt(params.targetAmount)}</td></tr>
+        <tr><td style="color:#6b7280;font-size:13px;padding:3px 0">Progress</td><td style="font-weight:600;text-align:right">${fmt(params.currentAmount)} (${pct}%)</td></tr>
+        <tr><td style="color:#6b7280;font-size:13px;padding:3px 0">Still needed</td><td style="color:#d97706;font-weight:600;text-align:right">${fmt(params.targetAmount - params.currentAmount)}</td></tr>
       </table>
-      <p>Consider reducing discretionary spending or increasing your per-paycheck savings contribution.</p>
+      <p style="color:#6b7280;font-size:14px">Consider reducing discretionary spending or increasing your per-paycheck savings contribution.</p>
     `),
   };
 }
@@ -288,8 +425,7 @@ export function receiptReminderEmail(params: {
     html: baseTemplate("Receipt Upload Reminder", `
       <p>Hi ${params.userName},</p>
       <p>It's been <strong>${params.daysSinceLastUpload} day${params.daysSinceLastUpload !== 1 ? "s" : ""}</strong> since your last receipt upload in <em>${params.budgetName}</em>.</p>
-      <p>Keeping your receipts up to date helps Yosan AI give you accurate spending insights and cash flow forecasts.</p>
-      <p style="margin-top:24px"><a href="#" style="background:#2563eb;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:600">Upload Receipts Now</a></p>
+      <p style="color:#6b7280;font-size:14px">Keeping your receipts up to date helps Yosan AI give you accurate spending insights and cash flow forecasts.</p>
     `),
   };
 }

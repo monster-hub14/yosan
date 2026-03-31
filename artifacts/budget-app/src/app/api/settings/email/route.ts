@@ -9,17 +9,24 @@ export async function GET(request: NextRequest) {
 
   const config = await db.emailConfig.findUnique({ where: { id: "singleton" } });
 
+  console.log(
+    `[email/settings] GET: found=${!!config} host=${config?.smtpHost ?? "(none)"} enabled=${config?.isEnabled ?? false}`
+  );
+
   return NextResponse.json({
     config: config
       ? {
           smtpHost: config.smtpHost,
           smtpPort: config.smtpPort,
-          smtpEncryption: (config as { smtpEncryption?: string }).smtpEncryption ?? "STARTTLS",
+          smtpEncryption: config.smtpEncryption ?? "STARTTLS",
           smtpUser: config.smtpUser,
           smtpPass: config.smtpPass ? "••••••••" : "",
           fromAddress: config.fromAddress,
           fromName: config.fromName,
           isEnabled: config.isEnabled,
+          lastTestedAt: config.lastTestedAt?.toISOString() ?? null,
+          lastTestOk: config.lastTestOk ?? null,
+          lastTestError: config.lastTestError ?? null,
         }
       : null,
   });
@@ -42,7 +49,7 @@ export async function PUT(request: NextRequest) {
 
   const { smtpHost, smtpPort, smtpEncryption, smtpUser, smtpPass, fromAddress, fromName, isEnabled } = body;
 
-  // Resolve the password: if masked (unchanged), keep existing
+  // Resolve the password: if masked (unchanged placeholder), keep existing
   let resolvedEncryptedPass: string | null | undefined = undefined;
   if (smtpPass && smtpPass !== "••••••••") {
     resolvedEncryptedPass = await encrypt(smtpPass);
@@ -50,6 +57,10 @@ export async function PUT(request: NextRequest) {
     resolvedEncryptedPass = null;
   }
   // If smtpPass === "••••••••", keep existing (don't include in update)
+
+  console.log(
+    `[email/settings] PUT: host=${smtpHost ?? "(none)"} port=${smtpPort ?? "(none)"} enc=${smtpEncryption ?? "(none)"} user=${smtpUser ?? "(none)"} passwordChanged=${resolvedEncryptedPass !== undefined} enabled=${isEnabled ?? false}`
+  );
 
   const config = await db.emailConfig.upsert({
     where: { id: "singleton" },
@@ -76,16 +87,21 @@ export async function PUT(request: NextRequest) {
     },
   });
 
+  console.log(`[email/settings] PUT: saved host=${config.smtpHost ?? "(none)"} enabled=${config.isEnabled}`);
+
   return NextResponse.json({
     config: {
       smtpHost: config.smtpHost,
       smtpPort: config.smtpPort,
+      smtpEncryption: config.smtpEncryption ?? "STARTTLS",
       smtpUser: config.smtpUser,
       smtpPass: config.smtpPass ? "••••••••" : "",
       fromAddress: config.fromAddress,
       fromName: config.fromName,
       isEnabled: config.isEnabled,
+      lastTestedAt: config.lastTestedAt?.toISOString() ?? null,
+      lastTestOk: config.lastTestOk ?? null,
+      lastTestError: config.lastTestError ?? null,
     },
   });
 }
-

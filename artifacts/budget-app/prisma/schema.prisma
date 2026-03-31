@@ -468,16 +468,19 @@ model UserAIControl {
 }
 
 model EmailConfig {
-  id             String   @id @default("singleton")
+  id             String    @id @default("singleton")
   smtpHost       String?
-  smtpPort       Int      @default(587)
-  smtpEncryption String   @default("STARTTLS")
+  smtpPort       Int       @default(587)
+  smtpEncryption String    @default("STARTTLS")
   smtpUser       String?
   smtpPass       String?
   fromAddress    String?
-  fromName       String   @default("Budget App")
-  isEnabled      Boolean  @default(false)
-  updatedAt      DateTime @updatedAt
+  fromName       String    @default("Budget App")
+  isEnabled      Boolean   @default(false)
+  lastTestedAt   DateTime?
+  lastTestOk     Boolean?
+  lastTestError  String?
+  updatedAt      DateTime  @updatedAt
 }
 
 model UserNotificationConfig {
