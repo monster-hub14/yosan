@@ -1,0 +1,58 @@
+Update the Gmail OAuth setup instructions to explicitly require enabling the Gmail API before configuring OAuth credentials.
+
+Problem:
+Users can successfully create OAuth credentials but still get Gmail API errors later if the Gmail API itself is not enabled in the Google Cloud project.
+
+Please improve the Gmail OAuth setup instructions and UI flow.
+
+Requirements:
+
+1. Reorder the setup instructions so enabling the Gmail API happens before creating OAuth credentials.
+
+2. Update the instructions to this order:
+
+Step 1:
+Go to Google Cloud Console
+
+Step 2:
+Create or select the Google Cloud project you want to use for Gmail receipt import
+
+Step 3:
+Enable the Gmail API for that project
+
+* Go to APIs & Services → Library
+* Search for “Gmail API”
+* Click Enable
+
+Step 4:
+Configure the OAuth consent screen if not already configured
+
+Step 5:
+Create an OAuth 2.0 Client ID for a Web Application
+
+Step 6:
+Add the Authorized JavaScript origin and Authorized Redirect URI shown by the app
+
+Step 7:
+Paste the Client ID and Client Secret into the app
+
+3. Add a visible note in the UI:
+   “Enabling OAuth credentials alone is not enough. You must also enable the Gmail API in the same Google Cloud project.”
+
+4. Add a direct Gmail API link in the instructions:
+   https://console.cloud.google.com/apis/library/gmail.googleapis.com
+
+5. Add a troubleshooting note:
+   “If you see an error like ‘Gmail API has not been used in project ... before or it is disabled,’ enable the Gmail API in the same project as your OAuth client and wait a few minutes.”
+
+6. Improve the configured state UI:
+   If OAuth is configured but Gmail API has not been enabled yet, show a helpful explanation rather than just a generic label-fetch failure.
+
+7. Keep the instructions dynamic:
+
+* show the correct Authorized JavaScript origin
+* show the correct Authorized Redirect URI
+* derive both from the app’s configured public base URL
+
+Goal:
+The setup instructions should be complete enough that a user can configure Gmail import successfully without discovering later that the Gmail API itself was never enabled.
