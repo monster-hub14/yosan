@@ -129,8 +129,13 @@ export function EmailSettingsForm() {
   const [testResult, setTestResult] = useState<{ ok: boolean; error?: string; lastTestedAt?: string } | null>(null);
   const [showPass, setShowPass] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
-  const [hasSavedOnce, setHasSavedOnce] = useState(false);
   const [config, setConfig] = useState<EmailConfig>(DEFAULT_CONFIG);
+  /**
+   * Snapshot of the smtpHost last confirmed by the server (on load or successful save).
+   * Used for canTest so that unsaved form edits (e.g. clearing the host field) don't
+   * disable the test button — the server still has the saved config.
+   */
+  const [savedSmtpHost, setSavedSmtpHost] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/settings/email")
@@ -139,7 +144,7 @@ export function EmailSettingsForm() {
         if (data.config) {
           const loaded: EmailConfig = { ...DEFAULT_CONFIG, ...data.config };
           setConfig(loaded);
-          setHasSavedOnce(!!loaded.smtpHost);
+          setSavedSmtpHost(loaded.smtpHost || null);
           // If advanced fields are already set, open them by default
           if (loaded.fromAddress || (loaded.fromName && loaded.fromName !== "Yosan AI")) {
             setAdvancedOpen(true);
@@ -149,8 +154,9 @@ export function EmailSettingsForm() {
       .finally(() => setLoading(false));
   }, []);
 
-  const statusKind = getStatus(config, hasSavedOnce);
-  const canTest = hasSavedOnce && !!config.smtpHost;
+  const statusKind = getStatus(config, !!savedSmtpHost);
+  /** Test is available only when the server has a saved SMTP host, regardless of current form edits. */
+  const canTest = !!savedSmtpHost;
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
@@ -166,7 +172,7 @@ export function EmailSettingsForm() {
         // Update config with what was returned (preserves lastTestedAt etc.)
         if (data.config) {
           setConfig((c) => ({ ...c, ...data.config }));
-          setHasSavedOnce(!!data.config.smtpHost);
+          setSavedSmtpHost(data.config.smtpHost || null);
         }
         toast.success("Settings saved");
       } else {
