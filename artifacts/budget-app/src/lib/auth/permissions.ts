@@ -4,11 +4,11 @@ import type { SessionPayload } from "./types";
 import { db } from "@/lib/db";
 
 export function unauthorized(message = "Unauthorized"): NextResponse {
-  return NextResponse.json({ error: message }, { status: 401 });
+  return NextResponse.json({ ok: false, error: message, errorCode: "unauthorized" }, { status: 401 });
 }
 
 export function forbidden(message = "Forbidden"): NextResponse {
-  return NextResponse.json({ error: message }, { status: 403 });
+  return NextResponse.json({ ok: false, error: message, errorCode: "forbidden" }, { status: 403 });
 }
 
 export async function requireAuth(
@@ -131,7 +131,7 @@ export async function requireBudgetAccess(
     });
 
     if (!budget) {
-      return NextResponse.json({ error: "Budget not found" }, { status: 404 });
+      return NextResponse.json({ ok: false, error: "Budget not found", errorCode: "not_found" }, { status: 404 });
     }
 
     if (budget.ownerId === user.userId) {
@@ -162,13 +162,13 @@ export async function requireBudgetAccess(
     });
 
     if (!share || !share.isActive) {
-      return NextResponse.json({ error: "Invalid or expired share link" }, { status: 403 });
+      return NextResponse.json({ ok: false, error: "Invalid or expired share link", errorCode: "forbidden" }, { status: 403 });
     }
     if (share.expiresAt && share.expiresAt < new Date()) {
-      return NextResponse.json({ error: "Share link has expired" }, { status: 403 });
+      return NextResponse.json({ ok: false, error: "Share link has expired", errorCode: "forbidden" }, { status: 403 });
     }
     if (share.budgetId !== budgetId) {
-      return NextResponse.json({ error: "Share token does not match budget" }, { status: 403 });
+      return NextResponse.json({ ok: false, error: "Share token does not match budget", errorCode: "forbidden" }, { status: 403 });
     }
 
     if (!soloRoleHasCapability(share.role, required)) {
