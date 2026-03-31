@@ -90,6 +90,7 @@ export async function POST(
 
     const newIds = messageIds.filter((id) => !alreadyImported.has(id));
     let imported = 0;
+    let failed = 0;
     const skipped = messageIds.length - newIds.length;
 
     const uploadDir = getUploadDir(budgetId);
@@ -98,6 +99,9 @@ export async function POST(
     for (const msgId of newIds) {
       try {
         const detail = await fetchMessageDetail(session.userId, msgId);
+
+        // GmailRevokedError from detail/attachment fetch must propagate out of loop
+        // (it is not swallowed — only non-revoked errors are caught per-message)
 
         const storedAttachments: {
           originalFilename: string;
@@ -120,8 +124,9 @@ export async function POST(
               mimeType: att.mimeType,
               size: att.size,
             });
-          } catch {
-            // Skip attachment if download fails
+          } catch (attErr) {
+            if (attErr instanceof GmailRevokedError) throw attErr;
+            // Skip individual attachment download failures silently
           }
         }
 
@@ -147,16 +152,32 @@ export async function POST(
 
         imported++;
       } catch (msgErr) {
+        if (msgErr instanceof GmailRevokedError) throw msgErr; // propagate revoke
         console.error(`[gmail/sync] Failed to import message ${msgId}:`, msgErr);
+        failed++;
       }
     }
 
+    const partialError =
+      failed > 0
+        ? `${failed} of ${newIds.length} messages could not be imported`
+        : null;
+
     await db.gmailLabelConfig.update({
       where: { userId: session.userId },
-      data: { lastSyncAt: new Date(), lastSyncError: null },
-    });
+      data: {
+        lastSyncAt: new Date(),
+        lastSyncError: partialError,
+      },
+    }).catch(() => {});
 
-    return NextResponse.json({ ok: true, imported, skipped });
+    return NextResponse.json({
+      ok: true,
+      imported,
+      skipped,
+      failed,
+      ...(partialError ? { warning: partialError } : {}),
+    });
   } catch (err) {
     const isRevoked = err instanceof GmailRevokedError;
     const msg = err instanceof Error ? err.message : "Sync failed";
