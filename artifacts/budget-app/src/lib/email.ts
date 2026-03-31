@@ -193,8 +193,10 @@ export async function testEmailConfig(params: TestEmailParams): Promise<{ ok: bo
 
 /**
  * Load the Yosan AI logo as a base64 data URL for embedding in HTML emails.
- * Loaded once lazily on first call; cached for the lifetime of the module.
- * Falls back gracefully if the file is missing or unreadable.
+ * Loaded lazily on the first template render, then cached for the module lifetime.
+ * Lazy loading (rather than top-level module init) is intentional — Next.js evaluates
+ * modules at build time where the public/ directory may not be accessible.
+ * Falls back gracefully to no-logo if the file is missing or unreadable.
  */
 let _logoDataUrl: string | null | undefined = undefined; // undefined = not yet attempted
 function getLogoDataUrl(): string | null {
@@ -203,7 +205,9 @@ function getLogoDataUrl(): string | null {
     const logoPath = path.join(process.cwd(), "public", "logo.png");
     const data = fs.readFileSync(logoPath);
     _logoDataUrl = `data:image/png;base64,${data.toString("base64")}`;
-    console.log(`[email] Logo loaded from ${logoPath} (${data.length} bytes)`);
+    if (process.env.NODE_ENV !== "production") {
+      console.log(`[email] Logo loaded from ${logoPath} (${data.length} bytes)`);
+    }
   } catch (err) {
     console.warn("[email] Could not load logo for email templates:", err instanceof Error ? err.message : String(err));
     _logoDataUrl = null;
