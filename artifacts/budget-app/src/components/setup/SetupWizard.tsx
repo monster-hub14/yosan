@@ -240,7 +240,7 @@ export default function SetupWizard() {
         <div className="flex items-center justify-center mx-auto">
           <img src="/logo.png" alt="Budget Logo" className="w-72 h-72" />
         </div>
-        <h1 className="text-2xl font-bold">Welcome to Budget</h1>
+        <h1 className="text-2xl font-bold">Welcome to Yosan AI</h1>
         <p className="text-muted-foreground text-sm">
           Let&apos;s set up your self-hosted budget tracker in a few steps.
         </p>
