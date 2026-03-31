@@ -1,12 +1,34 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSessionFromRequest } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { decrypt, encrypt } from "@/lib/encryption";
 import { exchangeCodeForTokens } from "@/lib/gmail";
+import { jwtVerify } from "jose";
+
+const FLOW_COOKIE = "gmail_oauth_flow";
 
 function getRedirectUri(request: NextRequest): string {
   const url = new URL(request.url);
   return `${url.protocol}//${url.host}/api/settings/gmail/callback`;
+}
+
+function getSecret(): Uint8Array {
+  const secret = process.env.JWT_SECRET ?? "";
+  return new TextEncoder().encode(secret);
+}
+
+interface GmailFlowPayload {
+  userId: string;
+  state: string;
+}
+
+async function verifyFlowToken(token: string): Promise<GmailFlowPayload | null> {
+  try {
+    const { payload } = await jwtVerify(token, getSecret());
+    if (typeof payload.userId !== "string" || typeof payload.state !== "string") return null;
+    return { userId: payload.userId as string, state: payload.state as string };
+  } catch {
+    return null;
+  }
 }
 
 export async function GET(request: NextRequest) {
@@ -21,15 +43,23 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // Require an authenticated session — do not rely on user cookie
-  const session = await getSessionFromRequest(request);
-  if (!session) {
-    return NextResponse.redirect(new URL("/login", request.url));
+  // Validate the signed Lax flow cookie (sent even after cross-site redirect from Google)
+  const flowCookie = request.cookies.get(FLOW_COOKIE)?.value;
+  if (!flowCookie) {
+    return NextResponse.redirect(
+      new URL("/settings/gmail?error=missing_flow_cookie", request.url)
+    );
   }
 
-  const savedState = request.cookies.get("gmail_oauth_state")?.value;
+  const flow = await verifyFlowToken(flowCookie);
+  if (!flow) {
+    return NextResponse.redirect(
+      new URL("/settings/gmail?error=invalid_flow_token", request.url)
+    );
+  }
 
-  if (!savedState || !state || savedState !== state) {
+  // CSRF: state in query must match state embedded in the signed flow token
+  if (!state || flow.state !== state) {
     return NextResponse.redirect(
       new URL("/settings/gmail?error=invalid_state", request.url)
     );
@@ -62,11 +92,11 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // Bind tokens to the authenticated session user — not a client-supplied cookie
+  // Bind tokens to the userId from the signed flow token (tamper-evident, server-signed)
   await db.gmailConnection.upsert({
-    where: { userId: session.userId },
+    where: { userId: flow.userId },
     create: {
-      userId: session.userId,
+      userId: flow.userId,
       accessToken: encrypt(tokens.accessToken),
       refreshToken: encrypt(tokens.refreshToken),
       tokenEmail: tokens.email,
@@ -86,6 +116,6 @@ export async function GET(request: NextRequest) {
   const response = NextResponse.redirect(
     new URL("/settings/gmail?connected=1", request.url)
   );
-  response.cookies.delete("gmail_oauth_state");
+  response.cookies.delete(FLOW_COOKIE);
   return response;
 }
