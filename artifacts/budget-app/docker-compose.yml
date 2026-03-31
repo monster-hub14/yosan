@@ -7,7 +7,7 @@ services:
     ports:
       - "${PORT:-24432}:${PORT:-24432}"
     environment:
-      DATABASE_URL: file:/app/data/budget.db
+      DATABASE_URL: ${DATABASE_URL:-file:/app/data/budget.db}
       JWT_SECRET: ${JWT_SECRET}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY}
       CRON_SECRET: ${CRON_SECRET}
