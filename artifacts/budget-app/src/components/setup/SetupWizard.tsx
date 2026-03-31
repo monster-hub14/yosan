@@ -33,7 +33,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
 
 type Step = {
   id: string;
@@ -247,47 +246,25 @@ export default function SetupWizard() {
         </p>
       </div>
 
-      <div className="flex items-center gap-1 overflow-x-auto pb-1">
-        {steps.map((s, i) => {
-          const Icon = s.icon;
-          const done = i < currentStep;
-          const active = i === currentStep;
-          return (
-            <div key={s.id} className="flex items-center gap-1 min-w-0">
-              <div
-                className={cn(
-                  "flex items-center justify-center w-7 h-7 rounded-full border-2 transition-colors flex-shrink-0",
-                  done
-                    ? "bg-primary border-primary text-primary-foreground"
-                    : active
-                    ? "border-primary text-primary bg-primary/10"
-                    : "border-muted-foreground/30 text-muted-foreground/30"
-                )}
-              >
-                {done ? (
-                  <CheckCircle2 className="w-4 h-4" />
-                ) : (
-                  <Icon className="w-3.5 h-3.5" />
-                )}
-              </div>
-              <span
-                className={cn(
-                  "text-xs font-medium hidden sm:block",
-                  active
-                    ? "text-foreground"
-                    : done
-                    ? "text-primary"
-                    : "text-muted-foreground/40"
-                )}
-              >
-                {s.label}
-              </span>
-              {i < steps.length - 1 && (
-                <ChevronRight className="w-3 h-3 text-muted-foreground/30 flex-shrink-0 mx-0.5" />
-              )}
+      <div className="flex flex-col items-center gap-2 py-2">
+        <p className="text-xs text-muted-foreground font-medium tabular-nums">
+          Step {currentStep + 1} of {steps.length}
+        </p>
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={step.id}
+            initial={{ opacity: 0, scale: 0.85, y: 6 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.85, y: -6 }}
+            transition={{ duration: 0.2, ease: "easeInOut" }}
+            className="flex flex-col items-center gap-2"
+          >
+            <div className="flex items-center justify-center w-14 h-14 rounded-2xl bg-primary/10 text-primary">
+              <step.icon className="w-7 h-7" />
             </div>
-          );
-        })}
+            <p className="text-sm font-semibold text-foreground">{step.label}</p>
+          </motion.div>
+        </AnimatePresence>
       </div>
 
       <div className="h-1.5 bg-muted rounded-full overflow-hidden">
