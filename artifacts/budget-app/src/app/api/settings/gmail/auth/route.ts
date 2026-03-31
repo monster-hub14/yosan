@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       {
         ok: false,
-        error: "Gmail OAuth credentials could not be decrypted. Re-enter your credentials in Gmail OAuth settings.",
+        error: "Gmail OAuth credentials could not be decrypted",
         errorCode: "gmail_oauth_decrypt_failed",
       },
       { status: 500 }
@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       {
         ok: false,
-        error: "Gmail OAuth credentials could not be decrypted. Re-enter your credentials in Gmail OAuth settings.",
+        error: "Gmail OAuth credentials could not be decrypted",
         errorCode: "gmail_oauth_decrypt_failed",
       },
       { status: 500 }

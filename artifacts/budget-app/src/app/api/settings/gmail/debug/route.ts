@@ -45,9 +45,9 @@ export async function GET(request: NextRequest) {
   const redirectUri = `${appBaseUrl}/api/settings/gmail/callback`;
 
   const decryptedClientId = cfg.clientId ? decrypt(cfg.clientId) : null;
-  const decryptionOk = decryptedClientId !== null;
-
   const decryptedSecret = cfg.clientSecret ? decrypt(cfg.clientSecret) : null;
+  // decryptionOk reflects what auth route actually needs: both credentials must decrypt
+  const decryptionOk = decryptedClientId !== null && decryptedSecret !== null;
   const hasClientSecret = decryptedSecret !== null && decryptedSecret.length > 0;
 
   const clientIdSuffix = decryptedClientId ? `...${decryptedClientId.slice(-8)}` : null;
