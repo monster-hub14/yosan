@@ -81,6 +81,31 @@ const CONFIDENCE_COLORS = {
   low: "text-destructive",
 };
 
+function normalizeDateStr(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const d = new Date(raw);
+  if (isNaN(d.getTime())) return null;
+  return d.toISOString().slice(0, 10);
+}
+
+function validateDateYear(dateStr: string): string | null {
+  if (!dateStr) return null;
+  const year = parseInt(dateStr.slice(0, 4), 10);
+  const currentYear = new Date().getFullYear();
+  if (isNaN(year) || year < 2000) return "Year looks wrong — did you mean " + currentYear + "? Use four digits (e.g. " + currentYear + ").";
+  if (year > currentYear + 1) return "Date is in the future — please check the year.";
+  return null;
+}
+
+function isDateStale(dateStr: string): boolean {
+  if (!dateStr) return false;
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return false;
+  const ninetyDaysAgo = new Date();
+  ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+  return d < ninetyDaysAgo;
+}
+
 export function ReviewClient({ id }: ReviewClientProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -91,6 +116,7 @@ export function ReviewClient({ id }: ReviewClientProps) {
   // Editable top-level fields
   const [merchant, setMerchant] = useState("");
   const [date, setDate] = useState("");
+  const [dateError, setDateError] = useState<string | null>(null);
   const [total, setTotal] = useState("");
   const [notes, setNotes] = useState("");
   const [categoryId, setCategoryId] = useState<string>("");
@@ -125,7 +151,7 @@ export function ReviewClient({ id }: ReviewClientProps) {
       const p: ParsedData = JSON.parse(importData.data || "{}");
       setParsed(p);
       setMerchant(p.merchant || "");
-      setDate(p.date || new Date().toISOString().slice(0, 10));
+      setDate(normalizeDateStr(p.date) || new Date().toISOString().slice(0, 10));
       setTotal(p.total != null ? String(p.total) : "");
       // Pre-fill item categories from AI suggestions
       const initCats: Record<number, string> = {};
@@ -493,17 +519,34 @@ export function ReviewClient({ id }: ReviewClientProps) {
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="date" className="flex items-center gap-1.5">
+              <Label htmlFor="date" className="flex items-center gap-1.5 flex-wrap">
                 <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
                 Date
+                {!isAlreadyDone && isDateStale(date) && !dateError && (
+                  <span className="ml-1 inline-flex items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded">
+                    <AlertTriangle className="w-3 h-3" />
+                    {new Date(date).getFullYear()} — please verify
+                  </span>
+                )}
               </Label>
               <Input
                 id="date"
                 type="date"
                 value={date}
-                onChange={(e) => setDate(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setDate(val);
+                  setDateError(validateDateYear(val));
+                }}
                 disabled={isAlreadyDone}
+                className={dateError ? "border-destructive focus-visible:ring-destructive" : ""}
               />
+              {dateError && (
+                <p className="text-xs text-destructive flex items-center gap-1">
+                  <AlertTriangle className="w-3 h-3 flex-shrink-0" />
+                  {dateError}
+                </p>
+              )}
             </div>
           </div>
 
@@ -635,7 +678,7 @@ export function ReviewClient({ id }: ReviewClientProps) {
           <Button
             className="flex-1"
             onClick={() => handleConfirm()}
-            disabled={confirming || discarding || savingLater}
+            disabled={confirming || discarding || savingLater || !!dateError}
           >
             {confirming ? (
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />

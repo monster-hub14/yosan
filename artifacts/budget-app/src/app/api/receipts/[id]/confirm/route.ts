@@ -71,6 +71,17 @@ export async function POST(request: NextRequest, { params }: Params) {
   const notes: string | null = body.notes ?? null;
   const duplicateResolution: string | null = body.duplicateResolution ?? null;
 
+  // Guard against clearly-wrong dates (e.g. abbreviated year "26" stored as year 0026 by Chrome)
+  if (dateStr) {
+    const parsedYear = new Date(dateStr).getFullYear();
+    if (isNaN(parsedYear) || parsedYear < 2000) {
+      return NextResponse.json(
+        { error: "Expense date appears incorrect (year before 2000). Please correct the date — use four digits for the year (e.g. 2026)." },
+        { status: 400 }
+      );
+    }
+  }
+
   // Handle "keep_existing" — user chose to discard this new import
   if (duplicateResolution === "keep_existing") {
     await db.$transaction(async (tx) => {
