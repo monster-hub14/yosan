@@ -182,7 +182,6 @@ export function computePayPeriod(
     // even before the user finishes income setup.
     const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
     const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 1);
-    const approxDays = getIntervalDays(frequency, customDays);
     const daysInMonth = Math.max(1, daysBetween(monthStart, monthEnd));
     const daysElapsed = Math.max(0, Math.min(daysInMonth, daysBetween(monthStart, today)));
     const daysRemaining = Math.max(0, daysBetween(today, monthEnd));
