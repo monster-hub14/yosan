@@ -1,0 +1,104 @@
+The current SMTP setup UX and implementation need to be redesigned and fixed.
+
+Problems to fix:
+
+1. The SMTP settings UI feels clunky and unlike typical self-hosted GitHub/homelab apps.
+2. “From address” and “From name” should not be required fields in the current way.
+3. Saving SMTP says it worked, but “Send test” still says “SMTP not configured,” which means the saved state is not actually being loaded, persisted, or recognized by the test-email logic.
+4. I want the email experience to feel more like Bitwarden / Vaultwarden / Nextcloud:
+
+   * the sender should simply be the SMTP account I configured
+   * the email should visually look branded with the app logo
+   * the app should generate a clean HTML test email template
+   * the user should not have to think about low-level mail-header settings unless absolutely necessary
+
+Redesign requirements:
+
+1. Simplify the SMTP form to the fields users actually expect:
+
+   * Enable email
+   * SMTP host
+   * Port
+   * Encryption
+   * Username / login email
+   * Password
+   * optional “Sender display name” only if truly needed
+2. Do not require a separate “From address” field by default.
+
+   * By default, send mail from the configured SMTP account / username email.
+   * Only expose advanced sender overrides if the transport actually supports it and only inside an “Advanced settings” section.
+3. Make the UI look like a polished homelab app, not an enterprise admin panel.
+
+   * cleaner spacing
+   * simpler labels
+   * less clutter
+   * clearer success/error states
+
+Functional fixes:
+
+1. Fix SMTP persistence.
+
+   * When I click Save, the configuration must actually be stored and reloaded correctly.
+   * The “Send test” action must read the saved SMTP config from the same source of truth.
+2. Fix the bug where Save says success but test says “SMTP not configured.”
+
+   * Trace whether the issue is:
+
+     * frontend state not updating
+     * backend save route not persisting
+     * test-email route reading the wrong table/config
+     * encryption/decryption issue
+     * per-user vs global config mismatch
+3. Add a real configuration status indicator:
+
+   * Not configured
+   * Saved but unverified
+   * Verified working
+4. Add a “Send test email” flow that returns useful errors:
+
+   * authentication failed
+   * bad host/port
+   * TLS/STARTTLS mismatch
+   * missing config
+   * sender rejected
+
+Email design requirements:
+
+1. Generate a branded HTML email template for test emails and alerts.
+2. Include:
+
+   * app logo
+   * app name
+   * clean card-style layout
+   * simple message body
+3. The email should feel like Bitwarden / Vaultwarden / Nextcloud style self-hosted emails.
+4. Use the configured sender email as the sending address by default.
+
+Implementation requirements:
+
+1. Use a single server-side source of truth for SMTP config.
+2. Keep SMTP config instance-level, not user-level.
+3. If secrets are encrypted at rest, make sure the test route can decrypt them correctly.
+4. Make sure save, load, status, and test all use the same configuration service/module.
+5. Add logging on the server for SMTP save/load/test paths so this bug can be debugged properly, but never log raw passwords.
+
+UI requirements:
+
+1. Replace the current SMTP card layout with a more standard self-hosted app settings style.
+2. Add:
+
+   * Save settings
+   * Send test email
+   * status badge
+   * last tested result
+3. Hide advanced mail-header configuration unless needed.
+
+Also create a reusable branded email template component so all future emails use the same visual identity:
+
+* test email
+* alerts
+* reminders
+* invites
+
+Important:
+The SMTP experience should feel simple and opinionated by default, with advanced options hidden unless necessary.
