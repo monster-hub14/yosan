@@ -37,7 +37,7 @@ export function SummaryCards({ summary, currency = "USD" }: SummaryCardsProps) {
       bg: netPositive ? "bg-emerald-500/10" : "bg-rose-500/10",
     },
     {
-      label: "Saved (snapshot)",
+      label: "Left Over",
       value: fmtCurrency(summary.saved, currency),
       icon: PiggyBank,
       color: "text-violet-500",

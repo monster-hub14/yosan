@@ -150,13 +150,25 @@ export async function GET(request: NextRequest, { params }: Params) {
   if (budget?.incomeSources[0]) {
     const src = budget.incomeSources[0];
     const pp = computePayPeriod(src.frequency, src.nextPayDate, src.amount, src.customDays);
-    payPeriod = { start: pp.start.toISOString(), end: pp.end.toISOString() };
 
-    const lastStart = getPreviousPeriodStart(pp.start, src.frequency, src.customDays);
-    // End of last period is one calendar day before current period start (non-overlapping)
-    const lastEnd = new Date(pp.start);
-    lastEnd.setDate(lastEnd.getDate() - 1);
-    lastPayPeriod = { start: lastStart.toISOString(), end: lastEnd.toISOString() };
+    // pp.start = retreat(nextPayDate) = the PREVIOUS pay date (e.g. March 19).
+    // Shift the period start forward by 1 day so "This Pay Period" begins the day
+    // AFTER the previous paycheck. This prevents the previous pay date from being
+    // counted as income for the current period in getPayDatesInRange.
+    //   This Pay Period  = [March 20, April 2]  → only April 2 paycheck  = $2,300
+    //   (old behaviour)  = [March 19, April 2]  → March 19 + April 2     = $4,600 ✗
+    const ppStart = new Date(pp.start);
+    ppStart.setDate(ppStart.getDate() + 1);
+    payPeriod = { start: ppStart.toISOString(), end: pp.end.toISOString() };
+
+    // Last period: end = pp.start (the previous pay date itself, e.g. March 19)
+    //              start = day after the pay date before pp.start (e.g. March 6)
+    //   Last Pay Period = [March 6, March 19] → only March 19 paycheck = $2,300
+    const lastPayEnd = pp.start; // March 19 — the most recent paycheck (previous period)
+    const lastPayStartRaw = getPreviousPeriodStart(pp.start, src.frequency, src.customDays);
+    const lastPayStart = new Date(lastPayStartRaw);
+    lastPayStart.setDate(lastPayStart.getDate() + 1); // day after pay date before pp.start
+    lastPayPeriod = { start: lastPayStart.toISOString(), end: lastPayEnd.toISOString() };
   }
 
   // Fetch all expenses in range with category info
@@ -216,13 +228,8 @@ export async function GET(request: NextRequest, { params }: Params) {
   const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
   const net = income - totalExpenses;
 
-  // Prefer active SavingsGoal.currentAmount snapshot as a proxy for saved; fall back to max(0, net)
-  const savingsGoals = await db.savingsGoal.findMany({
-    where: { budgetId, isActive: true },
-    select: { currentAmount: true },
-  });
-  const goalSnapshot = savingsGoals.reduce((s, g) => s + (g.currentAmount ?? 0), 0);
-  const saved = goalSnapshot > 0 ? goalSnapshot : Math.max(0, net);
+  // Saved = money left over after expenses (unspent income for the selected period)
+  const saved = Math.max(0, net);
 
   // Server-side adaptive time-series aggregation
   const timeSeries = buildTimeSeries(
