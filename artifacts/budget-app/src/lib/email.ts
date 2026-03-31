@@ -196,7 +196,7 @@ export async function testEmailConfig(params: TestEmailParams): Promise<{ ok: bo
  * Total email HTML stays well below Gmail's 102 KB clip threshold.
  */
 const LOGO_SVG_DATA_URL =
-  "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNTIiIGhlaWdodD0iNTIiIHZpZXdCb3g9IjAgMCA1MiA1MiIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNTIiIGhlaWdodD0iNTIiIHJ4PSIxMiIgZmlsbD0iI0ZGM0MwMCIvPjx0ZXh0IHg9IjI2IiB5PSI0MCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1mYW1pbHk9IkFyaWFsLEhlbHZldGljYSxzYW5zLXNlcmlmIiBmb250LXNpemU9IjMwIiBmb250LXdlaWdodD0iOTAwIiBmaWxsPSJ3aGl0ZSI+WTwvdGV4dD48L3N2Zz4=";
+  "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIHZpZXdCb3g9IjAgMCA0OCA0OCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIHJ4PSIxMSIgZmlsbD0iI0ZGM0MwMCIvPjx0ZXh0IHg9IjI0IiB5PSIzNyIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1mYW1pbHk9IkFyaWFsLEhlbHZldGljYSxzYW5zLXNlcmlmIiBmb250LXNpemU9IjI4IiBmb250LXdlaWdodD0iOTAwIiBmaWxsPSJ3aGl0ZSI+WTwvdGV4dD48L3N2Zz4=";
 
 /**
  * Branded base template for all Yosan AI emails.
@@ -221,7 +221,7 @@ function baseTemplate(title: string, body: string): string {
         <table width="560" cellpadding="0" cellspacing="0" role="presentation" style="max-width:560px">
           <tr>
             <td align="center" style="padding:0 0 20px 0">
-              <img src="${LOGO_SVG_DATA_URL}" alt="Yosan AI" width="52" height="52" style="display:block;margin:0 auto 10px auto;border:0" />
+              <img src="${LOGO_SVG_DATA_URL}" alt="Yosan AI" width="48" height="48" style="display:block;margin:0 auto 10px auto;border:0" />
               <div style="color:#111827;font-size:22px;font-weight:700;letter-spacing:-0.01em">Yosan AI</div>
             </td>
           </tr>
