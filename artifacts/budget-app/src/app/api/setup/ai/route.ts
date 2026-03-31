@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { guardSetupRoute } from "@/lib/auth/setup-guard";
+import { encrypt } from "@/lib/encryption";
 
 const VALID_PROVIDERS = ["OPENAI", "ANTHROPIC", "GOOGLE", "OLLAMA", "CUSTOM"] as const;
 
@@ -37,20 +38,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const encryptedKey = apiKey ? encrypt(apiKey) : null;
+
     await db.aIProviderConfig.upsert({
       where: { id: "singleton" },
       create: {
         id: "singleton",
         provider: normalizedProvider,
         model,
-        apiKey,
+        apiKey: encryptedKey,
         baseUrl: baseUrl || null,
         isEnabled: true,
       },
       update: {
         provider: normalizedProvider,
         model,
-        apiKey,
+        apiKey: encryptedKey,
         baseUrl: baseUrl || null,
         isEnabled: true,
       },
