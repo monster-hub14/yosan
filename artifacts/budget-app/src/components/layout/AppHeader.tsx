@@ -175,6 +175,7 @@ export default function AppHeader({ user, activeBudgetId, onMobileMenuToggle }: 
       )}
 
       <button
+        suppressHydrationWarning
         onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
         className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
         aria-label="Toggle theme"
