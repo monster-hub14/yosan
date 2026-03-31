@@ -93,60 +93,44 @@ export function GmailSettingsClient({ budgets, defaultBudgetId }: Props) {
     const left = Math.round(window.screenX + (window.outerWidth - width) / 2);
     const top = Math.round(window.screenY + (window.outerHeight - height) / 2);
 
-    // When the app runs inside the Replit workspace iframe, Chrome treats
-    // window.open() from an iframe as a new tab, not a popup. Use window.top
-    // (which is same-origin in Replit dev) so Chrome applies top-level popup
-    // rules. Verify same-origin before using it — cross-origin access throws a
-    // SecurityError, which the try/catch guards against. Fall back to the
-    // iframe's own window if window.top is unavailable or cross-origin.
-    let win: Window = window;
-    try {
-      if (window.top && window.top.location.origin === window.location.origin) {
-        win = window.top;
-      }
-    } catch {
-      // Cross-origin top window — stay in iframe context
-    }
-
-    // Build an absolute URL so it resolves correctly regardless of which
-    // window context calls open() (win might be the workspace container page,
-    // not the budget app).
+    // Build an absolute auth URL so it resolves correctly in all contexts.
     const authUrl = new URL("/api/settings/gmail/auth", window.location.href).href;
 
-    const popup = win.open(
+    const popup = window.open(
       authUrl,
       "gmail-oauth",
       `popup=yes,width=${width},height=${height},left=${left},top=${top},scrollbars=yes,resizable=yes`
     );
 
     if (!popup) {
-      // Popup blocked — fall back to same-tab navigation
-      window.location.href = "/api/settings/gmail/auth";
+      // Popup blocked by the browser — do NOT navigate the current tab.
+      toast.error(
+        "Popups are blocked. Please allow popups for this page and try again."
+      );
       return;
     }
 
-    function onMessage(event: MessageEvent) {
-      if (event.origin !== window.location.origin) return;
-      if (event.data?.type !== "gmail_oauth_complete") return;
-      win.removeEventListener("message", onMessage);
+    // BroadcastChannel lets the relay page notify us without depending on
+    // window.opener — it works whether the window opened as a popup or a tab.
+    const channel = new BroadcastChannel("gmail_oauth_complete");
+
+    channel.onmessage = (event: MessageEvent) => {
+      channel.close();
       clearInterval(pollClose);
-      if (event.data.status === "connected") {
+      if (event.data?.status === "connected") {
         toast.success("Gmail connected successfully!");
         fetchStatus();
       } else {
-        toast.error(`Gmail connection failed: ${String(event.data.error ?? "unknown").replace(/_/g, " ")}`);
+        const err = String(event.data?.error ?? "unknown").replace(/_/g, " ");
+        toast.error(`Gmail connection failed: ${err}`);
       }
-    }
+    };
 
-    // Register listener on the same window that will receive the postMessage
-    // (the relay page posts to window.opener, which is `win` here).
-    win.addEventListener("message", onMessage);
-
-    // Clean up listener if the popup is closed without completing
+    // Clean up channel if the popup/tab is closed before OAuth completes.
     const pollClose = setInterval(() => {
       if (popup.closed) {
         clearInterval(pollClose);
-        win.removeEventListener("message", onMessage);
+        channel.close();
       }
     }, 500);
   }
