@@ -38,15 +38,19 @@ export async function checkStartup(): Promise<void> {
     process.exit(1);
   }
 
-  // Log resolved database path (no secrets exposed — SQLite URLs contain only a file path)
-  const resolvedDbPath = dbUrl.startsWith("file:")
+  // Log resolved database path.
+  // Only print the full URL for SQLite (file: protocol) — other datasource URLs may
+  // contain credentials (user:password@host) and must be redacted.
+  const isSqliteUrl = dbUrl.startsWith("file:");
+  const safeDbUrl = isSqliteUrl ? dbUrl : "<redacted — non-SQLite datasource>";
+  const resolvedDbPath = isSqliteUrl
     ? path.resolve(
         process.cwd(),
         "prisma",
         dbUrl.replace(/^file:(\/\/)?/, "")
       )
-    : "(non-file datasource)";
-  console.log(`[startup] DATABASE_URL: ${dbUrl}`);
+    : "(non-file datasource — see DATABASE_URL)";
+  console.log(`[startup] DATABASE_URL: ${safeDbUrl}`);
   console.log(`[startup] Resolved SQLite path (approx): ${resolvedDbPath}`);
 
   // Apply any pending Prisma migrations before the app starts serving requests.
