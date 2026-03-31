@@ -3,11 +3,7 @@ import { requireAdmin, isSessionPayload } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import { decrypt } from "@/lib/encryption";
 import { buildAuthUrl, GMAIL_SCOPE } from "@/lib/gmail";
-
-function getAppBaseUrl(request: NextRequest): string {
-  const url = new URL(request.url);
-  return `${url.protocol}//${url.host}`;
-}
+import { resolveAppBaseUrl } from "@/lib/gmail-base-url";
 
 function getEncryptionKeySource(): "ENCRYPTION_KEY" | "JWT_SECRET" | "dev-fallback" {
   if (process.env.ENCRYPTION_KEY) return "ENCRYPTION_KEY";
@@ -18,6 +14,15 @@ function getEncryptionKeySource(): "ENCRYPTION_KEY" | "JWT_SECRET" | "dev-fallba
 export async function GET(request: NextRequest) {
   const session = await requireAdmin(request);
   if (!isSessionPayload(session)) return session;
+
+  const encryptionKeySource = getEncryptionKeySource();
+
+  // Resolve base URL using the shared proxy-aware helper
+  const baseUrlResult = resolveAppBaseUrl(request);
+  const appBaseUrl = baseUrlResult.ok ? baseUrlResult.baseUrl : null;
+  const appBaseUrlSource = baseUrlResult.source;
+  const baseUrlError = baseUrlResult.ok ? null : baseUrlResult.error;
+  const redirectUri = appBaseUrl ? `${appBaseUrl}/api/settings/gmail/callback` : null;
 
   const cfg = await db.gmailOAuthConfig.findUnique({ where: { id: "singleton" } });
 
@@ -30,19 +35,17 @@ export async function GET(request: NextRequest) {
       clientIdLength: null,
       rawClientIdLength: null,
       hasClientSecret: false,
-      encryptionKeySource: getEncryptionKeySource(),
-      appBaseUrl: getAppBaseUrl(request),
-      appBaseUrlSource: "request.host",
-      redirectUri: `${getAppBaseUrl(request)}/api/settings/gmail/callback`,
+      encryptionKeySource,
+      appBaseUrl,
+      appBaseUrlSource,
+      authorizedJavascriptOrigin: appBaseUrl,
+      baseUrlError,
+      redirectUri,
       scope: GMAIL_SCOPE,
       authUrlPreview: null,
       configUpdatedAt: null,
     });
   }
-
-  const encryptionKeySource = getEncryptionKeySource();
-  const appBaseUrl = getAppBaseUrl(request);
-  const redirectUri = `${appBaseUrl}/api/settings/gmail/callback`;
 
   const decryptedClientId = cfg.clientId ? decrypt(cfg.clientId) : null;
   const decryptedSecret = cfg.clientSecret ? decrypt(cfg.clientSecret) : null;
@@ -53,9 +56,10 @@ export async function GET(request: NextRequest) {
   const clientIdSuffix = decryptedClientId ? `...${decryptedClientId.slice(-8)}` : null;
   const clientIdLength = decryptedClientId ? decryptedClientId.length : null;
 
-  const authUrlPreview = decryptedClientId
-    ? buildAuthUrl(decryptedClientId, redirectUri, "debug-preview-state")
-    : null;
+  const authUrlPreview =
+    decryptedClientId && redirectUri
+      ? buildAuthUrl(decryptedClientId, redirectUri, "debug-preview-state")
+      : null;
 
   return NextResponse.json({
     ok: true,
@@ -66,7 +70,9 @@ export async function GET(request: NextRequest) {
     hasClientSecret,
     encryptionKeySource,
     appBaseUrl,
-    appBaseUrlSource: "request.host",
+    appBaseUrlSource,
+    authorizedJavascriptOrigin: appBaseUrl,
+    baseUrlError,
     redirectUri,
     scope: GMAIL_SCOPE,
     authUrlPreview,

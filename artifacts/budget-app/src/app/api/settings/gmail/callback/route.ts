@@ -2,14 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { decrypt, encrypt } from "@/lib/encryption";
 import { exchangeCodeForTokens } from "@/lib/gmail";
+import { resolveAppBaseUrl } from "@/lib/gmail-base-url";
 import { jwtVerify } from "jose";
 
 const FLOW_COOKIE = "gmail_oauth_flow";
-
-function getRedirectUri(request: NextRequest): string {
-  const url = new URL(request.url);
-  return `${url.protocol}//${url.host}/api/settings/gmail/callback`;
-}
 
 function getSecret(): Uint8Array {
   const secret = process.env.JWT_SECRET ?? "";
@@ -78,9 +74,28 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const clientId = decrypt(oauthCfg.clientId) ?? oauthCfg.clientId;
-  const clientSecret = decrypt(oauthCfg.clientSecret) ?? oauthCfg.clientSecret;
-  const redirectUri = getRedirectUri(request);
+  const clientId = decrypt(oauthCfg.clientId);
+  const clientSecret = decrypt(oauthCfg.clientSecret);
+  if (!clientId || !clientSecret) {
+    console.error("[gmail-callback] credential decryption failed");
+    return NextResponse.redirect(
+      new URL("/settings/gmail?error=oauth_decrypt_failed", request.url)
+    );
+  }
+
+  // The redirect_uri sent to Google during token exchange MUST exactly match
+  // the one used in the auth request. Use the same proxy-aware resolver.
+  const baseUrlResult = resolveAppBaseUrl(request);
+  if (!baseUrlResult.ok) {
+    console.error(`[gmail-callback] base URL error: ${baseUrlResult.error}`);
+    return NextResponse.redirect(
+      new URL(
+        `/settings/gmail?error=${encodeURIComponent("invalid_base_url: " + baseUrlResult.error)}`,
+        request.url
+      )
+    );
+  }
+  const redirectUri = `${baseUrlResult.baseUrl}/api/settings/gmail/callback`;
 
   let tokens: { accessToken: string; refreshToken: string; expiresAt: Date; email: string };
   try {

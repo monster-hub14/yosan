@@ -3,20 +3,12 @@ import { requireAuth, isSessionPayload } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import { decrypt } from "@/lib/encryption";
 import { buildAuthUrl, GMAIL_SCOPE } from "@/lib/gmail";
+import { resolveAppBaseUrl } from "@/lib/gmail-base-url";
 import { randomBytes } from "crypto";
 import { SignJWT } from "jose";
 
 const FLOW_COOKIE = "gmail_oauth_flow";
 const FLOW_MAX_AGE = 600; // 10 minutes
-
-function getAppBaseUrl(request: NextRequest): string {
-  const url = new URL(request.url);
-  return `${url.protocol}//${url.host}`;
-}
-
-function getRedirectUri(request: NextRequest): string {
-  return `${getAppBaseUrl(request)}/api/settings/gmail/callback`;
-}
 
 function getEncryptionKeySource(): "ENCRYPTION_KEY" | "JWT_SECRET" | "dev-fallback" {
   if (process.env.ENCRYPTION_KEY) return "ENCRYPTION_KEY";
@@ -36,6 +28,25 @@ export async function GET(request: NextRequest) {
   const keySource = getEncryptionKeySource();
   console.log(`[gmail-auth] encryptionKeySource: ${keySource}`);
 
+  // ── Resolve base URL (proxy-aware) ────────────────────────────────────────
+  const baseUrlResult = resolveAppBaseUrl(request);
+  if (!baseUrlResult.ok) {
+    console.error(`[gmail-auth] base URL error: ${baseUrlResult.error}`);
+    return NextResponse.json(
+      {
+        ok: false,
+        error: baseUrlResult.error,
+        errorCode: "gmail_invalid_base_url",
+      },
+      { status: 500 }
+    );
+  }
+  const { baseUrl, source: baseUrlSource } = baseUrlResult;
+  const redirectUri = `${baseUrl}/api/settings/gmail/callback`;
+  console.log(`[gmail-auth] baseUrl: ${baseUrl} (source: ${baseUrlSource})`);
+  console.log(`[gmail-auth] redirectUri: ${redirectUri}`);
+
+  // ── Credential validation ─────────────────────────────────────────────────
   const oauthCfg = await db.gmailOAuthConfig.findUnique({ where: { id: "singleton" } });
   if (!oauthCfg?.clientId || !oauthCfg?.clientSecret) {
     return NextResponse.json(
@@ -72,23 +83,19 @@ export async function GET(request: NextRequest) {
 
   console.log(`[gmail-auth] decryption: ok`);
   console.log(`[gmail-auth] clientId suffix: ...${clientId.slice(-8)} (length: ${clientId.length})`);
+  console.log(`[gmail-auth] scope: ${GMAIL_SCOPE}`);
 
+  // ── Build state and sign flow cookie ────────────────────────────────────
   const state = randomBytes(16).toString("hex");
-
-  // Sign a Lax flow token containing userId + state nonce.
-  // SameSite=Lax is required so browsers send it after the Google redirect.
   const flowToken = await new SignJWT({ userId: session.userId, state })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime("10m")
     .sign(getSecret());
 
-  const redirectUri = getRedirectUri(request);
   const authUrl = buildAuthUrl(clientId, redirectUri, state);
 
-  console.log(`[gmail-auth] redirectUri: ${redirectUri}`);
-  console.log(`[gmail-auth] scope: ${GMAIL_SCOPE}`);
-  // Log auth URL with client_id and state redacted (those contain sensitive/identifying info)
+  // Log auth URL with client_id and state redacted
   try {
     const redacted = new URL(authUrl);
     redacted.searchParams.set("client_id", "<redacted>");

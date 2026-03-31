@@ -37,8 +37,11 @@ async function getOAuthConfig() {
   if (!cfg?.clientId || !cfg?.clientSecret) {
     throw new Error("Gmail OAuth is not configured. Ask your admin to set Client ID and Secret.");
   }
-  const clientId = decrypt(cfg.clientId) ?? cfg.clientId;
-  const clientSecret = decrypt(cfg.clientSecret) ?? cfg.clientSecret;
+  const clientId = decrypt(cfg.clientId);
+  const clientSecret = decrypt(cfg.clientSecret);
+  if (!clientId || !clientSecret) {
+    throw new Error("Gmail OAuth credentials could not be decrypted. Re-enter your credentials in Gmail OAuth settings.");
+  }
   return { clientId, clientSecret };
 }
 
@@ -404,7 +407,7 @@ export function buildAuthUrl(
     response_type: "code",
     scope: GMAIL_SCOPE,
     access_type: "offline",
-    prompt: "consent",
+    prompt: "select_account consent",
     state,
   });
   return `https://accounts.google.com/o/oauth2/v2/auth?${params}`;

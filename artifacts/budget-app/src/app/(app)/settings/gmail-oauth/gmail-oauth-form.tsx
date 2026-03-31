@@ -4,7 +4,7 @@ import { useState, useEffect, Suspense } from "react";
 import {
   Loader2, Save, Mail, Eye, EyeOff, CheckCircle2, AlertCircle,
   ArrowRight, Tag, RefreshCw, Bug, ChevronDown, ChevronRight,
-  Copy, ExternalLink, ShieldCheck, ShieldAlert, Key,
+  Copy, ExternalLink, ShieldCheck, ShieldAlert, Key, TriangleAlert,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,18 +30,25 @@ interface Budget {
 interface DebugData {
   ok: boolean;
   error?: string;
+  baseUrlError?: string | null;
   decryptionOk: boolean;
   clientIdSuffix: string | null;
   clientIdLength: number | null;
   rawClientIdLength: number | null;
   hasClientSecret: boolean;
   encryptionKeySource: string;
-  appBaseUrl: string;
+  appBaseUrl: string | null;
   appBaseUrlSource: string;
-  redirectUri: string;
+  authorizedJavascriptOrigin: string | null;
+  redirectUri: string | null;
   scope: string;
   authUrlPreview: string | null;
   configUpdatedAt: string | null;
+}
+
+interface RedirectUriValidation {
+  valid: boolean;
+  issues: string[];
 }
 
 interface Props {
@@ -72,11 +79,53 @@ const STEPS: { num: number; Icon: React.ElementType; title: string; desc: string
 
 function DebugRow({ label, value, mono = false }: { label: string; value: React.ReactNode; mono?: boolean }) {
   return (
-    <div className="grid grid-cols-[180px_1fr] gap-2 py-1.5 border-b border-border/50 last:border-0 text-xs">
+    <div className="grid grid-cols-[200px_1fr] gap-2 py-1.5 border-b border-border/50 last:border-0 text-xs">
       <span className="text-muted-foreground font-medium">{label}</span>
       <span className={mono ? "font-mono break-all" : ""}>{value}</span>
     </div>
   );
+}
+
+function validateRedirectUri(data: DebugData): RedirectUriValidation {
+  const issues: string[] = [];
+  const uri = data.redirectUri;
+
+  if (!uri) {
+    return { valid: false, issues: ["Redirect URI could not be determined — base URL error."] };
+  }
+
+  // Check: must be parseable as absolute URL
+  let parsed: URL | null = null;
+  try {
+    parsed = new URL(uri);
+  } catch {
+    issues.push(`Not a valid absolute URL: "${uri}"`);
+    return { valid: false, issues };
+  }
+
+  // Check: must use https
+  if (parsed.protocol !== "https:") {
+    issues.push(`Scheme must be https, got "${parsed.protocol.replace(":", "")}". Google OAuth requires HTTPS.`);
+  }
+
+  // Check: no query string
+  if (parsed.search) {
+    issues.push(`Contains a query string ("${parsed.search}") — redirect URIs must not have query parameters.`);
+  }
+
+  // Check: no fragment/hash
+  if (parsed.hash) {
+    issues.push(`Contains a hash fragment ("${parsed.hash}") — redirect URIs must not have fragments.`);
+  }
+
+  // Check: origin matches appBaseUrl
+  if (data.appBaseUrl && parsed.origin !== data.appBaseUrl) {
+    issues.push(
+      `Origin mismatch — redirect URI origin is "${parsed.origin}" but app base URL is "${data.appBaseUrl}".`
+    );
+  }
+
+  return { valid: issues.length === 0, issues };
 }
 
 export function GmailOAuthForm({ budgets, defaultBudgetId }: Props) {
@@ -121,6 +170,12 @@ export function GmailOAuthForm({ budgets, defaultBudgetId }: Props) {
     setDebugOpen((v) => !v);
   }
 
+  async function copyRedirectUri() {
+    if (!debugData?.redirectUri) return;
+    await navigator.clipboard.writeText(debugData.redirectUri);
+    toast.success("Redirect URI copied");
+  }
+
   async function copyAuthUrl() {
     if (!debugData?.authUrlPreview) return;
     await navigator.clipboard.writeText(debugData.authUrlPreview);
@@ -162,6 +217,8 @@ export function GmailOAuthForm({ budgets, defaultBudgetId }: Props) {
       </div>
     );
   }
+
+  const uriValidation = debugData ? validateRedirectUri(debugData) : null;
 
   return (
     <div className="space-y-8 max-w-2xl">
@@ -293,7 +350,7 @@ export function GmailOAuthForm({ budgets, defaultBudgetId }: Props) {
               <Bug className="w-4 h-4 text-muted-foreground shrink-0" />
               <span className="text-sm font-medium">OAuth Debug</span>
               <span className="text-xs text-muted-foreground ml-1">
-                — verify client ID, redirect URI, and decryption status
+                — verify redirect URI, base URL, and credentials
               </span>
             </button>
           </CardHeader>
@@ -307,6 +364,18 @@ export function GmailOAuthForm({ budgets, defaultBudgetId }: Props) {
                 </div>
               ) : debugData ? (
                 <>
+                  {/* Base URL error — hard red if APP_BASE_URL is set but invalid */}
+                  {debugData.baseUrlError && (
+                    <div className="flex gap-2 p-3 rounded-md bg-red-500/10 border border-red-500/30 text-xs text-red-700 dark:text-red-400">
+                      <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-medium mb-0.5">APP_BASE_URL configuration error</p>
+                        <p className="font-mono">{debugData.baseUrlError}</p>
+                        <p className="mt-1">Set APP_BASE_URL to a plain origin, e.g. <span className="font-mono">https://yourdomain.com</span></p>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Decryption status banner */}
                   {debugData.decryptionOk ? (
                     <div className="flex items-center gap-2 p-3 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-xs text-emerald-700 dark:text-emerald-400">
@@ -320,7 +389,55 @@ export function GmailOAuthForm({ budgets, defaultBudgetId }: Props) {
                     </div>
                   )}
 
-                  {/* Debug fields table */}
+                  {/* ── Redirect URI — prominent display above the table ── */}
+                  <div className="rounded-md border border-border bg-muted/20 p-3 space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs font-semibold text-foreground">Redirect URI</p>
+                      <span className="text-xs text-muted-foreground">(register this exactly in Google Cloud Console)</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <p className="flex-1 text-xs font-mono break-all bg-background border border-border rounded px-2 py-1.5">
+                        {debugData.redirectUri ?? "— (unavailable)"}
+                      </p>
+                      {debugData.redirectUri && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-xs gap-1 shrink-0"
+                          onClick={copyRedirectUri}
+                        >
+                          <Copy className="w-3 h-3" />
+                          Copy
+                        </Button>
+                      )}
+                    </div>
+                    {/* Redirect URI validation */}
+                    {uriValidation && !uriValidation.valid && (
+                      <div className="rounded-md border border-yellow-400/40 bg-yellow-400/10 p-3 space-y-1.5">
+                        <div className="flex items-center gap-1.5 text-xs font-medium text-yellow-700 dark:text-yellow-400">
+                          <TriangleAlert className="w-3.5 h-3.5 shrink-0" />
+                          Redirect URI validation failed
+                        </div>
+                        <ul className="list-disc ml-4 space-y-1">
+                          {uriValidation.issues.map((issue, i) => (
+                            <li key={i} className="text-xs text-yellow-700 dark:text-yellow-400">{issue}</li>
+                          ))}
+                        </ul>
+                        <p className="text-xs text-yellow-700/80 dark:text-yellow-400/80 mt-1">
+                          Make sure this URI matches exactly what is registered under
+                          "Authorized Redirect URIs" in your Google Cloud Console OAuth client.
+                        </p>
+                      </div>
+                    )}
+                    {uriValidation?.valid && (
+                      <p className="text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3 shrink-0" />
+                        Redirect URI format looks valid — make sure this matches your Google Cloud Console entry exactly.
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Full debug fields table */}
                   <div className="rounded-md border border-border px-3 py-1">
                     <DebugRow
                       label="Decryption"
@@ -364,9 +481,14 @@ export function GmailOAuthForm({ budgets, defaultBudgetId }: Props) {
                         )
                       }
                     />
-                    <DebugRow label="App base URL" value={debugData.appBaseUrl} mono />
+                    <DebugRow label="App base URL" value={debugData.appBaseUrl ?? "—"} mono />
                     <DebugRow label="Base URL source" value={debugData.appBaseUrlSource} />
-                    <DebugRow label="Redirect URI" value={debugData.redirectUri} mono />
+                    <DebugRow
+                      label="JS origin (for Google)"
+                      value={debugData.authorizedJavascriptOrigin ?? "—"}
+                      mono
+                    />
+                    <DebugRow label="Redirect URI" value={debugData.redirectUri ?? "—"} mono />
                     <DebugRow label="Scope" value={debugData.scope} mono />
                     <DebugRow
                       label="Config saved"
