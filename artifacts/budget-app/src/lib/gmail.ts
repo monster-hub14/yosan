@@ -136,9 +136,19 @@ interface MessageListItem {
   threadId: string;
 }
 
+interface MessageListItemWithDate {
+  id: string;
+  internalDate: number;
+}
+
 interface MessageListResponse {
   messages?: MessageListItem[];
   nextPageToken?: string;
+}
+
+interface MessageMetadataResponse {
+  id: string;
+  internalDate?: string;
 }
 
 export interface FetchMessageIdsOptions {
@@ -147,8 +157,8 @@ export interface FetchMessageIdsOptions {
 }
 
 /**
- * Fetches message IDs for all given label IDs, deduplicates across labels,
- * returns newest first (sorted by Gmail internal date ordering via API).
+ * Fetches message IDs for all given label IDs, deduplicates globally,
+ * sorts newest-first by internalDate, then caps at maxResults.
  */
 export async function fetchMessageIds(
   userId: string,
@@ -159,7 +169,7 @@ export async function fetchMessageIds(
 
   const token = await getValidAccessToken(userId);
   const seen = new Set<string>();
-  const ids: string[] = [];
+  const allIds: string[] = [];
 
   let query = "";
   if (cutoffDate) {
@@ -167,12 +177,14 @@ export async function fetchMessageIds(
     query = `after:${epochSeconds}`;
   }
 
-  for (const labelId of labelIds) {
-    if (ids.length >= maxResults) break;
+  // Step 1: collect candidate IDs from all labels (deduplicated)
+  // Fetch enough candidates to have a good global pool before capping
+  const candidateLimit = Math.min(maxResults * 4, 500);
 
+  for (const labelId of labelIds) {
     const params = new URLSearchParams({
       labelIds: labelId,
-      maxResults: String(Math.min(maxResults - ids.length, 500)),
+      maxResults: String(candidateLimit),
     });
     if (query) params.set("q", query);
 
@@ -188,12 +200,44 @@ export async function fetchMessageIds(
     for (const msg of data.messages ?? []) {
       if (!seen.has(msg.id)) {
         seen.add(msg.id);
-        ids.push(msg.id);
+        allIds.push(msg.id);
       }
     }
   }
 
-  return ids.slice(0, maxResults);
+  if (allIds.length === 0) return [];
+
+  // Step 2: fetch internalDate for each candidate in parallel batches
+  // to enable global newest-first sorting
+  const BATCH_SIZE = 20;
+  const withDates: MessageListItemWithDate[] = [];
+
+  for (let i = 0; i < allIds.length; i += BATCH_SIZE) {
+    const batch = allIds.slice(i, i + BATCH_SIZE);
+    const results = await Promise.allSettled(
+      batch.map(async (msgId) => {
+        const r = await fetch(
+          `${GMAIL_API_BASE}/messages/${msgId}?format=metadata&metadataHeaders=Date`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        if (!r.ok) return null;
+        const meta = (await r.json()) as MessageMetadataResponse;
+        return {
+          id: msgId,
+          internalDate: parseInt(meta.internalDate ?? "0", 10),
+        };
+      })
+    );
+    for (const r of results) {
+      if (r.status === "fulfilled" && r.value) {
+        withDates.push(r.value);
+      }
+    }
+  }
+
+  // Step 3: sort newest-first, cap at maxResults
+  withDates.sort((a, b) => b.internalDate - a.internalDate);
+  return withDates.slice(0, maxResults).map((m) => m.id);
 }
 
 export interface MessageAttachmentInfo {
