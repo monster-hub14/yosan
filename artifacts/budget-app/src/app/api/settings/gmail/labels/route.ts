@@ -14,19 +14,19 @@ const LOG = "[gmail-labels-route]";
 export async function GET(request: NextRequest) {
   console.log(`${LOG} route=entered method=GET`);
 
-  const session = await requireAuth(request);
-  if (!isSessionPayload(session)) {
-    console.log(`${LOG} auth=failed`);
-    return session;
-  }
-  console.log(`${LOG} auth=ok userId=${session.userId}`);
-
   try {
+    const session = await requireAuth(request);
+    if (!isSessionPayload(session)) {
+      console.log(`${LOG} auth=failed`);
+      return session;
+    }
+    console.log(`${LOG} auth=ok userId=${session.userId}`);
+
     const labels = await fetchGmailLabels(session.userId);
     console.log(`${LOG} result=ok labels=${labels.length}`);
     return NextResponse.json({ ok: true, labels });
   } catch (err) {
-    // GmailRevokedError — refresh token is revoked or connection marked revoked
+    // GmailRevokedError — connection is missing, marked revoked, or refresh token was revoked
     if (err instanceof GmailRevokedError) {
       console.error(`${LOG} errorCode=gmail_not_connected message="${err.message}"`);
       return NextResponse.json(
@@ -40,22 +40,23 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // GmailDecryptError — stored token could not be decrypted
+    // GmailDecryptError — decrypt() returned null (corrupt/key mismatch) or empty string
     if (err instanceof GmailDecryptError) {
+      // null reason → actual decryption failure for access or refresh token
+      // empty reason → successfully decrypted but token string is empty
       const code =
-        err.which === "access"
+        err.reason === "null"
+          ? "gmail_token_decrypt_failed"
+          : err.which === "access"
           ? "gmail_access_token_missing"
-          : err.which === "refresh"
-          ? "gmail_refresh_token_missing"
-          : "gmail_token_decrypt_failed";
+          : "gmail_refresh_token_missing";
       console.error(
-        `${LOG} errorCode=${code} which=${err.which} message="${err.message}"`
+        `${LOG} errorCode=${code} which=${err.which} reason=${err.reason} message="${err.message}"`
       );
       return NextResponse.json(
         {
           ok: false,
-          error:
-            "Your Gmail credentials could not be read. Please reconnect your Gmail account.",
+          error: "Your Gmail credentials could not be read. Please reconnect your Gmail account.",
           errorCode: code,
           reconnect_required: true,
         },
@@ -63,17 +64,16 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // GmailRefreshError — refresh request failed for non-revocation reason
+    // GmailRefreshError — token refresh request failed for a non-revocation reason
     if (err instanceof GmailRefreshError) {
       console.error(
-        `${LOG} errorCode=gmail_token_decrypt_failed googleError="${err.googleError ?? ""}" message="${err.message}"`
+        `${LOG} errorCode=gmail_refresh_failed googleError="${err.googleError ?? ""}" message="${err.message}"`
       );
       return NextResponse.json(
         {
           ok: false,
-          error:
-            "Gmail access token refresh failed. Please reconnect your Gmail account.",
-          errorCode: "gmail_token_decrypt_failed",
+          error: "Gmail access token refresh failed. Please reconnect your Gmail account.",
+          errorCode: "gmail_refresh_failed",
           reconnect_required: true,
         },
         { status: 502 }
@@ -106,14 +106,14 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Unknown exception — log full stack, return safe generic message
+    // Unknown exception — log full stack server-side, return safe message only
     const stack = err instanceof Error ? err.stack : String(err);
-    const msg = err instanceof Error ? err.message : "Unknown error";
+    const msg = err instanceof Error ? err.message : String(err);
     console.error(`${LOG} errorCode=internal_error message="${msg}" stack:`, stack);
     return NextResponse.json(
       {
         ok: false,
-        error: "An internal error occurred while fetching Gmail labels.",
+        error: "An internal error occurred",
         errorCode: "internal_error",
       },
       { status: 500 }

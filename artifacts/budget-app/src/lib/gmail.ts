@@ -18,10 +18,17 @@ export class GmailRevokedError extends Error {
   }
 }
 
-/** Thrown when decrypt() returns null for a stored token. */
+/**
+ * Thrown when a stored token cannot be used.
+ * reason="null"  — decrypt() returned null (ciphertext is corrupt or key mismatch).
+ * reason="empty" — decrypt succeeded but produced an empty string.
+ */
 export class GmailDecryptError extends Error {
-  constructor(public readonly which: "access" | "refresh" | "oauth_config") {
-    super(`Failed to decrypt Gmail ${which} token. Reconnect required.`);
+  constructor(
+    public readonly which: "access" | "refresh" | "oauth_config",
+    public readonly reason: "null" | "empty"
+  ) {
+    super(`Gmail ${which} token ${reason === "null" ? "could not be decrypted" : "is empty"}. Reconnect required.`);
     this.name = "GmailDecryptError";
   }
 }
@@ -101,12 +108,14 @@ export async function getValidAccessToken(userId: string): Promise<string> {
   const decryptedAccess = decrypt(conn.accessToken);
   const decryptedRefresh = decrypt(conn.refreshToken);
   console.log(
-    `${LOG} access_token_present=${decryptedAccess !== null ? "yes" : "no"} ` +
-    `refresh_token_present=${decryptedRefresh !== null ? "yes" : "no"}`
+    `${LOG} access_token_present=${decryptedAccess !== null && decryptedAccess !== "" ? "yes" : "no"} ` +
+    `refresh_token_present=${decryptedRefresh !== null && decryptedRefresh !== "" ? "yes" : "no"}`
   );
 
-  if (decryptedAccess === null) throw new GmailDecryptError("access");
-  if (decryptedRefresh === null) throw new GmailDecryptError("refresh");
+  if (decryptedAccess === null) throw new GmailDecryptError("access", "null");
+  if (decryptedAccess === "") throw new GmailDecryptError("access", "empty");
+  if (decryptedRefresh === null) throw new GmailDecryptError("refresh", "null");
+  if (decryptedRefresh === "") throw new GmailDecryptError("refresh", "empty");
 
   const fiveMinutesFromNow = new Date(Date.now() + 5 * 60 * 1000);
   if (conn.expiresAt > fiveMinutesFromNow) {
