@@ -64,6 +64,7 @@ function buildTimeSeries(
     }
     return result;
   } else if (days <= 90) {
+    // Weekly — zero-fill all weeks in range
     const map = new Map<string, number>();
     for (const e of expenses) {
       const d = new Date(e.date);
@@ -74,29 +75,35 @@ function buildTimeSeries(
       const key = weekStart.toISOString().slice(0, 10);
       map.set(key, (map.get(key) ?? 0) + e.amount);
     }
-    return Array.from(map.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([key, amount]) => {
-        const [yr, mo, da] = key.split("-");
-        const d = new Date(Number(yr), Number(mo) - 1, Number(da));
-        const label = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-        return { key, label, amount };
-      });
+    const result: TimeSeriesPoint[] = [];
+    const cur = new Date(startDate);
+    cur.setDate(cur.getDate() - cur.getDay()); // rewind to Sunday of first week
+    cur.setHours(0, 0, 0, 0);
+    while (cur <= endDate) {
+      const key = cur.toISOString().slice(0, 10);
+      const label = cur.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+      result.push({ key, label, amount: map.get(key) ?? 0 });
+      cur.setDate(cur.getDate() + 7);
+    }
+    return result;
   } else {
+    // Monthly — zero-fill all months in range
     const map = new Map<string, number>();
     for (const e of expenses) {
       const d = new Date(e.date);
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
       map.set(key, (map.get(key) ?? 0) + e.amount);
     }
-    return Array.from(map.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([key, amount]) => {
-        const [yr, mo] = key.split("-");
-        const d = new Date(Number(yr), Number(mo) - 1, 1);
-        const label = d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
-        return { key, label, amount };
-      });
+    const result: TimeSeriesPoint[] = [];
+    const cur = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
+    const lastMonth = new Date(endDate.getFullYear(), endDate.getMonth(), 1);
+    while (cur <= lastMonth) {
+      const key = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, "0")}`;
+      const label = cur.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+      result.push({ key, label, amount: map.get(key) ?? 0 });
+      cur.setMonth(cur.getMonth() + 1);
+    }
+    return result;
   }
 }
 
@@ -200,7 +207,14 @@ export async function GET(request: NextRequest, { params }: Params) {
 
   const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
   const net = income - totalExpenses;
-  const saved = Math.max(0, net);
+
+  // Prefer active SavingsGoal.currentAmount snapshot as a proxy for saved; fall back to max(0, net)
+  const savingsGoals = await db.savingsGoal.findMany({
+    where: { budgetId, isActive: true },
+    select: { currentAmount: true },
+  });
+  const goalSnapshot = savingsGoals.reduce((s, g) => s + (g.currentAmount ?? 0), 0);
+  const saved = goalSnapshot > 0 ? goalSnapshot : Math.max(0, net);
 
   // Server-side adaptive time-series aggregation
   const timeSeries = buildTimeSeries(

@@ -21,6 +21,7 @@ function buildInsights(
 
   if (expenses === 0) {
     insights.push({ icon: Lightbulb, text: "No expenses recorded in this period.", severity: "info" });
+    insights.push({ icon: PiggyBank, text: "Try adding expenses to see spending breakdowns and personalised insights here.", severity: "info" });
     return insights;
   }
 
@@ -81,6 +82,15 @@ function buildInsights(
         severity: pct > 25 ? "warning" : "info",
       });
     }
+  }
+
+  // Guarantee at least 2 bullets
+  if (insights.length < 2) {
+    insights.push({
+      icon: Lightbulb,
+      text: `Total spending this period: ${fmtCurrency(expenses)} across ${groups.length} categor${groups.length === 1 ? "y" : "ies"}.`,
+      severity: "info",
+    });
   }
 
   return insights.slice(0, 5);
