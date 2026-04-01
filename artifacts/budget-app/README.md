@@ -102,6 +102,12 @@ For TrueNAS SCALE setup, bind-mount configuration, cron scheduling, Gmail sync, 
 
 ---
 
+## Pre-Release Verification
+
+A full Phase 1–7 hardening audit was completed before this project was published. Results are documented in **[RELEASE_NOTES.md](RELEASE_NOTES.md)**, covering Prisma migration integrity, build-without-secrets, fresh-install behavior, and portability checks.
+
+---
+
 ## Before Pushing to GitHub
 
 If you are distributing this app or pushing it to a public repository, run through this checklist first:
