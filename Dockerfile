@@ -3,7 +3,7 @@ ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 RUN corepack enable
 
-# Install all dependencies
+# Install all dependencies needed for build
 FROM base AS deps
 WORKDIR /workspace
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
@@ -52,8 +52,10 @@ COPY --from=builder /workspace/artifacts/budget-app/next.config.ts ./next.config
 # Copy app dependencies
 COPY --from=deps /workspace/artifacts/budget-app/node_modules ./node_modules
 
-# Copy Prisma CLI package from workspace root so the launcher works
-COPY --from=deps /workspace/node_modules/prisma ./node_modules/prisma
+# Install the exact Prisma CLI version declared by the app
+RUN PRISMA_VERSION=$(node -p "const p=require('./package.json'); (p.dependencies && p.dependencies.prisma) || (p.devDependencies && p.devDependencies.prisma) || ''") \
+    && if [ -z \"$PRISMA_VERSION\" ]; then echo 'Prisma version not found in package.json' && exit 1; fi \
+    && npm install -g "prisma@${PRISMA_VERSION}"
 
 RUN mkdir -p /app/data /app/uploads
 VOLUME ["/app/data", "/app/uploads"]
@@ -66,4 +68,4 @@ USER nextjs
 
 EXPOSE 3000
 
-CMD ["sh", "-c", "./node_modules/.bin/prisma migrate deploy && ./node_modules/.bin/next start -p ${PORT:-3000}"]
+CMD ["sh", "-c", "prisma migrate deploy && ./node_modules/.bin/next start -p ${PORT:-3000}"]
