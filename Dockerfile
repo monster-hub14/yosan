@@ -16,8 +16,6 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
 FROM base AS builder
 WORKDIR /workspace
 
-ARG ENCRYPTION_KEY
-ENV ENCRYPTION_KEY=$ENCRYPTION_KEY
 ENV NODE_ENV=production
 
 COPY --from=deps /workspace/node_modules ./node_modules
