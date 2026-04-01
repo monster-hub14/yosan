@@ -100,10 +100,6 @@ openssl rand -base64 48
 - Password hashing: bcryptjs (12 rounds)
 - Roles: `USER`, `ADMIN`
 
-### Dev Credentials (after seed)
-- Admin: `admin@budget.local` / `admin1234`
-- User: `user@budget.local` / `user1234`
-
 ## Setup (Development)
 
 ```bash
