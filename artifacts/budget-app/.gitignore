@@ -1,8 +1,32 @@
-.next/
+# ── Dependencies ──────────────────────────────────────────────────────────────
 node_modules/
+
+# ── Next.js build output ──────────────────────────────────────────────────────
+.next/
+
+# ── SQLite databases (any location in the tree) ───────────────────────────────
+*.db
+*.sqlite
+*.db-shm
+*.db-wal
 data/
-uploads/
+prisma/data/
+
+# ── Uploads & logs ────────────────────────────────────────────────────────────
+/uploads/
+/logs/
 *.log
+
+# ── Environment files ─────────────────────────────────────────────────────────
+# Keep .env.example tracked; ignore everything else.
 .env
-.env.local
-.env*.local
+.env.*
+!.env.example
+
+# ── OS / editor noise ─────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo

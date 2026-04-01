@@ -122,6 +122,65 @@ volumes:
 
 ---
 
+## Data Persistence Across Updates
+
+**Your data is safe when you update the app.** Nothing in the upgrade process touches your database or uploaded files.
+
+### What lives where
+
+| Container path | Host path (bind-mount example) | Contents |
+|---|---|---|
+| `/app/data/budget.db` | `/mnt/tank/yosan/data/budget.db` | All user accounts, budgets, transactions, categories, rules, and alert settings |
+| `/app/uploads/` | `/mnt/tank/yosan/uploads/` | Uploaded receipt images (JPEG/PNG) |
+
+Both paths are outside the container's image layer — they are mounted from the host at runtime and are never modified or deleted when the container image is rebuilt or replaced.
+
+### Migrations are additive-only
+
+On every startup, the container entrypoint runs:
+
+```bash
+npx prisma migrate deploy
+```
+
+`prisma migrate deploy` only **adds** new tables and columns — it never drops or truncates existing data. If a migration has already been applied (tracked in the `_prisma_migrations` table), it is skipped entirely. Downgrading to an older image leaves any newer columns in place and harmless.
+
+### Bind mounts vs named volumes (homelab recommendation)
+
+Named Docker volumes (the default in `docker-compose.yml`) are managed by Docker and stored under `/var/lib/docker/volumes/`. They are convenient but harder to inspect, back up, or move to another host.
+
+**For TrueNAS SCALE, Unraid, or any NAS where you want data on a specific dataset/share, use bind mounts instead:**
+
+```yaml
+services:
+  yosan:
+    image: yosan-ai
+    volumes:
+      - /mnt/tank/yosan/data:/app/data        # SQLite database
+      - /mnt/tank/yosan/uploads:/app/uploads  # Receipt images
+```
+
+Create the host directories before first start so Docker does not create them as root-owned:
+
+```bash
+mkdir -p /mnt/tank/yosan/data /mnt/tank/yosan/uploads
+```
+
+With bind mounts, your data is just ordinary files on the NAS dataset — you can snapshot them with ZFS, include them in a Borg/Restic backup job, or browse them with a file manager.
+
+### TrueNAS SCALE bind-mount example (Custom App)
+
+In the TrueNAS **Custom App** UI, under **Storage**, add two host path volumes:
+
+| Host path | Mount path in container | Read only |
+|---|---|---|
+| `/mnt/tank/yosan/data` | `/app/data` | No |
+| `/mnt/tank/yosan/uploads` | `/app/uploads` | No |
+
+Alternatively, paste the bind-mount `docker-compose.yml` snippet above directly into the compose editor.
+
+---
+
 ## Cron Alert Scheduling
 
 The app exposes `/api/cron/alerts` for sending email alerts (overspending, upcoming bills, payday reminders, cash flow deficit warnings, savings goal risks, and receipt reminders).
