@@ -5,20 +5,20 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     ports:
-      - "${PORT:-24432}:${PORT:-24432}"
+      - "${PORT:-3000}:${PORT:-3000}"
     environment:
       DATABASE_URL: ${DATABASE_URL:-file:/app/data/budget.db}
       JWT_SECRET: ${JWT_SECRET}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY}
       CRON_SECRET: ${CRON_SECRET}
-      PORT: ${PORT:-24432}
+      PORT: ${PORT:-3000}
       UPLOAD_DIR: /app/uploads
       NODE_ENV: production
     volumes:
       - yosan_data:/app/data
       - yosan_uploads:/app/uploads
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:${PORT:-24432}/api/setup/status"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:${PORT:-3000}/api/setup/status"]
       interval: 30s
       timeout: 10s
       retries: 3

@@ -3,6 +3,9 @@
  * Uses AES-256-GCM with a key derived from ENCRYPTION_KEY env var.
  * Falls back to a machine-local key if env var is not set (dev only).
  * NEVER import this from client components.
+ *
+ * Key derivation is lazy — it runs on first call, not at module import time.
+ * This means the module is safe to import during build without any env vars set.
  */
 
 import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from "crypto";
@@ -30,15 +33,24 @@ function deriveKey(): Buffer {
   return scryptSync(secret, SALT, 32);
 }
 
-const KEY = deriveKey();
+// Lazily derived — populated on first use, never at import time.
+let _key: Buffer | undefined;
+
+function getKey(): Buffer {
+  if (!_key) {
+    _key = deriveKey();
+  }
+  return _key;
+}
 
 /**
  * Encrypt a plaintext string. Returns a base64-encoded string.
  * Format: iv(12) + tag(16) + ciphertext
  */
 export function encrypt(plaintext: string): string {
+  const key = getKey();
   const iv = randomBytes(IV_LENGTH);
-  const cipher = createCipheriv(ALGORITHM, KEY, iv, { authTagLength: TAG_LENGTH });
+  const cipher = createCipheriv(ALGORITHM, key, iv, { authTagLength: TAG_LENGTH });
   const encrypted = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
   const tag = cipher.getAuthTag();
   return Buffer.concat([iv, tag, encrypted]).toString("base64");
@@ -49,11 +61,12 @@ export function encrypt(plaintext: string): string {
  */
 export function decrypt(ciphertext: string): string | null {
   try {
+    const key = getKey();
     const buf = Buffer.from(ciphertext, "base64");
     const iv = buf.subarray(0, IV_LENGTH);
     const tag = buf.subarray(IV_LENGTH, IV_LENGTH + TAG_LENGTH);
     const data = buf.subarray(IV_LENGTH + TAG_LENGTH);
-    const decipher = createDecipheriv(ALGORITHM, KEY, iv, { authTagLength: TAG_LENGTH });
+    const decipher = createDecipheriv(ALGORITHM, key, iv, { authTagLength: TAG_LENGTH });
     decipher.setAuthTag(tag);
     return Buffer.concat([decipher.update(data), decipher.final()]).toString("utf8");
   } catch {

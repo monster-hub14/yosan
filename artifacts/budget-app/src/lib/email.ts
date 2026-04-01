@@ -189,18 +189,27 @@ export async function testEmailConfig(params: TestEmailParams): Promise<{ ok: bo
 
 // ---- Email templates ----
 
-/** Direct public URL for the Yosan AI logo, loaded by email clients as an external image. */
-const LOGO_URL =
-  "https://raw.githubusercontent.com/monster-hub14/yosan-assets/main/Untitled%20design%20(7).png";
+/**
+ * Optional public URL for the app logo shown in outgoing emails.
+ * Set EMAIL_LOGO_URL to a publicly reachable HTTPS URL (e.g. your CDN or object store).
+ * When unset, emails are sent without a logo image.
+ */
+function getLogoUrl(): string {
+  return process.env.EMAIL_LOGO_URL || "";
+}
 
 /**
  * Branded base template for all Yosan AI emails.
- * Uses an externally hosted logo URL so email clients load it directly — no base64,
- * no file reads, no data URIs. Emails stay well under Gmail's 102 KB clip threshold.
+ * Logo is loaded from EMAIL_LOGO_URL env var — no logo is shown when the var is unset.
+ * Emails stay well under Gmail's 102 KB clip threshold.
  * @param title  Card header title
  * @param body   HTML body content
  */
 function baseTemplate(title: string, body: string): string {
+  const logoUrl = getLogoUrl();
+  const logoBlock = logoUrl
+    ? `<img src="${logoUrl}" alt="Yosan AI" height="96" style="display:block;margin:0 auto 10px auto;border:0;height:96px;width:auto" />`
+    : "";
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -216,7 +225,7 @@ function baseTemplate(title: string, body: string): string {
         <table width="560" cellpadding="0" cellspacing="0" role="presentation" style="max-width:560px">
           <tr>
             <td align="center" style="padding:0 0 20px 0">
-              <img src="${LOGO_URL}" alt="Yosan AI" height="96" style="display:block;margin:0 auto 10px auto;border:0;height:96px;width:auto" />
+              ${logoBlock}
               <div style="color:#111827;font-size:22px;font-weight:700;letter-spacing:-0.01em">Yosan AI</div>
             </td>
           </tr>
