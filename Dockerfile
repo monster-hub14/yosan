@@ -14,6 +14,10 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
 # Build the Next.js app
 FROM base AS builder
 WORKDIR /workspace
+
+ARG ENCRYPTION_KEY
+ENV ENCRYPTION_KEY=$ENCRYPTION_KEY
+
 COPY --from=deps /workspace/node_modules ./node_modules
 COPY --from=deps /workspace/artifacts/budget-app/node_modules ./artifacts/budget-app/node_modules
 COPY . .
@@ -28,6 +32,9 @@ FROM node:22-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
+
+ARG ENCRYPTION_KEY
+ENV ENCRYPTION_KEY=$ENCRYPTION_KEY
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     openssl \
