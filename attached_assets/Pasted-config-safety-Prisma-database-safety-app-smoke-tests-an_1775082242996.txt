@@ -1,0 +1,190 @@
+config safety, Prisma/database safety, app smoke tests, and deployment readiness.
+
+Golden rules before pushing
+No secrets hard-coded anywhere in code, Dockerfile, or committed files.
+Production secrets come only from environment variables.
+Replit/dev can use a local .env, but .env must be gitignored.
+GitHub should contain code, migrations, and setup instructions — not your actual secrets.
+TrueNAS should create/use its own SQLite DB in the mounted directory you choose.
+Production env contract
+
+These are the only runtime variables your app should depend on for production:
+
+DATABASE_URL=file:/app/data/budget.db
+ENCRYPTION_KEY=required in production
+JWT_SECRET=required in production
+UPLOAD_DIR=/app/uploads
+PORT=3000
+APP_BASE_URL=optional, but required for OAuth/public URL features
+
+For your repo, I’d add a .env.example with placeholders only:
+
+DATABASE_URL=file:/app/data/budget.db
+ENCRYPTION_KEY=replace_me
+JWT_SECRET=replace_me
+UPLOAD_DIR=/app/uploads
+PORT=3000
+APP_BASE_URL=
+Replit pre-push checklist
+1. Secret audit
+
+Check these places and remove any hard-coded secrets:
+
+Dockerfile
+docker-compose.yml if present
+*.ts, *.js, *.env, config files
+GitHub workflow files
+README examples
+
+Search for:
+
+grep -R "ENCRYPTION_KEY\|JWT_SECRET\|AIza\|sk-\|BEGIN PRIVATE KEY\|gmail\|password" .
+
+Pass condition:
+
+no real secret values in tracked files
+only process.env... usage in app code
+2. Runtime-only secret loading
+
+Make sure sensitive code reads env vars only when needed, not at import time.
+
+Pass condition:
+
+no top-level secret derivation that crashes build
+encryption/auth code uses lazy accessors like getKey()
+3. Docker sanity
+
+Your image must not require secrets at build time.
+
+Pass condition:
+
+no ARG ENCRYPTION_KEY
+no ENV ENCRYPTION_KEY=... in Dockerfile
+build succeeds without production secrets
+secrets are only provided when the container runs
+4. Prisma schema and migration health
+
+This is the big one.
+
+Run in Replit from the app folder:
+
+pnpm exec prisma validate
+pnpm exec prisma format
+pnpm exec prisma generate
+pnpm exec prisma migrate status
+
+Then create a fresh local DB test:
+
+rm -f ./prisma/dev.db ./dev.db ./budget.db
+DATABASE_URL="file:./test-build.db" pnpm exec prisma migrate deploy
+
+Then inspect status again:
+
+DATABASE_URL="file:./test-build.db" pnpm exec prisma migrate status
+
+Pass condition:
+
+all migrations apply cleanly on a totally fresh database
+no drift
+no missing column errors
+generated DB includes the fields your code expects
+5. Fresh-start app test
+
+Still in Replit, test with a brand-new DB and upload folder.
+
+Example:
+
+rm -f ./test-app.db
+rm -rf ./test-uploads
+mkdir -p ./test-uploads
+
+export DATABASE_URL="file:./test-app.db"
+export UPLOAD_DIR="./test-uploads"
+export ENCRYPTION_KEY="$(openssl rand -base64 48)"
+export JWT_SECRET="$(openssl rand -base64 48)"
+export PORT=3000
+export APP_BASE_URL="http://localhost:3000"
+
+Then start the app.
+
+Pass condition:
+
+app starts cleanly
+no Prisma P2022 missing-column errors
+signup works
+onboarding works
+category setup works
+AI settings page does not crash
+upload directory write test passes
+6. Build test
+
+Run the exact production-style build:
+
+pnpm install --frozen-lockfile
+pnpm build
+
+Pass condition:
+
+build succeeds without needing production secrets baked in
+no import-time env crashes
+7. Container test locally/in-Replit
+
+If Docker is available in your environment, test the same pattern you’ll use on TrueNAS:
+
+docker build -t yosan:test .
+docker run --rm \
+  -p 3000:3000 \
+  -e DATABASE_URL=file:/app/data/budget.db \
+  -e ENCRYPTION_KEY="$(openssl rand -base64 48)" \
+  -e JWT_SECRET="$(openssl rand -base64 48)" \
+  -e UPLOAD_DIR=/app/uploads \
+  -e PORT=3000 \
+  -v $(pwd)/test-data:/app/data \
+  -v $(pwd)/test-uploads:/app/uploads \
+  yosan:test
+
+Pass condition:
+
+container starts
+creates a fresh DB in mounted path
+writes to uploads path
+app loads and onboarding completes
+TrueNAS readiness checklist
+Repo/image
+GitHub contains prisma/schema.prisma
+GitHub contains all migration folders
+image builds from the restored working state
+no local-only fixes missing from GitHub
+App config
+Repository: ghcr.io/monster-hub14/yosan
+Tag: latest or a version tag
+Hostname field not abused for bind address
+env vars entered as proper NAME / VALUE
+Runtime env
+DATABASE_URL=file:/app/data/budget.db
+ENCRYPTION_KEY=<generated on TrueNAS>
+JWT_SECRET=<generated on TrueNAS>
+UPLOAD_DIR=/app/uploads
+PORT=3000
+APP_BASE_URL=https://your-domain when ready
+Mounts
+/mnt/tank/apps/yosan/data -> /app/data
+/mnt/tank/apps/yosan/upload or /uploads -> /app/uploads
+confirm the exact host path matches the mount
+permissions allow container writes
+First-boot expectation
+
+On first boot with empty mounted data dir:
+
+app should create budget.db
+Prisma should apply all migrations
+uploads write test should pass
+app should reach ready state with no missing-column errors
+Things to add to the repo before GitHub distribution
+.env.example
+a “Self-hosting / TrueNAS” section in README
+exact required env vars
+exact volume mounts
+exact first-run behavior
+note that secrets must be user-supplied
+note that fresh installs should start with an empty mounted DB directory

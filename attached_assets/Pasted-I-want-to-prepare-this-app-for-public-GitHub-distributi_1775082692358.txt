@@ -1,0 +1,103 @@
+I want to prepare this app for public GitHub distribution and self-hosted deployment without assuming any specific machine, NAS, folder layout, hostname, or secrets.
+
+Your job is to audit and fix the project so it is deployment-ready, portable, and environment-driven.
+
+Goals:
+
+1. Remove any hardcoded machine-specific values.
+2. Ensure all sensitive configuration comes only from environment variables.
+3. Ensure Prisma migrations fully match `schema.prisma`.
+4. Ensure a fresh deployment creates a working SQLite database in a user-mounted directory.
+5. Ensure uploads use a user-mounted writable directory.
+6. Keep the app working in Replit after the changes.
+
+Rules:
+
+* Do NOT hardcode any host filesystem path like `/mnt/...`
+* Do NOT hardcode any domain, hostname, port mapping, NAS path, username, email, or secret
+* Do NOT require any specific platform like TrueNAS, Replit, or Docker Desktop
+* Only use container/app-internal defaults like `/app/data`, `/app/uploads`, and port `3000`
+* Use environment variables for all deployment-sensitive values
+* Do NOT reset or destroy data unless absolutely necessary and clearly explained first
+* Prefer minimal safe changes over broad rewrites
+
+Required production environment variables:
+
+* `DATABASE_URL` — default should be `file:/app/data/budget.db`
+* `ENCRYPTION_KEY` — required in production, no default secret
+* `JWT_SECRET` — required in production, no default secret
+* `UPLOAD_DIR` — default `/app/uploads`
+* `PORT` — default `3000`
+* `APP_BASE_URL` — optional, required only for public URL / OAuth-style features
+
+Tasks:
+
+1. Audit the codebase for hardcoded values
+
+   * Find any hardcoded secrets, URLs, ports, host paths, usernames, emails, hostnames, or machine-specific assumptions
+   * Replace them with environment variables or neutral defaults
+   * Especially check Dockerfile, README, app config, auth code, encryption code, Prisma config, and setup/onboarding code
+
+2. Standardize runtime configuration
+
+   * Make sure the app uses only environment-driven config
+   * Use safe defaults only for non-secret values
+   * Ensure secret values are never needed at build time
+   * Ensure code does not read required secrets too early during import/build if it can be deferred to runtime
+
+3. Verify Prisma alignment
+
+   * Compare `prisma/schema.prisma` against the full migration history
+   * If schema is ahead of migrations, generate the missing migration using Prisma commands, not hand-written SQL first
+   * Ensure a fresh database created from migrations contains all columns and tables expected by the current code
+   * Regenerate Prisma client if needed
+
+4. Fresh-start validation
+
+   * Test with a brand-new SQLite database file and a writable uploads directory
+   * Confirm the app can start, run migrations, create the database, and pass setup without “column does not exist” or path/permission assumptions
+   * Confirm signup/onboarding/category setup/AI config paths do not crash
+
+5. Deployment portability
+
+   * Make sure the app only assumes these internal paths:
+
+     * `/app/data`
+     * `/app/uploads`
+   * Do not assume anything about the host-side mount source path
+   * Ensure docs explain that users may mount any host directory to those container paths
+
+6. Documentation and examples
+
+   * Create or update:
+
+     * `.env.example`
+     * a deployment section in README
+   * Docs must be generic and portable
+   * Use placeholder examples only, never real secrets or machine-specific paths
+   * Make it clear which values are required, optional, and what defaults apply
+
+7. Build and runtime verification
+
+   * Confirm production build works without requiring secrets baked into the image
+   * Confirm runtime works when env vars are supplied
+   * Flag any remaining blockers clearly
+
+Commands to prefer:
+
+* Prisma migration generation should use normal Prisma workflows first
+* If using pnpm workspace, use the correct workspace command
+* If a Prisma migration fails, explain exactly why before attempting a minimal manual fallback
+
+Deliverables:
+
+1. A summary of all hardcoded/setup-specific issues found
+2. The exact files changed
+3. Any new env vars introduced or cleaned up
+4. Confirmation that Prisma migrations now match schema
+5. Confirmation that a fresh deployment can create its own database in `/app/data`
+6. Updated README / `.env.example`
+7. A short “next steps to push to GitHub safely” checklist
+
+Important:
+Treat this app as a portable self-hosted app for many users, not a custom setup for one machine. Avoid any wording or code that assumes my personal directories, NAS layout, domain, or secrets.
