@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 import { execSync } from "child_process";
 import { db } from "@/lib/db";
-import { encryptIfPlaintext } from "@/lib/encryption";
+import { encryptIfPlaintext, decrypt } from "@/lib/encryption";
 
 export async function checkStartup(): Promise<void> {
   const uploadDir = process.env.UPLOAD_DIR || "/app/uploads";
@@ -79,6 +79,54 @@ export async function checkStartup(): Promise<void> {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[startup] FATAL: EmailConfig schema check failed:", msg);
     console.error("[startup] The database schema is out of date. Run: pnpm db:migrate:deploy");
+    process.exit(1);
+  }
+
+  // Verify that ENCRYPTION_KEY can decrypt stored secrets
+  // If encrypted config exists but cannot be decrypted, it means the key is wrong
+  // and we should fail loudly before the app serves requests
+  try {
+    const emailCfgForDecrypt = await db.emailConfig.findFirst({
+      select: { id: true, smtpPass: true },
+    });
+    if (emailCfgForDecrypt?.smtpPass) {
+      // Try to decrypt SMTP password — if it fails, the ENCRYPTION_KEY is wrong
+      const decrypted = decrypt(emailCfgForDecrypt.smtpPass);
+      if (decrypted === null) {
+        console.error(
+          "[startup] FATAL: Stored SMTP password cannot be decrypted. " +
+          "The ENCRYPTION_KEY in your environment does not match the key used to encrypt stored secrets. " +
+          "Either restore the correct ENCRYPTION_KEY or manually reset encrypted config (SMTP, AI keys, Gmail tokens) " +
+          "in the database and reconfigure them."
+        );
+        process.exit(1);
+      }
+    }
+
+    // Same check for Gmail OAuth credentials if they exist
+    const gmailOAuthCfg = await db.gmailOAuthConfig.findFirst({
+      select: { clientId: true },
+    });
+    if (gmailOAuthCfg?.clientId) {
+      const decrypted = decrypt(gmailOAuthCfg.clientId);
+      if (decrypted === null) {
+        console.error(
+          "[startup] FATAL: Stored Gmail OAuth credentials cannot be decrypted. " +
+          "The ENCRYPTION_KEY in your environment does not match the key used to encrypt stored secrets. " +
+          "Either restore the correct ENCRYPTION_KEY or manually reset encrypted config (SMTP, AI keys, Gmail tokens) " +
+          "in the database and reconfigure them."
+        );
+        process.exit(1);
+      }
+    }
+
+    console.log("[startup] Encryption key validation passed.");
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[startup] FATAL: Could not validate encryption key:", msg);
+    console.error(
+      "[startup] This may indicate a database schema issue or an ENCRYPTION_KEY mismatch."
+    );
     process.exit(1);
   }
 
