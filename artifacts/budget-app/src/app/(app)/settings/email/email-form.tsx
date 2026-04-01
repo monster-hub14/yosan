@@ -7,7 +7,6 @@ import {
   Mail,
   Eye,
   EyeOff,
-  Inbox,
   Send,
   CheckCircle2,
   XCircle,
@@ -603,45 +602,6 @@ export function EmailSettingsForm() {
         </CardContent>
       </Card>
 
-      {/* Receipt ingestion (instance-level stub) */}
-      <Card className="border-border">
-        <CardHeader>
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-muted">
-              <Inbox className="w-5 h-5 text-muted-foreground" />
-            </div>
-            <div className="flex-1">
-              <div className="flex items-center gap-2">
-                <CardTitle className="text-base">Receipt Ingestion</CardTitle>
-                <Badge variant="secondary" className="text-xs">Coming soon</Badge>
-              </div>
-              <CardDescription>
-                Forward email receipts to your instance for automatic AI parsing
-              </CardDescription>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            When receipt ingestion is enabled, the app listens on an inbound email
-            address (e.g. via a mail relay or catch-all rule). Forwarded receipts
-            are parsed by the configured AI provider and added as pending expenses
-            for review.
-          </p>
-          <div className="space-y-1">
-            <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">
-              Inbound address format
-            </p>
-            <code className="text-xs bg-muted px-2 py-1 rounded font-mono">
-              receipts+&#123;budgetId&#125;@&#123;your-domain&#125;
-            </code>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Each budget has its own forwarding address shown in Budget &rsaquo; Budget Settings.
-            Configure your mail server or IMAP polling in a future release.
-          </p>
-        </CardContent>
-      </Card>
     </div>
   );
 }
