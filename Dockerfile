@@ -52,6 +52,9 @@ COPY --from=builder /workspace/artifacts/budget-app/next.config.ts ./next.config
 # Copy app dependencies
 COPY --from=deps /workspace/artifacts/budget-app/node_modules ./node_modules
 
+# Copy Prisma CLI package from workspace root so the launcher works
+COPY --from=deps /workspace/node_modules/prisma ./node_modules/prisma
+
 RUN mkdir -p /app/data /app/uploads
 VOLUME ["/app/data", "/app/uploads"]
 
