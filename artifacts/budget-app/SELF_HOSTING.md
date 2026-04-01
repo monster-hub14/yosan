@@ -22,7 +22,14 @@ mkdir yosan-ai && cd yosan-ai
 
 ### 2. Copy the app files
 
-Clone or download the `artifacts/budget-app/` directory into this folder, or copy only these files:
+Clone the repository:
+
+```bash
+git clone https://github.com/monster-hub14/yosan.git .
+cd artifacts/budget-app
+```
+
+Or manually copy only these files from the repo:
 
 ```
 Dockerfile
