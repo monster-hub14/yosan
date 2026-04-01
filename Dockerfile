@@ -42,9 +42,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     openssl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install prisma CLI globally so migrate works reliably at runtime
-RUN npm install -g prisma
-
 # Copy built app
 COPY --from=builder /workspace/artifacts/budget-app/.next ./.next
 COPY --from=builder /workspace/artifacts/budget-app/public ./public
@@ -66,4 +63,4 @@ USER nextjs
 
 EXPOSE 3000
 
-CMD ["sh", "-c", "prisma migrate deploy && ./node_modules/.bin/next start -p ${PORT:-3000}"]
+CMD ["sh", "-c", "./node_modules/.bin/prisma migrate deploy && ./node_modules/.bin/next start -p ${PORT:-3000}"]
