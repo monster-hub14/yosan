@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 import { encryptIfPlaintext } from "@/lib/encryption";
 
 export async function checkStartup(): Promise<void> {
-  const uploadDir = process.env.UPLOAD_DIR || path.join(process.cwd(), "uploads");
+  const uploadDir = process.env.UPLOAD_DIR || "/app/uploads";
 
   try {
     if (!fs.existsSync(uploadDir)) {

@@ -16,7 +16,7 @@ const ALLOWED_TYPES = new Set([
 const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
 
 function getUploadDir(budgetId: string): string {
-  const base = process.env.UPLOAD_DIR || path.join(process.cwd(), "uploads");
+  const base = process.env.UPLOAD_DIR || "/app/uploads";
   return path.join(base, budgetId);
 }
 

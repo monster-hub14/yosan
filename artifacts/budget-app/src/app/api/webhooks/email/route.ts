@@ -22,7 +22,7 @@ import path from "path";
 import crypto from "crypto";
 import { processReceipt } from "@/lib/ai/process-receipt";
 
-const UPLOAD_DIR = process.env.UPLOAD_DIR ?? "./uploads";
+const UPLOAD_DIR = process.env.UPLOAD_DIR ?? "/app/uploads";
 const WEBHOOK_SECRET = process.env.WEBHOOK_EMAIL_SECRET;
 
 const RECEIPT_MIME_TYPES = new Set([
