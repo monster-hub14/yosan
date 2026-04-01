@@ -88,12 +88,17 @@ TrueNAS SCALE uses Docker Compose under the hood for Custom Apps.
 | `JWT_SECRET` | **Yes** | — | Signs session tokens — use 32+ random characters |
 | `ENCRYPTION_KEY` | **Yes** | falls back to `JWT_SECRET` | AES-256 key for encrypting stored SMTP passwords and AI API keys |
 | `CRON_SECRET` | **Yes** | — | Bearer token that authenticates `/api/cron/alerts` and `/api/cron/gmail-sync` requests |
+| `APP_BASE_URL` | **Required for Gmail OAuth** | auto-detected | Public HTTPS origin of your app — **must be HTTPS** (e.g. `https://yourdomain.com`). Without this, Gmail OAuth redirect URIs may resolve to an internal HTTP address that Google rejects. No path, no trailing slash. |
 | `PORT` | No | `24432` | HTTP port the app listens on |
 | `UPLOAD_DIR` | No | `/app/uploads` | Directory for uploaded receipt images |
 | `NODE_ENV` | No | `production` | Set by the Dockerfile — do not override |
 
 > **Security note:** `ENCRYPTION_KEY` and `CRON_SECRET` are critical for production use.
 > Losing `ENCRYPTION_KEY` means stored SMTP/AI passwords can no longer be decrypted.
+
+> **Gmail OAuth note:** Without `APP_BASE_URL`, the app tries to detect its public URL from reverse-proxy headers.
+> On Docker setups without a proxy, this typically resolves to an internal `http://` address — Google requires HTTPS and will reject the OAuth redirect.
+> Always set `APP_BASE_URL=https://yourdomain.com` when using Gmail integration.
 
 ---
 
