@@ -7,9 +7,12 @@ const nextConfig: NextConfig = {
       bodySizeLimit: "10mb",
     },
   },
-  // allowedDevOrigins restricts cross-origin dev-server access during `next dev`.
-  // Add your own origins here if your dev environment proxies through a custom domain.
-  // Example: allowedDevOrigins: ["*.example.com"]
+  // allowedDevOrigins allows cross-origin requests to the dev server from these
+  // wildcard patterns. Only applies during `next dev` — no effect in production.
+  // The *.replit.dev entries are required when developing inside Replit, where
+  // the preview pane proxies requests through a *.replit.dev domain.
+  // Contributors developing outside Replit can remove or extend this list.
+  allowedDevOrigins: ["*.replit.dev", "*.kirk.replit.dev", "*.repl.co"],
 };
 
 export default nextConfig;
