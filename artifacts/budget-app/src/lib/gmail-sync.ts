@@ -54,7 +54,7 @@ export interface GmailSyncResult {
 }
 
 function getUploadDir(budgetId: string): string {
-  const base = process.env.UPLOAD_DIR || "/app/uploads";
+  const base = process.env.UPLOAD_DIR || path.join(process.cwd(), "uploads");
   return path.join(base, budgetId);
 }
 

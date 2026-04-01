@@ -22,14 +22,7 @@ mkdir yosan-ai && cd yosan-ai
 
 ### 2. Copy the app files
 
-Clone the repository:
-
-```bash
-git clone https://github.com/monster-hub14/yosan.git .
-cd artifacts/budget-app
-```
-
-Or manually copy only these files from the repo:
+Clone or download the `artifacts/budget-app/` directory into this folder, or copy only these files:
 
 ```
 Dockerfile
@@ -92,8 +85,8 @@ TrueNAS SCALE uses Docker Compose under the hood for Custom Apps.
 | Variable | Required | Default | Description |
 |---|---|---|---|
 | `DATABASE_URL` | Yes (set by Compose) | `file:/app/data/budget.db` | SQLite path — do not change unless you know what you're doing |
-| `JWT_SECRET` | **Yes** | — | Signs session tokens — use 32+ random characters. **Keep separate from ENCRYPTION_KEY.** |
-| `ENCRYPTION_KEY` | **Yes** | — | AES-256-GCM key for encrypting stored SMTP passwords, AI API keys, and Gmail tokens. **Required in production. Generate with:** `openssl rand -base64 48`. **Do not reuse or derive from JWT_SECRET.** |
+| `JWT_SECRET` | **Yes** | — | Signs session tokens — use 32+ random characters |
+| `ENCRYPTION_KEY` | **Yes** | falls back to `JWT_SECRET` | AES-256 key for encrypting stored SMTP passwords and AI API keys |
 | `CRON_SECRET` | **Yes** | — | Bearer token that authenticates `/api/cron/alerts` and `/api/cron/gmail-sync` requests |
 | `APP_BASE_URL` | **Required for Gmail OAuth** | auto-detected | Public HTTPS origin of your app — **must be HTTPS** (e.g. `https://yourdomain.com`). Without this, Gmail OAuth redirect URIs may resolve to an internal HTTP address that Google rejects. No path, no trailing slash. |
 | `PORT` | No | `24432` | HTTP port the app listens on |
@@ -101,17 +94,7 @@ TrueNAS SCALE uses Docker Compose under the hood for Custom Apps.
 | `NODE_ENV` | No | `production` | Set by the Dockerfile — do not override |
 
 > **Security note:** `ENCRYPTION_KEY` and `CRON_SECRET` are critical for production use.
-> **Never lose or rotate `ENCRYPTION_KEY` without preparation.**
-> 
-> If you rotate `ENCRYPTION_KEY`:
-> - The app will fail to start with **FATAL: Stored secrets cannot be decrypted** error
-> - Existing SMTP passwords, AI API keys, and Gmail tokens become unrecoverable
-> - You must manually reset encrypted config and reconfigure them:
->   1. Delete/null out encrypted fields: `smtpPass`, `apiKey` (AI config), `accessToken`/`refreshToken` (Gmail), `clientId`/`clientSecret` (Gmail OAuth)
->   2. Reconfigure SMTP, AI provider, and Gmail settings in the app
-> - Consider storing your `ENCRYPTION_KEY` in a secure location (e.g., password manager, HSM, secrets manager) before deploying
->
-> **Changing `JWT_SECRET` does not affect encrypted secrets** (they use separate keys), so JWT_SECRET can be rotated independently.
+> Losing `ENCRYPTION_KEY` means stored SMTP/AI passwords can no longer be decrypted.
 
 > **Gmail OAuth note:** Without `APP_BASE_URL`, the app tries to detect its public URL from reverse-proxy headers.
 > On Docker setups without a proxy, this typically resolves to an internal `http://` address — Google requires HTTPS and will reject the OAuth redirect.
@@ -406,17 +389,10 @@ If you prefer not to use Docker:
    ```bash
    npx prisma generate
    ```
-5. Create a `.env` file with the environment variables listed above (or set env vars):
-   ```bash
-   export DATABASE_URL="file:./data/budget.db"  # or /path/to/data/budget.db
-   export JWT_SECRET="your-32+-char-secret"
-   export ENCRYPTION_KEY="your-32+-char-secret"
-   export CRON_SECRET="your-32+-char-secret"
-   export UPLOAD_DIR="./uploads"  # or /path/to/uploads
-   ```
+5. Create a `.env` file with the environment variables listed above.
 6. Run migrations:
    ```bash
-   npx prisma migrate deploy
+   DATABASE_URL="file:./data/budget.db" npx prisma migrate deploy
    ```
 7. Build:
    ```bash

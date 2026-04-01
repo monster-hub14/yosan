@@ -1,12 +1,8 @@
 /**
  * Server-only symmetric encryption for sensitive config values (API keys).
  * Uses AES-256-GCM with a key derived from ENCRYPTION_KEY env var.
- * In production, ENCRYPTION_KEY is required and has no fallback.
- * In development, falls back to a machine-local key if not set.
+ * Falls back to a machine-local key if env var is not set (dev only).
  * NEVER import this from client components.
- *
- * Note: ENCRYPTION_KEY is separate from JWT_SECRET to allow independent rotation.
- * Rotating JWT_SECRET does not affect encrypted secrets in the database.
  */
 
 import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from "crypto";
@@ -14,24 +10,20 @@ import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from "crypt
 const ALGORITHM = "aes-256-gcm";
 const IV_LENGTH = 12; // 96 bits for GCM
 const TAG_LENGTH = 16;
-const SALT = "budget-app-key-v1"; // fixed (not random) — ensures deterministic key derivation across restarts
+const SALT = "budget-app-key-v1"; // fixed — key is per-installation
 
 function deriveKey(): Buffer {
-  const secret = process.env.ENCRYPTION_KEY;
-  const isProduction = process.env.NODE_ENV === "production";
-
+  const secret = process.env.ENCRYPTION_KEY || process.env.JWT_SECRET;
   if (!secret) {
-    if (isProduction) {
+    if (process.env.NODE_ENV === "production") {
       throw new Error(
-        "[encryption] FATAL: ENCRYPTION_KEY must be set in production. " +
-        "Generate with: openssl rand -base64 48 " +
-        "Never use JWT_SECRET for encryption — keep them separate for independent rotation."
+        "[encryption] ENCRYPTION_KEY or JWT_SECRET must be set in production. " +
+        "Set ENCRYPTION_KEY to a random 32+ character string."
       );
     }
-    // Development: use fallback key with warning
     console.warn(
-      "[encryption] WARNING: ENCRYPTION_KEY not set in development. " +
-      "Using insecure dev fallback. Set ENCRYPTION_KEY before deploying to production."
+      "[encryption] WARNING: No ENCRYPTION_KEY or JWT_SECRET set. " +
+      "Using insecure dev fallback. Set these env vars before deploying."
     );
     return scryptSync("dev-local-insecure-key-please-set-env", SALT, 32);
   }
