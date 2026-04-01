@@ -123,7 +123,7 @@ TrueNAS SCALE uses Docker Compose under the hood for Custom Apps.
    | *(any writable path you choose)* | `/app/data` | No |
    | *(any writable path you choose)* | `/app/uploads` | No |
 
-   Example: if your data pool is `tank` and you want a `yosan` directory, you might use `/mnt/tank/yosan/data` and `/mnt/tank/yosan/uploads` — but **the exact host path is entirely your choice**.
+   Choose any host path that suits your storage layout — the container paths (`/app/data`, `/app/uploads`) are fixed; the host-side path is entirely up to you.
 
 5. Click **Install** and wait for the container health check to pass.
 6. Open `http://<truenas-ip>:3000/setup` to complete setup.
