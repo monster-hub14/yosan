@@ -1,5 +1,11 @@
 # See https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files for more about ignoring files.
 
+# env files
+.env
+.env.local
+.env.*
+!.env.example
+
 # compiled output
 dist
 tmp
