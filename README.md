@@ -74,14 +74,25 @@ artifacts/
 ## Key Configuration
 
 ### Environment Variables
+
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `DATABASE_URL` | SQLite URL | `file:./data/budget.db` |
-| `JWT_SECRET` | JWT signing secret (≥32 chars) | Set in artifact env |
-| `UPLOAD_DIR` | Receipt upload directory | `./uploads` |
-| `PORT` | Server port | `24432` (dev) |
+| `DATABASE_URL` | SQLite database URL | `file:/app/data/budget.db` |
+| `ENCRYPTION_KEY` | Encryption key for sensitive data (generate with `openssl rand -base64 48`) | Required in production |
+| `JWT_SECRET` | JWT signing secret (≥32 chars, generate with `openssl rand -base64 48`) | Required in production |
+| `UPLOAD_DIR` | Directory for uploaded receipts/files | `/app/uploads` |
+| `PORT` | Server port | `3000` |
+| `APP_BASE_URL` | Public HTTPS URL of the app (required for OAuth features like Gmail) | Optional |
 
 The artifact environment sets `DATABASE_URL=file:./data/budget.db` to avoid conflicts with Replit's global `DATABASE_URL` (PostgreSQL).
+
+### Generating Secrets
+
+Generate secure values for `ENCRYPTION_KEY` and `JWT_SECRET` with:
+
+```bash
+openssl rand -base64 48
+```
 
 ### Auth
 - Cookie name: `budget_session`
@@ -116,8 +127,8 @@ See `artifacts/budget-app/SELF_HOSTING.md` for full Docker/TrueNAS SCALE instruc
 
 ```bash
 cp .env.example .env
-# Edit .env with your JWT_SECRET and settings
-docker-compose up -d
+# Edit .env with your JWT_SECRET, ENCRYPTION_KEY, CRON_SECRET, and other settings
+docker compose up -d
 ```
 
 ## Status
