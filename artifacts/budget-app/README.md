@@ -66,6 +66,8 @@ Open `http://localhost:3000/setup` and follow the wizard to create your admin ac
 | `UPLOAD_DIR` | No | `/app/uploads` | Receipt upload directory inside the container |
 | `APP_BASE_URL` | Required for Gmail OAuth | auto-detected | Public HTTPS URL of your app, e.g. `https://budget.yourdomain.com` |
 | `EMAIL_LOGO_URL` | No | *(no logo)* | Public HTTPS URL for the logo shown in outgoing emails |
+| `INBOUND_EMAIL_DOMAIN` | No | from SMTP `fromAddress` | Domain for receipt-forwarding addresses, e.g. `receipts.yourdomain.com` |
+| `WEBHOOK_EMAIL_SECRET` | No (recommended) | — | Bearer token for authenticating inbound email webhook requests |
 
 See `.env.example` for the full list with comments.
 

@@ -7,7 +7,9 @@ const nextConfig: NextConfig = {
       bodySizeLimit: "10mb",
     },
   },
-  allowedDevOrigins: ["*.replit.dev", "*.kirk.replit.dev", "*.repl.co"],
+  // allowedDevOrigins restricts cross-origin dev-server access during `next dev`.
+  // Add your own origins here if your dev environment proxies through a custom domain.
+  // Example: allowedDevOrigins: ["*.example.com"]
 };
 
 export default nextConfig;
