@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
         const setupToken = await createSetupToken();
         response.cookies.set(SETUP_COOKIE, setupToken, {
           httpOnly: true,
-          sameSite: "lax",
+          sameSite: "lax", // Lax allows top-level navigation (e.g., redirect after OAuth). Post-setup, /api/setup/* requires ADMIN auth via guardSetupRoute(), so CSRF is not a risk.
           path: "/",
           maxAge: SETUP_MAX_AGE,
         });

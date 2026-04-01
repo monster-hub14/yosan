@@ -59,7 +59,7 @@ export function makeSessionCookie(token: string): string {
     "HttpOnly",
     `Max-Age=${COOKIE_MAX_AGE}`,
     "Path=/",
-    "SameSite=Strict",
+    "SameSite=Strict", // Prevents cross-site cookie inclusion (CSRF mitigation via SameSite strategy)
     isProd ? "Secure" : "",
   ]
     .filter(Boolean)
@@ -68,5 +68,5 @@ export function makeSessionCookie(token: string): string {
 }
 
 export function makeClearSessionCookie(): string {
-  return `${COOKIE_NAME}=; HttpOnly; Max-Age=0; Path=/; SameSite=Strict`;
+  return `${COOKIE_NAME}=; HttpOnly; Max-Age=0; Path=/; SameSite=Strict`; // Same SameSite strategy for logout
 }
