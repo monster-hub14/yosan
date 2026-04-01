@@ -199,3 +199,9 @@ docker-compose up -d
   - `/settings/gmail` — Account nav; connect/disconnect/label picker/sync now with budget selector
 - Receipt landing (`/receipts`): added "Import from Gmail" button alongside Upload
 - Inbox (`/receipts/inbox`): Gmail badge (blue), sender line, subject as title for Gmail imports
+
+## Security & Maintenance Backlog
+
+### Future Hardening (Non-Blocking)
+
+- **Introduce `OAUTH_STATE_SECRET`** — Currently, Gmail OAuth flow tokens are signed with `JWT_SECRET`. Consider introducing a dedicated `OAUTH_STATE_SECRET` for clearer separation of concerns (auth secrets vs. CSRF flow validation). Low priority since flow tokens are short-lived (10 min) and low-risk, but would improve defense-in-depth. Relevant files: `src/app/api/settings/gmail/auth/route.ts` and `src/app/api/settings/gmail/callback/route.ts`.
