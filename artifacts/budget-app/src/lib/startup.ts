@@ -58,7 +58,7 @@ export async function checkStartup(): Promise<void> {
   // In Docker / TrueNAS this ensures new schema columns land on first boot after upgrade.
   try {
     console.log("[startup] Running prisma migrate deploy...");
-    execSync("prisma migrate deploy --schema /app/prisma/schema.prisma", {
+    execSync("node_modules/.bin/prisma migrate deploy", {
       cwd: process.cwd(),
       stdio: "inherit",
       timeout: 30_000,
