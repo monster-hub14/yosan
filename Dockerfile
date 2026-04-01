@@ -44,14 +44,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy built app
-COPY --from=builder /workspace/artifacts/budget-app/.next ./.next
+COPY --from=builder /workspace/artifacts/budget-app/.next/standalone ./
+COPY --from=builder /workspace/artifacts/budget-app/.next/static ./.next/static
 COPY --from=builder /workspace/artifacts/budget-app/public ./public
 COPY --from=builder /workspace/artifacts/budget-app/prisma ./prisma
 COPY --from=builder /workspace/artifacts/budget-app/package.json ./package.json
 COPY --from=builder /workspace/artifacts/budget-app/next.config.ts ./next.config.ts
-
-# Copy app dependencies
-COPY --from=deps /workspace/artifacts/budget-app/node_modules ./node_modules
 
 # Install the exact Prisma CLI version declared by the app
 RUN PRISMA_VERSION=$(node -p "const p=require('./package.json'); (p.dependencies && p.dependencies.prisma) || (p.devDependencies && p.devDependencies.prisma) || ''") \
@@ -69,4 +67,4 @@ USER nextjs
 
 EXPOSE 3000
 
-CMD ["sh", "-c", "prisma migrate deploy && ./node_modules/.bin/next start -p ${PORT:-3000}"]
+CMD ["sh", "-c", "prisma migrate deploy && node server.js"]
