@@ -3,7 +3,7 @@ ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 RUN corepack enable
 
-# Install all dependencies needed for build and runtime
+# Install all dependencies
 FROM base AS deps
 WORKDIR /workspace
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
@@ -17,17 +17,19 @@ WORKDIR /workspace
 
 ARG ENCRYPTION_KEY
 ENV ENCRYPTION_KEY=$ENCRYPTION_KEY
+ENV NODE_ENV=production
 
 COPY --from=deps /workspace/node_modules ./node_modules
 COPY --from=deps /workspace/artifacts/budget-app/node_modules ./artifacts/budget-app/node_modules
 COPY . .
+
 WORKDIR /workspace/artifacts/budget-app
 RUN ./node_modules/.bin/prisma generate
+
 WORKDIR /workspace
-ENV NODE_ENV=production
 RUN pnpm --filter @workspace/budget-app run build
 
-# Minimal runtime image
+# Runtime image
 FROM node:22-slim AS runner
 WORKDIR /app
 
@@ -40,14 +42,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     openssl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy the built app
+# Install prisma CLI globally so migrate works reliably at runtime
+RUN npm install -g prisma
+
+# Copy built app
 COPY --from=builder /workspace/artifacts/budget-app/.next ./.next
 COPY --from=builder /workspace/artifacts/budget-app/public ./public
 COPY --from=builder /workspace/artifacts/budget-app/prisma ./prisma
 COPY --from=builder /workspace/artifacts/budget-app/package.json ./package.json
 COPY --from=builder /workspace/artifacts/budget-app/next.config.ts ./next.config.ts
 
-# Copy runtime node_modules from the app package
+# Copy app dependencies
 COPY --from=deps /workspace/artifacts/budget-app/node_modules ./node_modules
 
 RUN mkdir -p /app/data /app/uploads
@@ -61,4 +66,4 @@ USER nextjs
 
 EXPOSE 3000
 
-CMD ["sh", "-c", "npx prisma migrate deploy && npx next start -p ${PORT:-3000}"]
+CMD ["sh", "-c", "prisma migrate deploy && ./node_modules/.bin/next start -p ${PORT:-3000}"]
