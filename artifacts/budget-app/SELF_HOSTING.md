@@ -396,10 +396,17 @@ If you prefer not to use Docker:
    ```bash
    npx prisma generate
    ```
-5. Create a `.env` file with the environment variables listed above.
+5. Create a `.env` file with the environment variables listed above (or set env vars):
+   ```bash
+   export DATABASE_URL="file:./data/budget.db"  # or /path/to/data/budget.db
+   export JWT_SECRET="your-32+-char-secret"
+   export ENCRYPTION_KEY="your-32+-char-secret"
+   export CRON_SECRET="your-32+-char-secret"
+   export UPLOAD_DIR="./uploads"  # or /path/to/uploads
+   ```
 6. Run migrations:
    ```bash
-   DATABASE_URL="file:./data/budget.db" npx prisma migrate deploy
+   npx prisma migrate deploy
    ```
 7. Build:
    ```bash
