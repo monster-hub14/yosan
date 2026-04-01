@@ -45,8 +45,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Copy built app
 COPY --from=builder /workspace/artifacts/budget-app/.next/standalone ./
-COPY --from=builder /workspace/artifacts/budget-app/.next/static ./.next/static
-COPY --from=builder /workspace/artifacts/budget-app/public ./public
+COPY --from=builder /workspace/artifacts/budget-app/.next/static ./artifacts/budget-app/.next/static
+COPY --from=builder /workspace/artifacts/budget-app/public ./artifacts/budget-app/public
 COPY --from=builder /workspace/artifacts/budget-app/prisma ./prisma
 COPY --from=builder /workspace/artifacts/budget-app/package.json ./package.json
 COPY --from=builder /workspace/artifacts/budget-app/next.config.ts ./next.config.ts
