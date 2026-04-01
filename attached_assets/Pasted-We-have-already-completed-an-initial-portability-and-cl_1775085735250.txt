@@ -1,0 +1,164 @@
+We have already completed an initial portability and cleanup pass. Now perform a FINAL verification and hardening pass before pushing this project to GitHub for public self-hosted distribution.
+
+Your goal is to confirm the app is truly production-ready, portable, and consistent — not just patched.
+
+STRICT RULES:
+
+* Do NOT introduce any hardcoded machine-specific paths (no `/mnt/...`, no personal domains, no usernames)
+* Do NOT add secrets into code, Dockerfile, or committed files
+* Do NOT reset or destroy data unless absolutely necessary and clearly explained
+* Prefer verification and minimal fixes over large rewrites
+
+---
+
+## Phase 1 — Final Config Audit
+
+1. Scan the entire repo again for:
+
+   * hardcoded secrets
+   * hardcoded host paths
+   * personal domains, emails, usernames
+   * fixed ports or URLs that should be configurable
+
+2. Confirm:
+
+   * all secrets are ONLY read from environment variables
+   * no secrets are required at build time
+   * `.env` is gitignored
+   * `.env.example` exists and contains only placeholders
+
+---
+
+## Phase 2 — Prisma Integrity (CRITICAL)
+
+1. Verify:
+
+   * `schema.prisma` matches all migrations
+   * no missing columns or tables relative to schema
+
+2. Run a **true fresh database test**:
+
+   * use a brand-new SQLite file
+   * run `prisma migrate deploy`
+   * confirm ALL migrations apply cleanly
+
+3. Then:
+
+   * start the app against that fresh DB
+   * confirm NO runtime errors like:
+
+     * “column does not exist”
+     * Prisma P2022 errors
+
+4. If mismatch is found:
+
+   * generate a forward migration (do NOT reset DB)
+   * explain exactly what changed
+
+---
+
+## Phase 3 — First-Run Behavior Validation
+
+Simulate a brand-new user environment:
+
+1. Empty database
+2. Empty uploads directory
+
+Then verify:
+
+* app starts successfully
+* database is created automatically in `/app/data`
+* uploads directory is writable (`/app/uploads`)
+* signup works
+* onboarding/setup completes fully
+* category setup works
+* AI settings page does NOT crash
+
+---
+
+## Phase 4 — Build & Runtime Separation
+
+1. Run production build:
+
+   * confirm build succeeds with NO secrets set
+
+2. Confirm:
+
+   * app does NOT crash during build due to missing env vars
+   * secrets are only required at runtime
+
+3. Verify Docker behavior:
+
+   * image builds without secrets
+   * container runs correctly when env vars are provided
+
+---
+
+## Phase 5 — Portability Enforcement
+
+Verify the app ONLY assumes:
+
+* `/app/data`
+* `/app/uploads`
+
+Confirm:
+
+* NO assumptions about host filesystem
+* NO required directory names on host
+* mount instructions are generic
+
+---
+
+## Phase 6 — Documentation Validation
+
+Check and fix:
+
+1. README:
+
+   * no personal URLs
+   * no machine-specific paths
+   * clear install instructions for generic Docker/self-hosting
+
+2. `.env.example`:
+
+   * includes ALL required variables
+   * includes NO real values
+
+3. Deployment section must clearly state:
+
+   * required env vars
+   * required writable mounts
+   * no platform-specific assumptions
+
+---
+
+## Phase 7 — Final Report
+
+Return:
+
+1. List of any remaining issues found
+2. All changes made (files + purpose)
+3. Confirmation of:
+
+   * Prisma migration correctness
+   * fresh install success
+   * build success without secrets
+   * runtime success with env vars
+4. Final “ready for GitHub” verdict
+
+---
+
+## Definition of DONE
+
+The app must:
+
+* build without secrets
+* run with env vars only
+* create its own database in `/app/data`
+* use `/app/uploads` correctly
+* pass fresh install onboarding
+* contain no machine-specific assumptions
+* contain no hardcoded secrets
+* have consistent Prisma schema + migrations
+
+If ANY of these fail, do not mark complete — fix or clearly explain the blocker.
