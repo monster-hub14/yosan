@@ -79,6 +79,7 @@ export async function notifySharedBudgetActivity(params: {
           budgetName: budget.name,
           actorName,
           activityType: params.activityType,
+          action,
           amount: params.amount,
           description: params.description,
           currency: budget.currency,

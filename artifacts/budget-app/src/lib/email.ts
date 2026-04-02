@@ -539,6 +539,7 @@ export function memberActivityEmail(params: {
   budgetName: string;
   actorName: string;
   activityType: "expense" | "income";
+  action?: "added" | "edited";
   amount: number;
   description: string;
   currency: string;
@@ -546,16 +547,18 @@ export function memberActivityEmail(params: {
   const fmt = (n: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: params.currency }).format(n);
   const typeLabel = params.activityType === "expense" ? "expense" : "income entry";
   const icon = params.activityType === "expense" ? "💸" : "💰";
+  const action = params.action ?? "added";
+  const byLabel = action === "added" ? "Added by" : "Edited by";
   return {
-    subject: `${icon} ${params.actorName} added a ${typeLabel} — ${params.budgetName}`,
+    subject: `${icon} ${params.actorName} ${action} a ${typeLabel} — ${params.budgetName}`,
     html: baseTemplate("Budget Activity", `
       <p>Hi ${params.userName},</p>
-      <p><strong>${params.actorName}</strong> added a new ${typeLabel} to <em>${params.budgetName}</em>.</p>
+      <p><strong>${params.actorName}</strong> ${action} a ${typeLabel} in <em>${params.budgetName}</em>.</p>
       <table cellpadding="0" cellspacing="0" role="presentation" style="margin:16px 0;background:#f8faff;border-radius:6px;padding:16px;width:100%">
         <tr><td style="color:#6b7280;font-size:13px;padding:3px 0">Type</td><td style="font-weight:600;text-align:right;text-transform:capitalize">${typeLabel}</td></tr>
         <tr><td style="color:#6b7280;font-size:13px;padding:3px 0">Amount</td><td style="font-weight:700;font-size:18px;text-align:right">${fmt(params.amount)}</td></tr>
         ${params.description ? `<tr><td style="color:#6b7280;font-size:13px;padding:3px 0">Details</td><td style="text-align:right">${params.description}</td></tr>` : ""}
-        <tr><td style="color:#6b7280;font-size:13px;padding:3px 0">Added by</td><td style="font-weight:600;text-align:right">${params.actorName}</td></tr>
+        <tr><td style="color:#6b7280;font-size:13px;padding:3px 0">${byLabel}</td><td style="font-weight:600;text-align:right">${params.actorName}</td></tr>
       </table>
     `),
   };
