@@ -128,7 +128,7 @@ export default function AppHeader({ user, activeBudgetId, onMobileMenuToggle }: 
       prev.map((n) => (n.id === id ? { ...n, isRead: true } : n))
     );
     setUnreadCount((c) => Math.max(0, c - 1));
-    await fetch("/api/notifications/inbox", {
+    await fetch("/api/notifications/inbox/mark-read", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id }),
@@ -138,7 +138,7 @@ export default function AppHeader({ user, activeBudgetId, onMobileMenuToggle }: 
   async function markAllRead() {
     setMarkingAll(true);
     try {
-      await fetch("/api/notifications/inbox", {
+      await fetch("/api/notifications/inbox/mark-read", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ all: true }),
@@ -248,9 +248,11 @@ export default function AppHeader({ user, activeBudgetId, onMobileMenuToggle }: 
       <div className="relative" ref={bellRef}>
         <button
           onClick={() => {
-            setBellOpen((o) => !o);
+            const opening = !bellOpen;
+            setBellOpen(opening);
             setMenuOpen(false);
             setBudgetMenuOpen(false);
+            if (opening) fetchNotifications();
           }}
           className={cn(
             "relative p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors",

@@ -3,6 +3,7 @@ import { requireAuth, isSessionPayload, requireBudgetWrite } from "@/lib/auth/pe
 import { db } from "@/lib/db";
 import { computeSafeToSpend } from "@/lib/safe-to-spend";
 import { computePayPeriod, getPeriodsPerMonth } from "@/lib/pay-period";
+import { notifySharedBudgetActivity } from "@/lib/notify-shared-budget-activity";
 
 interface Params { params: Promise<{ id: string; expenseId: string }> }
 
@@ -104,6 +105,15 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   });
 
   const safeToSpend = await calcSafeToSpend(budgetId);
+
+  // Notify other members of shared_budget_activity on edit (fire-and-forget)
+  notifySharedBudgetActivity({
+    budgetId,
+    actorId: session.userId,
+    activityType: "expense",
+    amount: expense.amount,
+    description: expense.merchant || expense.description || "",
+  }).catch((err) => console.error("[expenses/patch] shared activity notify failed:", err));
 
   return NextResponse.json({ expense, safeToSpend });
 }

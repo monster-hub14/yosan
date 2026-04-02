@@ -151,6 +151,17 @@ export function NotificationsForm() {
     });
   }
 
+  function muteAll(channel: "IN_APP" | "EMAIL") {
+    const allOn = EVENT_KEYS.every((e) => prefs.get(buildKey(channel, e)) ?? false);
+    setPrefs((prev) => {
+      const next = new Map(prev);
+      for (const e of EVENT_KEYS) {
+        next.set(buildKey(channel, e), !allOn);
+      }
+      return next;
+    });
+  }
+
   async function handleSave() {
     setSaving(true);
     try {
@@ -292,6 +303,33 @@ export function NotificationsForm() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Global mute-all toggles */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-2"
+          onClick={() => muteAll("IN_APP")}
+        >
+          <BellOff className="w-3.5 h-3.5" />
+          {EVENT_KEYS.every((e) => prefs.get(buildKey("IN_APP", e)) ?? false)
+            ? "Mute all in-app"
+            : "Unmute all in-app"}
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-2"
+          onClick={() => muteAll("EMAIL")}
+          disabled={!emailEnabled}
+        >
+          <Mail className="w-3.5 h-3.5" />
+          {EVENT_KEYS.every((e) => prefs.get(buildKey("EMAIL", e)) ?? false)
+            ? "Mute all email"
+            : "Unmute all email"}
+        </Button>
+      </div>
 
       {/* Notification toggles — grouped */}
       <Card className="border-border">

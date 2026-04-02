@@ -584,14 +584,18 @@ export async function POST(request: NextRequest) {
     }
 
     // ── Income threshold (>80% of pay-period income spent) ───────────────────
+    // Uses the PRIMARY income source only to derive one pay window per budget,
+    // with total income = sum of all active sources for that period.
     if (alertType === "all" || alertType === "income_threshold") {
       try {
-        for (const source of budget.incomeSources) {
+        const primarySource = budget.incomeSources[0] ?? null;
+        if (primarySource) {
+          const totalIncome = budget.incomeSources.reduce((s, src) => s + src.amount, 0);
           const period = computePayPeriod(
-            source.frequency,
-            source.nextPayDate,
-            source.amount,
-            source.customDays
+            primarySource.frequency,
+            primarySource.nextPayDate,
+            totalIncome,
+            primarySource.customDays
           );
 
           const periodExpenses = await db.expense.aggregate({
@@ -603,47 +607,48 @@ export async function POST(request: NextRequest) {
           });
           const spent = periodExpenses._sum.amount ?? 0;
           const income = period.periodIncome;
-          if (income <= 0) continue;
-          const pct = (spent / income) * 100;
-          if (pct < 80) continue;
+          if (income > 0) {
+            const pct = (spent / income) * 100;
+            if (pct >= 80) {
+              const fmt = new Intl.NumberFormat("en-US", { style: "currency", currency: budget.currency });
+              for (const user of allUsers) {
+                await writeInApp({
+                  userId: user.id,
+                  budgetId: budget.id,
+                  event: "income_threshold",
+                  title: `${Math.round(pct)}% of period income spent`,
+                  body: `You've spent ${fmt.format(spent)} of ${fmt.format(income)} (${Math.round(pct)}%) this pay period in ${budget.name}.`,
+                });
+                sentCount.incomeThreshold++;
 
-          const fmt = new Intl.NumberFormat("en-US", { style: "currency", currency: budget.currency });
-          for (const user of allUsers) {
-            await writeInApp({
-              userId: user.id,
-              budgetId: budget.id,
-              event: "income_threshold",
-              title: `${Math.round(pct)}% of period income spent`,
-              body: `You've spent ${fmt.format(spent)} of ${fmt.format(income)} (${Math.round(pct)}%) this pay period in ${budget.name}.`,
-            });
-            sentCount.incomeThreshold++;
+                if (emailEnabled && await hasEmailPref(user.id, "income_threshold")) {
+                  const toEmail = getNotifyEmail(user.email, notifConfigByUserId.get(user.id) ?? null);
+                  const { subject, html } = incomeThresholdEmail({
+                    userName: user.name,
+                    budgetName: budget.name,
+                    spent,
+                    income,
+                    pct,
+                    currency: budget.currency,
+                  });
+                  await sendMail({ to: toEmail, subject, html });
+                }
+              }
 
-            if (emailEnabled && await hasEmailPref(user.id, "income_threshold")) {
-              const toEmail = getNotifyEmail(user.email, notifConfigByUserId.get(user.id) ?? null);
-              const { subject, html } = incomeThresholdEmail({
-                userName: user.name,
-                budgetName: budget.name,
-                spent,
-                income,
-                pct,
-                currency: budget.currency,
-              });
-              await sendMail({ to: toEmail, subject, html });
-            }
-          }
-
-          if (emailEnabled) {
-            for (const extraEmail of extraEmails) {
-              const { subject, html } = incomeThresholdEmail({
-                userName: budget.name,
-                budgetName: budget.name,
-                spent,
-                income,
-                pct,
-                currency: budget.currency,
-              });
-              await sendMail({ to: extraEmail, subject, html });
-              sentCount.incomeThreshold++;
+              if (emailEnabled) {
+                for (const extraEmail of extraEmails) {
+                  const { subject, html } = incomeThresholdEmail({
+                    userName: budget.name,
+                    budgetName: budget.name,
+                    spent,
+                    income,
+                    pct,
+                    currency: budget.currency,
+                  });
+                  await sendMail({ to: extraEmail, subject, html });
+                  sentCount.incomeThreshold++;
+                }
+              }
             }
           }
         }
