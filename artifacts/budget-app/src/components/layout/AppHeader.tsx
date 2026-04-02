@@ -288,7 +288,7 @@ export default function AppHeader({ user, activeBudgetId, onMobileMenuToggle }: 
                     className="text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50 flex items-center gap-1"
                   >
                     <Check className="w-3 h-3" />
-                    Mark all read
+                    Mark all as read
                   </button>
                 )}
               </div>
@@ -298,7 +298,7 @@ export default function AppHeader({ user, activeBudgetId, onMobileMenuToggle }: 
                 {notifications.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-12 text-center px-6">
                     <BellOff className="w-8 h-8 text-muted-foreground/40 mb-3" />
-                    <p className="text-sm font-medium text-muted-foreground">No notifications yet</p>
+                    <p className="text-sm font-medium text-muted-foreground">No new notifications</p>
                     <p className="text-xs text-muted-foreground/70 mt-1">Alerts will appear here when triggered</p>
                   </div>
                 ) : (

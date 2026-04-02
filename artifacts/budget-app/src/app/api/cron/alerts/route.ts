@@ -39,7 +39,7 @@ function getNotifyEmail(
   return notifConfig?.notificationEmail?.trim() || userEmail;
 }
 
-/** Write an in-app notification unless the user has explicitly disabled it. */
+/** Write an in-app notification, respecting the user's IN_APP preference for the event. */
 async function writeInApp(params: {
   userId: string;
   budgetId: string;
@@ -48,11 +48,13 @@ async function writeInApp(params: {
   body: string;
 }) {
   const { userId, budgetId, event, title, body } = params;
-  // Only skip if there is an explicit opt-out row (isEnabled = false)
-  const disabled = await db.notificationPreference.findFirst({
-    where: { userId, channel: "IN_APP", event, isEnabled: false },
+  // Look up the user's explicit preference row for this channel+event.
+  // If a row exists and isEnabled is false → user has opted out → skip.
+  // If no row exists → default is ON (opt-out model: all in-app enabled by default).
+  const pref = await db.notificationPreference.findFirst({
+    where: { userId, channel: "IN_APP", event },
   });
-  if (disabled) return;
+  if (pref !== null && !pref.isEnabled) return;
   await db.inAppNotification.create({
     data: { userId, budgetId, event, title, body },
   });

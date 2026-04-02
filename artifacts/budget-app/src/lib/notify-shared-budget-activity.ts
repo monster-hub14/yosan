@@ -49,10 +49,11 @@ export async function notifySharedBudgetActivity(params: {
   const icon = params.activityType === "expense" ? "💸" : "💰";
 
   for (const user of otherUsers) {
-    const inAppDisabled = await db.notificationPreference.findFirst({
-      where: { userId: user.id, channel: "IN_APP", event: "shared_budget_activity", isEnabled: false },
+    const inAppPref = await db.notificationPreference.findFirst({
+      where: { userId: user.id, channel: "IN_APP", event: "shared_budget_activity" },
     });
-    if (!inAppDisabled) {
+    // No row = default ON; explicit row with isEnabled=false = opted out
+    if (inAppPref === null || inAppPref.isEnabled) {
       await db.inAppNotification.create({
         data: {
           userId: user.id,
