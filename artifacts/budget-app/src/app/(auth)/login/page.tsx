@@ -4,23 +4,25 @@ import Link from "next/link";
 import { db } from "@/lib/db";
 import { LoginForm } from "./login-form";
 
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "Sign In | Yosan AI",
 };
 
 export default async function LoginPage() {
-  let setupComplete = false;
+  let adminAccountCreated = false;
   try {
     const progress = await db.setupProgress.findUnique({
       where: { id: "singleton" },
-      select: { completedAt: true },
+      select: { adminAccountCreated: true },
     });
-    setupComplete = progress?.completedAt != null;
+    adminAccountCreated = progress?.adminAccountCreated === true;
   } catch {
     // DB may not be initialised yet on a fresh install
   }
 
-  if (!setupComplete) {
+  if (!adminAccountCreated) {
     redirect("/setup");
   }
 

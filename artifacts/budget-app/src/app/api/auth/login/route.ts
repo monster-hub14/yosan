@@ -66,9 +66,9 @@ export async function POST(request: NextRequest) {
     if (!setupAlreadyVerified) {
       const progress = await db.setupProgress.findUnique({
         where: { id: "singleton" },
-        select: { completedAt: true },
+        select: { adminAccountCreated: true },
       });
-      if (progress?.completedAt) {
+      if (progress?.adminAccountCreated) {
         const setupToken = await createSetupToken();
         response.cookies.set(SETUP_COOKIE, setupToken, {
           httpOnly: true,

@@ -3,22 +3,26 @@ import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import SetupWizard from "@/components/setup/SetupWizard";
 
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "Setup | Yosan AI",
 };
 
 export default async function SetupPage() {
-  let progress = null;
+  let adminAccountCreated = false;
 
   try {
-    progress = await db.setupProgress.findUnique({
+    const progress = await db.setupProgress.findUnique({
       where: { id: "singleton" },
+      select: { adminAccountCreated: true },
     });
+    adminAccountCreated = progress?.adminAccountCreated === true;
   } catch {
     // DB might not be initialized yet — allow setup to proceed
   }
 
-  if (progress?.completedAt) {
+  if (adminAccountCreated) {
     redirect("/login");
   }
 
