@@ -27,22 +27,14 @@ function isAuthApiPath(pathname: string): boolean {
  * Build a proxy-aware redirect URL.
  *
  * Uses the same priority order as gmail-base-url.ts:
- *  1. x-forwarded-proto + x-forwarded-host — set by reverse proxies (Nginx Proxy Manager, Caddy …)
- *  2. APP_BASE_URL env var                 — authoritative deployment override
+ *  1. APP_BASE_URL env var                 — authoritative override; takes precedence over headers
+ *  2. x-forwarded-proto + x-forwarded-host — set by reverse proxies (Nginx Proxy Manager, Caddy …)
  *  3. request.url                          — direct access fallback
  *
  * Without this, redirects built from `request.url` would use the internal HTTP
  * scheme/host when behind a proxy, sending the browser to http:// instead of https://.
  */
 function proxyAwareUrl(path: string, request: NextRequest): URL {
-  const fwdProto = request.headers.get("x-forwarded-proto");
-  const fwdHost = request.headers.get("x-forwarded-host");
-  if (fwdProto && fwdHost) {
-    const scheme = fwdProto.split(",")[0].trim();
-    const host = fwdHost.split(",")[0].trim();
-    if (scheme && host) return new URL(path, `${scheme}://${host}`);
-  }
-
   const appBaseUrl = process.env.APP_BASE_URL;
   if (appBaseUrl) {
     try {
@@ -50,6 +42,14 @@ function proxyAwareUrl(path: string, request: NextRequest): URL {
     } catch {
       // invalid APP_BASE_URL — fall through
     }
+  }
+
+  const fwdProto = request.headers.get("x-forwarded-proto");
+  const fwdHost = request.headers.get("x-forwarded-host");
+  if (fwdProto && fwdHost) {
+    const scheme = fwdProto.split(",")[0].trim();
+    const host = fwdHost.split(",")[0].trim();
+    if (scheme && host) return new URL(path, `${scheme}://${host}`);
   }
 
   return new URL(path, request.url);
