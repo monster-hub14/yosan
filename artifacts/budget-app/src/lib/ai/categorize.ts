@@ -126,19 +126,27 @@ export async function categorizeItem(
 
   const categories = await db.category.findMany({
     where: { OR: [{ budgetId }, { isDefault: true, budgetId: null }] },
-    select: { id: true, name: true },
-    take: 30,
+    select: { id: true, name: true, parent: { select: { name: true } } },
+    orderBy: { name: "asc" },
   });
 
-  const categoryList = categories.map((c) => `${c.id}: ${c.name}`).join("\n");
+  const categoryList = categories
+    .map((c) => (c.parent ? `${c.id}: ${c.parent.name} > ${c.name}` : `${c.id}: ${c.name}`))
+    .join("\n");
 
-  const prompt = `You are a budget categorization assistant. Categorize this purchase item.
+  const prompt = `You are a budget categorization assistant. Categorize this purchase item into one of the available categories.
 
 Item: "${itemDescription}"
 Merchant: "${merchantName ?? "Unknown"}"
 
-Available categories:
+Available categories (format is "id: name" or "id: parent > child"):
 ${categoryList || "No categories defined yet."}
+
+Rules:
+- Always pick the single best-matching category from the list above.
+- Prefer the most specific subcategory (child) over a parent when both could apply.
+- Only set isAmbiguous=true when the item genuinely fits two completely unrelated categories and context alone cannot resolve it. If a reasonable best-fit exists, pick it with medium confidence rather than marking it ambiguous.
+- If no category fits at all, set categoryId=null.
 
 Respond with JSON only:
 {
@@ -150,8 +158,7 @@ Respond with JSON only:
   "suggestedOptions": []
 }
 
-If ambiguous (e.g., "batteries" could be electronics or auto), set isAmbiguous=true, clarificationQuestion to a short question, and suggestedOptions to 2-4 category names.
-If no category fits, use categoryId=null and suggest creating one.`;
+If truly ambiguous, set isAmbiguous=true, clarificationQuestion to a short question, and suggestedOptions to 2-4 category names from the list above.`;
 
   try {
     const response = await chatCompletion(config, [
