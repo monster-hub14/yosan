@@ -1,11 +1,7 @@
--- Schema drift patch for Yosan AI.
--- Brings a self-hosted instance up to date with the current prisma schema
--- after the 12-migration history.  Apply with prisma migrate deploy.
-
 PRAGMA defer_foreign_keys=ON;
 PRAGMA foreign_keys=OFF;
 
--- New tables ------------------------------------------------------------
+-- New tables
 
 CREATE TABLE "CategoryTarget" (
     "id"         TEXT     NOT NULL PRIMARY KEY,
@@ -48,9 +44,8 @@ CREATE TABLE "UserAIControl" (
         FOREIGN KEY ("userId") REFERENCES "User" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 
--- Table redefinitions ---------------------------------------------------
+-- Table redefinitions
 
--- ClarificationHistory: receiptId NOT NULL -> nullable; add context
 CREATE TABLE "new_ClarificationHistory" (
     "id"        TEXT     NOT NULL PRIMARY KEY,
     "receiptId" TEXT,
@@ -63,14 +58,13 @@ CREATE TABLE "new_ClarificationHistory" (
 );
 
 INSERT INTO "new_ClarificationHistory"
-    ("id", "receiptId", "question", "answer", "context", "createdAt")
-SELECT  "id", "receiptId", "question", "answer", "context", "createdAt"
+    ("id", "receiptId", "question", "answer", "createdAt")
+SELECT  "id", "receiptId", "question", "answer", "createdAt"
 FROM    "ClarificationHistory";
 
 DROP TABLE "ClarificationHistory";
 ALTER TABLE "new_ClarificationHistory" RENAME TO "ClarificationHistory";
 
--- Expense: add currency column and addedById FK constraint
 CREATE TABLE "new_Expense" (
     "id"          TEXT     NOT NULL PRIMARY KEY,
     "budgetId"    TEXT     NOT NULL,
@@ -96,16 +90,15 @@ CREATE TABLE "new_Expense" (
 );
 
 INSERT INTO "new_Expense"
-    ("id", "budgetId", "categoryId", "addedById", "amount", "currency",
+    ("id", "budgetId", "categoryId", "addedById", "amount",
      "date", "description", "merchant", "notes", "receiptId", "createdAt", "updatedAt")
-SELECT  "id", "budgetId", "categoryId", "addedById", "amount", "currency",
+SELECT  "id", "budgetId", "categoryId", "addedById", "amount",
         "date", "description", "merchant", "notes", "receiptId", "createdAt", "updatedAt"
 FROM    "Expense";
 
 DROP TABLE "Expense";
 ALTER TABLE "new_Expense" RENAME TO "Expense";
 
--- GmailOAuthConfig: remove DEFAULT CURRENT_TIMESTAMP from updatedAt
 CREATE TABLE "new_GmailOAuthConfig" (
     "id"           TEXT     NOT NULL PRIMARY KEY DEFAULT 'singleton',
     "clientId"     TEXT,
@@ -121,7 +114,6 @@ FROM    "GmailOAuthConfig";
 DROP TABLE "GmailOAuthConfig";
 ALTER TABLE "new_GmailOAuthConfig" RENAME TO "GmailOAuthConfig";
 
--- ItemMemory: add isAmbiguous and ambiguousQuestion columns
 CREATE TABLE "new_ItemMemory" (
     "id"                TEXT     NOT NULL PRIMARY KEY,
     "budgetId"          TEXT     NOT NULL,
@@ -138,16 +130,13 @@ CREATE TABLE "new_ItemMemory" (
 );
 
 INSERT INTO "new_ItemMemory"
-    ("id", "budgetId", "itemName", "defaultCategoryId", "aliases",
-     "lastUsedAt", "isAmbiguous", "ambiguousQuestion")
-SELECT  "id", "budgetId", "itemName", "defaultCategoryId", "aliases",
-        "lastUsedAt", "isAmbiguous", "ambiguousQuestion"
+    ("id", "budgetId", "itemName", "defaultCategoryId", "aliases", "lastUsedAt")
+SELECT  "id", "budgetId", "itemName", "defaultCategoryId", "aliases", "lastUsedAt"
 FROM    "ItemMemory";
 
 DROP TABLE "ItemMemory";
 ALTER TABLE "new_ItemMemory" RENAME TO "ItemMemory";
 
--- PendingImport: add expenseId, confirmedById, confirmedAt and FK constraints
 CREATE TABLE "new_PendingImport" (
     "id"             TEXT     NOT NULL PRIMARY KEY,
     "budgetId"       TEXT     NOT NULL,
@@ -175,18 +164,16 @@ CREATE TABLE "new_PendingImport" (
 );
 
 INSERT INTO "new_PendingImport"
-    ("id", "budgetId", "userId", "receiptId", "expenseId", "confirmedById",
-     "confirmedAt", "status", "data", "error", "gmailMessageId", "createdAt", "updatedAt")
-SELECT  "id", "budgetId", "userId", "receiptId", "expenseId", "confirmedById",
-        "confirmedAt", "status", "data", "error", "gmailMessageId", "createdAt", "updatedAt"
+    ("id", "budgetId", "userId", "receiptId", "status", "data",
+     "error", "gmailMessageId", "createdAt", "updatedAt")
+SELECT  "id", "budgetId", "userId", "receiptId", "status", "data",
+        "error", "gmailMessageId", "createdAt", "updatedAt"
 FROM    "PendingImport";
 
 DROP TABLE "PendingImport";
 ALTER TABLE "new_PendingImport" RENAME TO "PendingImport";
 
--- GmailConnection: convert inline UNIQUE on userId to named index.
--- SQLite 3.46 cannot DROP the auto-index (sqlite_autoindex_GmailConnection_2)
--- without a full table redefine.
+-- GmailConnection: SQLite 3.46 cannot DROP sqlite_autoindex_* — table redefine required
 CREATE TABLE "new_GmailConnection" (
     "id"           TEXT     NOT NULL PRIMARY KEY,
     "userId"       TEXT     NOT NULL,
@@ -210,7 +197,6 @@ FROM    "GmailConnection";
 DROP TABLE "GmailConnection";
 ALTER TABLE "new_GmailConnection" RENAME TO "GmailConnection";
 
--- GmailLabelConfig: same as GmailConnection
 CREATE TABLE "new_GmailLabelConfig" (
     "id"                  TEXT     NOT NULL PRIMARY KEY,
     "userId"              TEXT     NOT NULL,
@@ -238,7 +224,7 @@ ALTER TABLE "new_GmailLabelConfig" RENAME TO "GmailLabelConfig";
 PRAGMA foreign_keys=ON;
 PRAGMA defer_foreign_keys=OFF;
 
--- Indexes ---------------------------------------------------------------
+-- Indexes
 
 CREATE UNIQUE INDEX "CategoryTarget_budgetId_categoryId_key"
     ON "CategoryTarget"("budgetId", "categoryId");
