@@ -411,140 +411,182 @@ export function GmailOAuthForm({ budgets, defaultBudgetId }: Props) {
           <div className="rounded-md bg-muted/40 border border-border px-4 py-3 space-y-3 text-sm">
             <p className="font-medium text-foreground">Google Cloud Console setup</p>
 
-            {/* Important note */}
-            <div className="flex gap-2 p-3 rounded-md bg-amber-500/10 border border-amber-500/30 text-xs">
-              <TriangleAlert className="w-3.5 h-3.5 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
-              <p className="text-amber-700 dark:text-amber-400">
-                <span className="font-semibold">Important:</span> Enabling OAuth credentials alone is not
-                enough. You must also enable the Gmail API in the same Google Cloud project, otherwise
-                label and sync requests will fail.
-              </p>
-            </div>
+            {!baseUrlStatus?.isExplicitlySet ? (
+              /* ── Prerequisite notice: APP_BASE_URL must be set first ── */
+              <div className="flex gap-3 p-3 rounded-md bg-blue-500/10 border border-blue-500/30">
+                <Globe className="w-4 h-4 shrink-0 mt-0.5 text-blue-600 dark:text-blue-400" />
+                <div className="space-y-2.5 min-w-0">
+                  <p className="text-xs font-semibold text-blue-800 dark:text-blue-300">
+                    Set <span className="font-mono">APP_BASE_URL</span> before configuring Gmail OAuth
+                  </p>
+                  <p className="text-xs text-blue-700 dark:text-blue-400">
+                    Google OAuth requires an exact Authorized Redirect URI that matches your app&apos;s
+                    public HTTPS origin. Without{" "}
+                    <span className="font-mono font-medium">APP_BASE_URL</span> configured, the app
+                    falls back to a local network address — which Google will reject and will not work
+                    for OAuth.
+                  </p>
+                  <div className="space-y-1.5">
+                    <p className="text-[11px] font-semibold text-blue-700 dark:text-blue-400">How to fix</p>
+                    <p className="text-xs text-foreground/70">
+                      Add <span className="font-mono font-medium">APP_BASE_URL</span> to your
+                      environment and restart the app:
+                    </p>
+                    <p className="font-mono text-xs bg-muted/60 rounded px-2 py-1 break-all">
+                      APP_BASE_URL=https://yourdomain.com
+                    </p>
+                    <p className="text-[11px] text-muted-foreground">
+                      In Docker: add to your <span className="font-mono">.env</span> file or the{" "}
+                      <span className="font-mono">environment:</span> section in{" "}
+                      <span className="font-mono">docker-compose.yml</span>. Must be just the origin
+                      — no path, no trailing slash.
+                    </p>
+                  </div>
+                  <p className="text-[11px] text-blue-600/80 dark:text-blue-400/80 italic">
+                    The full Google Cloud Console setup instructions will appear here once{" "}
+                    <span className="font-mono not-italic">APP_BASE_URL</span> is configured and the
+                    app is restarted.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* Important note */}
+                <div className="flex gap-2 p-3 rounded-md bg-amber-500/10 border border-amber-500/30 text-xs">
+                  <TriangleAlert className="w-3.5 h-3.5 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+                  <p className="text-amber-700 dark:text-amber-400">
+                    <span className="font-semibold">Important:</span> Enabling OAuth credentials alone is not
+                    enough. You must also enable the Gmail API in the same Google Cloud project, otherwise
+                    label and sync requests will fail.
+                  </p>
+                </div>
 
-            <ol className="space-y-3 text-xs text-muted-foreground">
-              {/* Step 1 */}
-              <li className="flex gap-2.5">
-                <span className="flex-none w-5 h-5 rounded-full bg-primary/15 text-primary text-[10px] font-bold flex items-center justify-center mt-0.5">1</span>
-                <span>
-                  Go to{" "}
-                  <a
-                    href="https://console.cloud.google.com"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-primary underline underline-offset-2 hover:no-underline"
-                  >
-                    Google Cloud Console
-                  </a>
-                </span>
-              </li>
-
-              {/* Step 2 */}
-              <li className="flex gap-2.5">
-                <span className="flex-none w-5 h-5 rounded-full bg-primary/15 text-primary text-[10px] font-bold flex items-center justify-center mt-0.5">2</span>
-                <span>Create or select the Google Cloud project you want to use for Gmail receipt import</span>
-              </li>
-
-              {/* Step 3 — Gmail API */}
-              <li className="flex gap-2.5">
-                <span className="flex-none w-5 h-5 rounded-full bg-primary/15 text-primary text-[10px] font-bold flex items-center justify-center mt-0.5">3</span>
-                <span className="space-y-1">
-                  <span className="block font-medium text-foreground">Enable the Gmail API</span>
-                  <span className="block">
-                    Go to <span className="font-mono">APIs &amp; Services → Library</span>, search for{" "}
-                    <span className="font-mono">Gmail API</span>, and click Enable. Or use the direct link:
-                  </span>
-                  <a
-                    href="https://console.cloud.google.com/apis/library/gmail.googleapis.com"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-primary underline underline-offset-2 hover:no-underline font-mono"
-                  >
-                    console.cloud.google.com/apis/library/gmail.googleapis.com
-                    <ExternalLink className="w-3 h-3" />
-                  </a>
-                </span>
-              </li>
-
-              {/* Step 4 */}
-              <li className="flex gap-2.5">
-                <span className="flex-none w-5 h-5 rounded-full bg-primary/15 text-primary text-[10px] font-bold flex items-center justify-center mt-0.5">4</span>
-                <span>
-                  Configure the <span className="font-mono">OAuth consent screen</span> if not already done
-                  — add <span className="font-mono">gmail.readonly</span> to the scopes
-                </span>
-              </li>
-
-              {/* Step 5 */}
-              <li className="flex gap-2.5">
-                <span className="flex-none w-5 h-5 rounded-full bg-primary/15 text-primary text-[10px] font-bold flex items-center justify-center mt-0.5">5</span>
-                <span>
-                  Go to <span className="font-mono">APIs &amp; Services → Credentials</span> and create an{" "}
-                  <span className="font-medium">OAuth 2.0 Client ID</span> for a <span className="font-medium">Web Application</span>
-                </span>
-              </li>
-
-              {/* Step 6 — URIs */}
-              <li className="flex gap-2.5">
-                <span className="flex-none w-5 h-5 rounded-full bg-primary/15 text-primary text-[10px] font-bold flex items-center justify-center mt-0.5">6</span>
-                <span className="flex-1 space-y-2 min-w-0">
-                  <span className="block">Add the following Authorized JavaScript origin and Authorized Redirect URI:</span>
-
-                  {/* JS Origin */}
-                  <span className="block space-y-1">
-                    <span className="text-[10px] font-semibold text-foreground/70 uppercase tracking-wide">Authorized JavaScript Origin</span>
-                    <span className="flex items-center gap-2">
-                      <span className="flex-1 font-mono text-[11px] bg-background border border-border rounded px-2 py-1 break-all">
-                        {instrOrigin}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => copyInstructionUri(instrOrigin, "origin")}
-                        className="flex-none flex items-center gap-1 text-[10px] px-2 py-1 rounded border border-border bg-background hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                <ol className="space-y-3 text-xs text-muted-foreground">
+                  {/* Step 1 */}
+                  <li className="flex gap-2.5">
+                    <span className="flex-none w-5 h-5 rounded-full bg-primary/15 text-primary text-[10px] font-bold flex items-center justify-center mt-0.5">1</span>
+                    <span>
+                      Go to{" "}
+                      <a
+                        href="https://console.cloud.google.com"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary underline underline-offset-2 hover:no-underline"
                       >
-                        {copiedOrigin ? <CheckCircle2 className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
-                        {copiedOrigin ? "Copied!" : "Copy"}
-                      </button>
+                        Google Cloud Console
+                      </a>
                     </span>
-                  </span>
+                  </li>
 
-                  {/* Callback URI */}
-                  <span className="block space-y-1">
-                    <span className="text-[10px] font-semibold text-foreground/70 uppercase tracking-wide">Authorized Redirect URI</span>
-                    <span className="flex items-center gap-2">
-                      <span className="flex-1 font-mono text-[11px] bg-background border border-border rounded px-2 py-1 break-all">
-                        {instrCallback}
+                  {/* Step 2 */}
+                  <li className="flex gap-2.5">
+                    <span className="flex-none w-5 h-5 rounded-full bg-primary/15 text-primary text-[10px] font-bold flex items-center justify-center mt-0.5">2</span>
+                    <span>Create or select the Google Cloud project you want to use for Gmail receipt import</span>
+                  </li>
+
+                  {/* Step 3 — Gmail API */}
+                  <li className="flex gap-2.5">
+                    <span className="flex-none w-5 h-5 rounded-full bg-primary/15 text-primary text-[10px] font-bold flex items-center justify-center mt-0.5">3</span>
+                    <span className="space-y-1">
+                      <span className="block font-medium text-foreground">Enable the Gmail API</span>
+                      <span className="block">
+                        Go to <span className="font-mono">APIs &amp; Services → Library</span>, search for{" "}
+                        <span className="font-mono">Gmail API</span>, and click Enable. Or use the direct link:
                       </span>
-                      <button
-                        type="button"
-                        onClick={() => copyInstructionUri(instrCallback, "callback")}
-                        className="flex-none flex items-center gap-1 text-[10px] px-2 py-1 rounded border border-border bg-background hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                      <a
+                        href="https://console.cloud.google.com/apis/library/gmail.googleapis.com"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-primary underline underline-offset-2 hover:no-underline font-mono"
                       >
-                        {copiedCallback ? <CheckCircle2 className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
-                        {copiedCallback ? "Copied!" : "Copy"}
-                      </button>
+                        console.cloud.google.com/apis/library/gmail.googleapis.com
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
                     </span>
-                  </span>
-                </span>
-              </li>
+                  </li>
 
-              {/* Step 7 */}
-              <li className="flex gap-2.5">
-                <span className="flex-none w-5 h-5 rounded-full bg-primary/15 text-primary text-[10px] font-bold flex items-center justify-center mt-0.5">7</span>
-                <span>Paste the Client ID and Client Secret into the fields below and save</span>
-              </li>
-            </ol>
+                  {/* Step 4 */}
+                  <li className="flex gap-2.5">
+                    <span className="flex-none w-5 h-5 rounded-full bg-primary/15 text-primary text-[10px] font-bold flex items-center justify-center mt-0.5">4</span>
+                    <span>
+                      Configure the <span className="font-mono">OAuth consent screen</span> if not already done
+                      — add <span className="font-mono">gmail.readonly</span> to the scopes
+                    </span>
+                  </li>
 
-            {/* Troubleshooting callout */}
-            <div className="flex gap-2 p-3 rounded-md bg-muted/60 border border-border text-xs text-muted-foreground">
-              <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-              <p>
-                <span className="font-semibold text-foreground/80">Troubleshooting:</span>{" "}
-                If you see an error like{" "}
-                <span className="font-mono italic">&quot;Gmail API has not been used in project … before or it is disabled&quot;</span>,
-                enable the Gmail API (Step 3) in the same project as your OAuth client, then wait a
-                few minutes for the change to propagate before trying again.
-              </p>
-            </div>
+                  {/* Step 5 */}
+                  <li className="flex gap-2.5">
+                    <span className="flex-none w-5 h-5 rounded-full bg-primary/15 text-primary text-[10px] font-bold flex items-center justify-center mt-0.5">5</span>
+                    <span>
+                      Go to <span className="font-mono">APIs &amp; Services → Credentials</span> and create an{" "}
+                      <span className="font-medium">OAuth 2.0 Client ID</span> for a <span className="font-medium">Web Application</span>
+                    </span>
+                  </li>
+
+                  {/* Step 6 — URIs */}
+                  <li className="flex gap-2.5">
+                    <span className="flex-none w-5 h-5 rounded-full bg-primary/15 text-primary text-[10px] font-bold flex items-center justify-center mt-0.5">6</span>
+                    <span className="flex-1 space-y-2 min-w-0">
+                      <span className="block">Add the following Authorized JavaScript origin and Authorized Redirect URI:</span>
+
+                      {/* JS Origin */}
+                      <span className="block space-y-1">
+                        <span className="text-[10px] font-semibold text-foreground/70 uppercase tracking-wide">Authorized JavaScript Origin</span>
+                        <span className="flex items-center gap-2">
+                          <span className="flex-1 font-mono text-[11px] bg-background border border-border rounded px-2 py-1 break-all">
+                            {instrOrigin}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => copyInstructionUri(instrOrigin, "origin")}
+                            className="flex-none flex items-center gap-1 text-[10px] px-2 py-1 rounded border border-border bg-background hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                          >
+                            {copiedOrigin ? <CheckCircle2 className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                            {copiedOrigin ? "Copied!" : "Copy"}
+                          </button>
+                        </span>
+                      </span>
+
+                      {/* Callback URI */}
+                      <span className="block space-y-1">
+                        <span className="text-[10px] font-semibold text-foreground/70 uppercase tracking-wide">Authorized Redirect URI</span>
+                        <span className="flex items-center gap-2">
+                          <span className="flex-1 font-mono text-[11px] bg-background border border-border rounded px-2 py-1 break-all">
+                            {instrCallback}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => copyInstructionUri(instrCallback, "callback")}
+                            className="flex-none flex items-center gap-1 text-[10px] px-2 py-1 rounded border border-border bg-background hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                          >
+                            {copiedCallback ? <CheckCircle2 className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                            {copiedCallback ? "Copied!" : "Copy"}
+                          </button>
+                        </span>
+                      </span>
+                    </span>
+                  </li>
+
+                  {/* Step 7 */}
+                  <li className="flex gap-2.5">
+                    <span className="flex-none w-5 h-5 rounded-full bg-primary/15 text-primary text-[10px] font-bold flex items-center justify-center mt-0.5">7</span>
+                    <span>Paste the Client ID and Client Secret into the fields below and save</span>
+                  </li>
+                </ol>
+
+                {/* Troubleshooting callout */}
+                <div className="flex gap-2 p-3 rounded-md bg-muted/60 border border-border text-xs text-muted-foreground">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                  <p>
+                    <span className="font-semibold text-foreground/80">Troubleshooting:</span>{" "}
+                    If you see an error like{" "}
+                    <span className="font-mono italic">&quot;Gmail API has not been used in project … before or it is disabled&quot;</span>,
+                    enable the Gmail API (Step 3) in the same project as your OAuth client, then wait a
+                    few minutes for the change to propagate before trying again.
+                  </p>
+                </div>
+              </>
+            )}
           </div>
 
           <form onSubmit={handleSave} className="space-y-4">
