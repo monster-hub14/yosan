@@ -52,21 +52,4 @@ export async function getSessionFromRequest(
   return verifySessionToken(token);
 }
 
-export function makeSessionCookie(token: string): string {
-  const isProd = process.env.NODE_ENV === "production";
-  const attrs = [
-    `${COOKIE_NAME}=${token}`,
-    "HttpOnly",
-    `Max-Age=${COOKIE_MAX_AGE}`,
-    "Path=/",
-    "SameSite=Strict",
-    isProd ? "Secure" : "",
-  ]
-    .filter(Boolean)
-    .join("; ");
-  return attrs;
-}
-
-export function makeClearSessionCookie(): string {
-  return `${COOKIE_NAME}=; HttpOnly; Max-Age=0; Path=/; SameSite=Strict`;
-}
+export { COOKIE_NAME as SESSION_COOKIE_NAME, COOKIE_MAX_AGE as SESSION_MAX_AGE };

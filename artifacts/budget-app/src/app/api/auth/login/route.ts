@@ -12,6 +12,33 @@ import {
 const SESSION_COOKIE = "budget_session";
 const SESSION_MAX_AGE = 60 * 60 * 24 * 7;
 
+/**
+ * Detect whether the incoming request arrived over HTTPS.
+ *
+ * Priority order (mirrors gmail-base-url.ts):
+ *  1. x-forwarded-proto header  — set by reverse proxies (Nginx Proxy Manager, Caddy, Traefik …)
+ *  2. APP_BASE_URL env var scheme — authoritative override for the deployment
+ *  3. request.url scheme         — actual connection (works for direct HTTP/HTTPS access)
+ *
+ * This replaces `NODE_ENV === "production"` which is always true in Docker and
+ * causes Secure cookies to be rejected by browsers on plain HTTP connections.
+ */
+function isHttpsRequest(request: NextRequest): boolean {
+  const fwdProto = request.headers.get("x-forwarded-proto");
+  if (fwdProto) return fwdProto.split(",")[0].trim() === "https";
+
+  const appBaseUrl = process.env.APP_BASE_URL;
+  if (appBaseUrl) {
+    try {
+      return new URL(appBaseUrl).protocol === "https:";
+    } catch {
+      // invalid APP_BASE_URL — fall through
+    }
+  }
+
+  return new URL(request.url).protocol === "https:";
+}
+
 export async function POST(request: NextRequest) {
   try {
     const { email, password } = await request.json();
@@ -45,14 +72,14 @@ export async function POST(request: NextRequest) {
       user: { id: user.id, email: user.email, name: user.name, role: user.role },
     });
 
-    const isProd = process.env.NODE_ENV === "production";
+    const isSecure = isHttpsRequest(request);
 
     response.cookies.set(SESSION_COOKIE, token, {
       httpOnly: true,
-      sameSite: "strict",
+      sameSite: "lax",
       path: "/",
       maxAge: SESSION_MAX_AGE,
-      secure: isProd,
+      secure: isSecure,
     });
 
     // Re-issue the signed setup token on every login so the middleware can verify

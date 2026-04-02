@@ -24,6 +24,38 @@ function isAuthApiPath(pathname: string): boolean {
 }
 
 /**
+ * Build a proxy-aware redirect URL.
+ *
+ * Uses the same priority order as gmail-base-url.ts:
+ *  1. x-forwarded-proto + x-forwarded-host — set by reverse proxies (Nginx Proxy Manager, Caddy …)
+ *  2. APP_BASE_URL env var                 — authoritative deployment override
+ *  3. request.url                          — direct access fallback
+ *
+ * Without this, redirects built from `request.url` would use the internal HTTP
+ * scheme/host when behind a proxy, sending the browser to http:// instead of https://.
+ */
+function proxyAwareUrl(path: string, request: NextRequest): URL {
+  const fwdProto = request.headers.get("x-forwarded-proto");
+  const fwdHost = request.headers.get("x-forwarded-host");
+  if (fwdProto && fwdHost) {
+    const scheme = fwdProto.split(",")[0].trim();
+    const host = fwdHost.split(",")[0].trim();
+    if (scheme && host) return new URL(path, `${scheme}://${host}`);
+  }
+
+  const appBaseUrl = process.env.APP_BASE_URL;
+  if (appBaseUrl) {
+    try {
+      return new URL(path, appBaseUrl);
+    } catch {
+      // invalid APP_BASE_URL — fall through
+    }
+  }
+
+  return new URL(path, request.url);
+}
+
+/**
  * Middleware routing contract:
  *
  * Setup-state is detected via a server-signed JWT in the `budget_setup` cookie.
@@ -74,7 +106,7 @@ export async function middleware(request: NextRequest) {
     if (pathname.startsWith("/api/")) {
       return NextResponse.json({ error: "Setup not complete" }, { status: 503 });
     }
-    return NextResponse.redirect(new URL("/setup", request.url));
+    return NextResponse.redirect(proxyAwareUrl("/setup", request));
   }
 
   // Setup is complete from here on.
@@ -82,7 +114,7 @@ export async function middleware(request: NextRequest) {
   // Per-route guardSetupRoute() will return 401 for post-setup calls.
 
   if (isSetupPagePath(pathname) || pathname === "/login") {
-    if (session) return NextResponse.redirect(new URL("/dashboard", request.url));
+    if (session) return NextResponse.redirect(proxyAwareUrl("/dashboard", request));
     return NextResponse.next();
   }
 
@@ -90,7 +122,7 @@ export async function middleware(request: NextRequest) {
     if (pathname.startsWith("/api/")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    const loginUrl = new URL("/login", request.url);
+    const loginUrl = proxyAwareUrl("/login", request);
     if (pathname !== "/") loginUrl.searchParams.set("from", pathname);
     return NextResponse.redirect(loginUrl);
   }
