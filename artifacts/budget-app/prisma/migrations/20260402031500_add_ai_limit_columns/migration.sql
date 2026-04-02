@@ -1,0 +1,8 @@
+ALTER TABLE "AIProviderConfig"
+ADD COLUMN "dailyLimitPerUser" INTEGER DEFAULT 50;
+
+ALTER TABLE "AIProviderConfig"
+ADD COLUMN "weeklyLimitPerUser" INTEGER DEFAULT 200;
+
+ALTER TABLE "AIProviderConfig"
+ADD COLUMN "monthlyLimitPerUser" INTEGER DEFAULT 500;
