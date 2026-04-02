@@ -38,6 +38,40 @@ interface InAppNotification {
   budgetId?: string | null;
 }
 
+interface DropdownPos {
+  top: number;
+  left?: number;
+  right?: number;
+}
+
+function getAnchoredPos(el: HTMLElement, align: "left" | "right"): DropdownPos {
+  const rect = el.getBoundingClientRect();
+  const top = rect.bottom + 4;
+  if (align === "left") return { top, left: rect.left };
+  return { top, right: window.innerWidth - rect.right };
+}
+
+/**
+ * Hook that fires `onClose` when a mousedown occurs outside all the provided refs.
+ */
+function useOutsideClick(
+  refs: Array<React.RefObject<HTMLElement | null>>,
+  onClose: () => void,
+  enabled: boolean
+) {
+  useEffect(() => {
+    if (!enabled) return;
+    function handler(e: MouseEvent) {
+      const target = e.target as Node;
+      if (refs.every((r) => !r.current?.contains(target))) {
+        onClose();
+      }
+    }
+    document.addEventListener("mousedown", handler, true);
+    return () => document.removeEventListener("mousedown", handler, true);
+  }, [enabled, onClose, ...refs.map((r) => r.current)]); // eslint-disable-line react-hooks/exhaustive-deps
+}
+
 export default function AppHeader({ user, activeBudgetId, onMobileMenuToggle }: AppHeaderProps) {
   const { theme, setTheme } = useTheme();
   const router = useRouter();
@@ -52,7 +86,21 @@ export default function AppHeader({ user, activeBudgetId, onMobileMenuToggle }: 
   const [notifications, setNotifications] = useState<InAppNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [markingAll, setMarkingAll] = useState(false);
-  const bellRef = useRef<HTMLDivElement>(null);
+
+  // Dropdown anchor positions (fixed, viewport-relative)
+  const [budgetPos, setBudgetPos] = useState<DropdownPos | null>(null);
+  const [bellPos, setBellPos] = useState<DropdownPos | null>(null);
+  const [menuPos, setMenuPos] = useState<DropdownPos | null>(null);
+
+  // Trigger button refs
+  const budgetBtnRef = useRef<HTMLButtonElement>(null);
+  const bellBtnRef = useRef<HTMLButtonElement>(null);
+  const menuBtnRef = useRef<HTMLButtonElement>(null);
+
+  // Panel refs (used by outside-click hooks)
+  const budgetPanelRef = useRef<HTMLDivElement>(null);
+  const bellPanelRef = useRef<HTMLDivElement>(null);
+  const menuPanelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { setMounted(true); }, []);
 
@@ -83,6 +131,40 @@ export default function AppHeader({ user, activeBudgetId, onMobileMenuToggle }: 
     const interval = setInterval(fetchNotifications, 60000);
     return () => clearInterval(interval);
   }, [fetchNotifications]);
+
+  // Outside-click handlers (no backdrop overlay needed)
+  useOutsideClick(
+    [budgetBtnRef, budgetPanelRef],
+    useCallback(() => setBudgetMenuOpen(false), []),
+    budgetMenuOpen
+  );
+  useOutsideClick(
+    [bellBtnRef, bellPanelRef],
+    useCallback(() => setBellOpen(false), []),
+    bellOpen
+  );
+  useOutsideClick(
+    [menuBtnRef, menuPanelRef],
+    useCallback(() => setMenuOpen(false), []),
+    menuOpen
+  );
+
+  // Recompute panel positions on window resize so open panels track correctly
+  useEffect(() => {
+    function handleResize() {
+      if (budgetMenuOpen && budgetBtnRef.current) {
+        setBudgetPos(getAnchoredPos(budgetBtnRef.current, "left"));
+      }
+      if (bellOpen && bellBtnRef.current) {
+        setBellPos(getAnchoredPos(bellBtnRef.current, "right"));
+      }
+      if (menuOpen && menuBtnRef.current) {
+        setMenuPos(getAnchoredPos(menuBtnRef.current, "right"));
+      }
+    }
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, [budgetMenuOpen, bellOpen, menuOpen]);
 
   async function handleLogout() {
     setLoggingOut(true);
@@ -124,7 +206,6 @@ export default function AppHeader({ user, activeBudgetId, onMobileMenuToggle }: 
   }
 
   async function markRead(id: string) {
-    // Optimistic local update
     setNotifications((prev) =>
       prev.map((n) => (n.id === id ? { ...n, isRead: true } : n))
     );
@@ -180,10 +261,20 @@ export default function AppHeader({ user, activeBudgetId, onMobileMenuToggle }: 
         </button>
       )}
 
+      {/* Budget switcher */}
       {budgets.length > 0 && (
         <div className="relative">
           <button
-            onClick={() => setBudgetMenuOpen(!budgetMenuOpen)}
+            ref={budgetBtnRef}
+            onClick={() => {
+              const opening = !budgetMenuOpen;
+              setBudgetMenuOpen(opening);
+              setBellOpen(false);
+              setMenuOpen(false);
+              if (opening && budgetBtnRef.current) {
+                setBudgetPos(getAnchoredPos(budgetBtnRef.current, "left"));
+              }
+            }}
             disabled={switching}
             className={cn(
               "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
@@ -199,45 +290,44 @@ export default function AppHeader({ user, activeBudgetId, onMobileMenuToggle }: 
             <ChevronDown className={cn("w-3.5 h-3.5 text-muted-foreground transition-transform", budgetMenuOpen && "rotate-180")} />
           </button>
 
-          {budgetMenuOpen && (
-            <>
-              <div className="fixed inset-0 z-40" onClick={() => setBudgetMenuOpen(false)} aria-hidden />
-              <div className="absolute left-0 top-full mt-1 w-64 rounded-lg border border-border bg-popover shadow-lg z-50 py-1">
-                <p className="px-3 py-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                  Your budgets
-                </p>
-                {budgets.map((b) => (
-                  <button
-                    key={b.id}
-                    onClick={() => handleSwitchBudget(b)}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted transition-colors text-left"
+          {budgetMenuOpen && budgetPos && (
+            <div
+              ref={budgetPanelRef}
+              className="fixed z-[9999] w-64 rounded-lg border border-border bg-popover shadow-lg py-1"
+              style={{ top: budgetPos.top, left: budgetPos.left }}
+            >
+              <p className="px-3 py-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                Your budgets
+              </p>
+              {budgets.map((b) => (
+                <button
+                  key={b.id}
+                  onClick={() => handleSwitchBudget(b)}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted transition-colors text-left"
+                >
+                  <div className="w-6 h-6 rounded bg-primary/10 flex items-center justify-center flex-shrink-0">
+                    <Wallet className="w-3 h-3 text-primary" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="truncate font-medium">{b.name}</p>
+                    <p className="text-xs text-muted-foreground">{b.budgetType === "SOLO" ? "Solo" : "Shared"} · {b.currency}</p>
+                  </div>
+                  {b.id === currentBudget?.id && <Check className="w-4 h-4 text-primary flex-shrink-0" />}
+                </button>
+              ))}
+              {user.role === "ADMIN" && (
+                <div className="border-t border-border mt-1 pt-1">
+                  <Link
+                    href="/budgets/new"
+                    onClick={() => setBudgetMenuOpen(false)}
+                    className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted transition-colors text-muted-foreground"
                   >
-                    <div className="w-6 h-6 rounded bg-primary/10 flex items-center justify-center flex-shrink-0">
-                      <Wallet className="w-3 h-3 text-primary" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="truncate font-medium">{b.name}</p>
-                      <p className="text-xs text-muted-foreground">{b.budgetType === "SOLO" ? "Solo" : "Shared"} · {b.currency}</p>
-                    </div>
-                    {b.id === currentBudget?.id && <Check className="w-4 h-4 text-primary flex-shrink-0" />}
-                  </button>
-                ))}
-                {user.role === "ADMIN" && (
-                  <>
-                    <div className="border-t border-border mt-1 pt-1">
-                      <Link
-                        href="/budgets/new"
-                        onClick={() => setBudgetMenuOpen(false)}
-                        className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted transition-colors text-muted-foreground"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                        New budget
-                      </Link>
-                    </div>
-                  </>
-                )}
-              </div>
-            </>
+                    <Plus className="w-3.5 h-3.5" />
+                    New budget
+                  </Link>
+                </div>
+              )}
+            </div>
           )}
         </div>
       )}
@@ -260,14 +350,20 @@ export default function AppHeader({ user, activeBudgetId, onMobileMenuToggle }: 
       </button>
 
       {/* Bell / Notifications */}
-      <div className="relative" ref={bellRef}>
+      <div className="relative">
         <button
+          ref={bellBtnRef}
           onClick={() => {
             const opening = !bellOpen;
             setBellOpen(opening);
             setMenuOpen(false);
             setBudgetMenuOpen(false);
-            if (opening) fetchNotifications();
+            if (opening) {
+              fetchNotifications();
+              if (bellBtnRef.current) {
+                setBellPos(getAnchoredPos(bellBtnRef.current, "right"));
+              }
+            }
           }}
           className={cn(
             "relative p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors",
@@ -281,96 +377,103 @@ export default function AppHeader({ user, activeBudgetId, onMobileMenuToggle }: 
           )}
         </button>
 
-        {bellOpen && (
-          <>
-            <div className="fixed inset-0 z-40" onClick={() => setBellOpen(false)} aria-hidden />
-            <div className="absolute right-0 top-full mt-1 w-80 rounded-lg border border-border bg-popover shadow-xl z-50 flex flex-col max-h-[480px]">
-              {/* Header */}
-              <div className="flex items-center justify-between px-4 py-3 border-b border-border flex-shrink-0">
-                <div className="flex items-center gap-2">
-                  <Bell className="w-4 h-4 text-muted-foreground" />
-                  <span className="text-sm font-semibold">Notifications</span>
-                  {unreadCount > 0 && (
-                    <span className="inline-flex items-center justify-center text-xs font-bold bg-red-500 text-white rounded-full min-w-[18px] h-[18px] px-1">
-                      {unreadCount > 99 ? "99+" : unreadCount}
-                    </span>
-                  )}
-                </div>
+        {bellOpen && bellPos && (
+          <div
+            ref={bellPanelRef}
+            className="fixed z-[9999] w-80 rounded-lg border border-border bg-popover shadow-xl flex flex-col max-h-[480px]"
+            style={{ top: bellPos.top, right: bellPos.right }}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border flex-shrink-0">
+              <div className="flex items-center gap-2">
+                <Bell className="w-4 h-4 text-muted-foreground" />
+                <span className="text-sm font-semibold">Notifications</span>
                 {unreadCount > 0 && (
-                  <button
-                    onClick={markAllRead}
-                    disabled={markingAll}
-                    className="text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50 flex items-center gap-1"
-                  >
-                    <Check className="w-3 h-3" />
-                    Mark all as read
-                  </button>
+                  <span className="inline-flex items-center justify-center text-xs font-bold bg-red-500 text-white rounded-full min-w-[18px] h-[18px] px-1">
+                    {unreadCount > 99 ? "99+" : unreadCount}
+                  </span>
                 )}
               </div>
-
-              {/* Notification list */}
-              <div className="overflow-y-auto flex-1">
-                {notifications.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-12 text-center px-6">
-                    <BellOff className="w-8 h-8 text-muted-foreground/40 mb-3" />
-                    <p className="text-sm font-medium text-muted-foreground">No new notifications</p>
-                    <p className="text-xs text-muted-foreground/70 mt-1">Alerts will appear here when triggered</p>
-                  </div>
-                ) : (
-                  notifications.map((n, idx) => (
-                    <button
-                      key={n.id}
-                      onClick={() => {
-                        if (!n.isRead) markRead(n.id);
-                      }}
-                      className={cn(
-                        "w-full text-left px-4 py-3 flex items-start gap-3 transition-colors hover:bg-muted/60",
-                        idx < notifications.length - 1 && "border-b border-border/60",
-                        !n.isRead && "bg-blue-50/40 dark:bg-blue-950/20"
-                      )}
-                    >
-                      <div className={cn(
-                        "mt-0.5 w-2 h-2 rounded-full flex-shrink-0",
-                        !n.isRead ? "bg-blue-500" : "bg-transparent"
-                      )} />
-                      <div className="flex-1 min-w-0">
-                        <p className={cn("text-sm leading-snug truncate", !n.isRead && "font-medium")}>
-                          {n.title}
-                        </p>
-                        <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2 leading-relaxed">
-                          {n.body}
-                        </p>
-                        <p className="text-xs text-muted-foreground/60 mt-1">
-                          {formatDistanceToNow(new Date(n.createdAt), { addSuffix: true })}
-                        </p>
-                      </div>
-                    </button>
-                  ))
-                )}
-              </div>
-
-              {/* Footer */}
-              <div className="border-t border-border px-4 py-2.5 flex-shrink-0">
-                <Link
-                  href="/settings/notifications"
-                  onClick={() => setBellOpen(false)}
-                  className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+              {unreadCount > 0 && (
+                <button
+                  onClick={markAllRead}
+                  disabled={markingAll}
+                  className="text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50 flex items-center gap-1"
                 >
-                  <Settings className="w-3 h-3" />
-                  Notification preferences
-                </Link>
-              </div>
+                  <Check className="w-3 h-3" />
+                  Mark all as read
+                </button>
+              )}
             </div>
-          </>
+
+            {/* Notification list */}
+            <div className="overflow-y-auto flex-1">
+              {notifications.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 text-center px-6">
+                  <BellOff className="w-8 h-8 text-muted-foreground/40 mb-3" />
+                  <p className="text-sm font-medium text-muted-foreground">No new notifications</p>
+                  <p className="text-xs text-muted-foreground/70 mt-1">Alerts will appear here when triggered</p>
+                </div>
+              ) : (
+                notifications.map((n, idx) => (
+                  <button
+                    key={n.id}
+                    onClick={() => {
+                      if (!n.isRead) markRead(n.id);
+                    }}
+                    className={cn(
+                      "w-full text-left px-4 py-3 flex items-start gap-3 transition-colors hover:bg-muted/60",
+                      idx < notifications.length - 1 && "border-b border-border/60",
+                      !n.isRead && "bg-blue-50/40 dark:bg-blue-950/20"
+                    )}
+                  >
+                    <div className={cn(
+                      "mt-0.5 w-2 h-2 rounded-full flex-shrink-0",
+                      !n.isRead ? "bg-blue-500" : "bg-transparent"
+                    )} />
+                    <div className="flex-1 min-w-0">
+                      <p className={cn("text-sm leading-snug truncate", !n.isRead && "font-medium")}>
+                        {n.title}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2 leading-relaxed">
+                        {n.body}
+                      </p>
+                      <p className="text-xs text-muted-foreground/60 mt-1">
+                        {formatDistanceToNow(new Date(n.createdAt), { addSuffix: true })}
+                      </p>
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="border-t border-border px-4 py-2.5 flex-shrink-0">
+              <Link
+                href="/settings/notifications"
+                onClick={() => setBellOpen(false)}
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+              >
+                <Settings className="w-3 h-3" />
+                Notification preferences
+              </Link>
+            </div>
+          </div>
         )}
       </div>
 
       {/* User menu */}
       <div className="relative">
         <button
+          ref={menuBtnRef}
           onClick={() => {
-            setMenuOpen(!menuOpen);
+            const opening = !menuOpen;
+            setMenuOpen(opening);
             setBellOpen(false);
+            setBudgetMenuOpen(false);
+            if (opening && menuBtnRef.current) {
+              setMenuPos(getAnchoredPos(menuBtnRef.current, "right"));
+            }
           }}
           className={cn(
             "flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors",
@@ -389,42 +492,43 @@ export default function AppHeader({ user, activeBudgetId, onMobileMenuToggle }: 
           <ChevronRight className={cn("w-3.5 h-3.5 transition-transform hidden sm:block", menuOpen && "rotate-90")} />
         </button>
 
-        {menuOpen && (
-          <>
-            <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} aria-hidden />
-            <div className="absolute right-0 top-full mt-1 w-52 rounded-lg border border-border bg-popover shadow-lg z-50 py-1">
-              <div className="px-3 py-2 border-b border-border mb-1">
-                <p className="text-sm font-medium truncate">{user.name}</p>
-                <p className="text-xs text-muted-foreground truncate">{user.email}</p>
-              </div>
-              <Link
-                href="/settings/account"
-                onClick={() => setMenuOpen(false)}
-                className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted transition-colors"
-              >
-                <User className="w-4 h-4 text-muted-foreground" />
-                Profile
-              </Link>
-              <Link
-                href="/settings"
-                onClick={() => setMenuOpen(false)}
-                className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted transition-colors"
-              >
-                <Settings className="w-4 h-4 text-muted-foreground" />
-                Settings
-              </Link>
-              <div className="border-t border-border mt-1 pt-1">
-                <button
-                  onClick={handleLogout}
-                  disabled={loggingOut}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-500 hover:bg-muted transition-colors disabled:opacity-50"
-                >
-                  <LogOut className="w-4 h-4" />
-                  {loggingOut ? "Signing out…" : "Sign out"}
-                </button>
-              </div>
+        {menuOpen && menuPos && (
+          <div
+            ref={menuPanelRef}
+            className="fixed z-[9999] w-52 rounded-lg border border-border bg-popover shadow-lg py-1"
+            style={{ top: menuPos.top, right: menuPos.right }}
+          >
+            <div className="px-3 py-2 border-b border-border mb-1">
+              <p className="text-sm font-medium truncate">{user.name}</p>
+              <p className="text-xs text-muted-foreground truncate">{user.email}</p>
             </div>
-          </>
+            <Link
+              href="/settings/account"
+              onClick={() => setMenuOpen(false)}
+              className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted transition-colors"
+            >
+              <User className="w-4 h-4 text-muted-foreground" />
+              Profile
+            </Link>
+            <Link
+              href="/settings"
+              onClick={() => setMenuOpen(false)}
+              className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted transition-colors"
+            >
+              <Settings className="w-4 h-4 text-muted-foreground" />
+              Settings
+            </Link>
+            <div className="border-t border-border mt-1 pt-1">
+              <button
+                onClick={handleLogout}
+                disabled={loggingOut}
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-500 hover:bg-muted transition-colors disabled:opacity-50"
+              >
+                <LogOut className="w-4 h-4" />
+                {loggingOut ? "Signing out…" : "Sign out"}
+              </button>
+            </div>
+          </div>
         )}
       </div>
     </header>
