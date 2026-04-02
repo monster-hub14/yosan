@@ -212,13 +212,7 @@ export default function AppHeader({ user, activeBudgetId, onMobileMenuToggle }: 
 
   return (
     <>
-      {/*
-        header uses relative + z-[9999] so that its buttons always render
-        above any backdrop overlay portaled into document.body at z-[9998].
-        backdrop-blur-sm creates a CSS stacking context which would otherwise
-        trap absolutely-positioned children; dropdown panels are portaled
-        into document.body to fully escape it.
-      */}
+      {/* z-[9999] keeps header buttons above the portaled backdrop at z-[9998] */}
       <header className="relative z-[9999] h-14 flex items-center px-4 gap-3 border-b border-border bg-card/50 backdrop-blur-sm flex-shrink-0">
         {/* Mobile hamburger */}
         {onMobileMenuToggle && (
@@ -339,15 +333,6 @@ export default function AppHeader({ user, activeBudgetId, onMobileMenuToggle }: 
           </button>
         </div>
       </header>
-
-      {/* ── Portaled dropdown panels ────────────────────────────────────────────
-          All three panels are portaled into document.body so they render
-          outside the header's stacking context (created by backdrop-blur-sm).
-          The backdrop at z-[9998] consumes first-click on page content
-          (restoring the original click-capture behaviour). The header is at
-          z-[9999] so its buttons remain clickable above the backdrop.
-          Each panel is at z-[9999] so it sits on top of both.
-      */}
 
       {/* Budget panel */}
       {portalTarget && budgetMenuOpen && budgetPos && createPortal(
