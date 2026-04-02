@@ -67,19 +67,23 @@ function proxyAwareUrl(path: string, request: NextRequest): URL {
  *
  *   STATIC / AUTH-API paths → always pass through
  *
+ *   /api/setup/* → ALWAYS pass through to per-route guards (DB-authoritative).
+ *     The route-level guardSetupRoute() checks SetupProgress.completedAt in the
+ *     DB. If setup is not yet done (fresh DB or DB reset), it allows the request.
+ *     If setup IS done, it requires an authenticated ADMIN session. This means a
+ *     stale budget_setup cookie left over from a wiped DB can never block the
+ *     wizard from running — the DB is always the source of truth.
+ *
  *   Setup NOT complete (cookie absent or invalid signature):
  *     /login         → pass through (DB-authoritative page redirects to /setup
  *                       if setup is truly not done, preventing redirect loops)
  *     /setup/*       → pass through (wizard pages)
- *     /api/setup/*   → pass through (wizard API routes, guarded per-route)
  *     /api/*         → 503 Setup not complete
  *     everything else → redirect to /setup
  *
  *   Setup complete (valid signed cookie):
  *     /login or /setup/* + session       → redirect to /dashboard
  *     /login or /setup/* + no session   → pass through
- *     /api/setup/* (post-setup)         → requires session (401 if absent),
- *                                         then per-route guardSetupRoute() returns 401
  *     /api/* + no session               → 401 Unauthorized
  *     everything else + no session      → redirect to /login?from=<path>
  *     everything else + session         → pass through
@@ -90,6 +94,13 @@ export async function middleware(request: NextRequest) {
   if (isStatic(pathname)) return NextResponse.next();
   if (isAuthApiPath(pathname)) return NextResponse.next();
 
+  // /api/setup/* is ALWAYS passed through to the route-level guards.
+  // guardSetupRoute() does a DB check — it allows setup when SetupProgress has
+  // no completedAt (first run or after a DB reset), and requires ADMIN session
+  // once setup is truly complete. This ensures a stale budget_setup cookie
+  // left over from a wiped database never blocks the setup wizard.
+  if (isSetupApiPath(pathname)) return NextResponse.next();
+
   const sessionToken = request.cookies.get(SESSION_COOKIE)?.value;
   const session = sessionToken ? await verifySessionToken(sessionToken) : null;
 
@@ -97,9 +108,8 @@ export async function middleware(request: NextRequest) {
   const setupDone = setupToken ? await verifySetupToken(setupToken) : false;
 
   if (!setupDone) {
-    // Allow setup pages and setup API routes (per-route guards handle auth)
+    // Allow setup pages
     if (isSetupPagePath(pathname)) return NextResponse.next();
-    if (isSetupApiPath(pathname)) return NextResponse.next();
     // Always allow /login — its DB-authoritative check redirects to /setup if
     // setup is truly not done, preventing /login → /setup → /login loops.
     if (pathname === "/login") return NextResponse.next();
@@ -110,8 +120,6 @@ export async function middleware(request: NextRequest) {
   }
 
   // Setup is complete from here on.
-  // /api/setup/* is NO longer exempted — it falls through to the session check.
-  // Per-route guardSetupRoute() will return 401 for post-setup calls.
 
   if (isSetupPagePath(pathname) || pathname === "/login") {
     if (session) return NextResponse.redirect(proxyAwareUrl("/dashboard", request));

@@ -138,7 +138,16 @@ export default function SetupWizard() {
           }),
         });
         const data = await res.json();
-        if (!res.ok) { toast.error(data.error); return; }
+        if (!res.ok) {
+          if (res.status === 401) {
+            toast.error(
+              "Session cookie conflict — please clear your browser cookies and reload the page."
+            );
+          } else {
+            toast.error(data.error);
+          }
+          return;
+        }
       }
 
       if (step.id === "income") {
