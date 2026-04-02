@@ -125,8 +125,8 @@ export default function AppHeader({ user, activeBudgetId, onMobileMenuToggle }: 
 
           {budgetMenuOpen && (
             <>
-              <div className="fixed inset-0 z-10" onClick={() => setBudgetMenuOpen(false)} aria-hidden />
-              <div className="absolute left-0 top-full mt-1 w-64 rounded-lg border border-border bg-popover shadow-lg z-20 py-1">
+              <div className="fixed inset-0 z-40" onClick={() => setBudgetMenuOpen(false)} aria-hidden />
+              <div className="absolute left-0 top-full mt-1 w-64 rounded-lg border border-border bg-popover shadow-lg z-50 py-1">
                 <p className="px-3 py-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wide">
                   Your budgets
                 </p>
@@ -212,8 +212,8 @@ export default function AppHeader({ user, activeBudgetId, onMobileMenuToggle }: 
 
         {menuOpen && (
           <>
-            <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} aria-hidden />
-            <div className="absolute right-0 top-full mt-1 w-52 rounded-lg border border-border bg-popover shadow-lg z-20 py-1">
+            <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} aria-hidden />
+            <div className="absolute right-0 top-full mt-1 w-52 rounded-lg border border-border bg-popover shadow-lg z-50 py-1">
               <div className="px-3 py-2 border-b border-border mb-1">
                 <p className="text-sm font-medium truncate">{user.name}</p>
                 <p className="text-xs text-muted-foreground truncate">{user.email}</p>
