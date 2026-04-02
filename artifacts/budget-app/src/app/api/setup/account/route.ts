@@ -10,11 +10,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Setup already completed" }, { status: 400 });
     }
 
-    const userCount = await db.user.count();
-    if (userCount > 0) {
-      return NextResponse.json({ error: "Admin account already exists" }, { status: 400 });
-    }
-
     let body: Record<string, unknown>;
     try {
       body = await request.json();
