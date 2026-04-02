@@ -7,8 +7,7 @@ FROM base AS deps
 COPY package.json pnpm-lock.yaml* ./
 # Use hoisted layout so node_modules contains real files, not pnpm symlinks.
 # pnpm's default symlink strategy breaks multi-stage COPY --from= (targets missing).
-RUN echo "node-linker=hoisted\nauto-install-peers=false\nstrict-peer-dependencies=false" > .npmrc && \
-    pnpm install --frozen-lockfile
+RUN echo "node-linker=hoisted" > .npmrc && pnpm install --frozen-lockfile
 
 # ── Builder ───────────────────────────────────────────────────────────────────
 FROM base AS builder
