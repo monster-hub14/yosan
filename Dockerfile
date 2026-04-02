@@ -33,6 +33,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     openssl \
     && rm -rf /var/lib/apt/lists/*
 
+RUN mkdir -p /node_modules
+COPY --from=deps /workspace/node_modules/.pnpm /node_modules/.pnpm
+
 # Copy runtime dependencies and app files
 COPY --from=deps /workspace/artifacts/budget-app/node_modules ./node_modules
 COPY --from=builder /workspace/artifacts/budget-app/.next ./.next
@@ -47,7 +50,7 @@ VOLUME ["/app/data", "/app/uploads"]
 # Non-root user for security
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs && \
-    chown -R nextjs:nodejs /app
+    chown -R nextjs:nodejs /app /node_modules
 USER nextjs
 
 EXPOSE 3000
