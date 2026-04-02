@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import {
   ArrowLeft, Loader2, CheckCircle2, XCircle, AlertTriangle, Receipt,
   Calendar, Store, DollarSign, Tag, Edit3, Save, Trash2, Package, Clock, HelpCircle,
+  Mail, Repeat,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,6 +46,9 @@ interface ParsedData {
   confidence: "high" | "medium" | "low";
   error?: string;
   isManual?: boolean;
+  source?: string;
+  subject?: string;
+  sender?: string;
 }
 
 interface PendingImport {
@@ -133,6 +137,9 @@ export function ReviewClient({ id }: ReviewClientProps) {
   const [itemCategories, setItemCategories] = useState<Record<number, string>>({});
   // Answers to clarification questions: itemIndex -> answered categoryId
   const [clarifications, setClarifications] = useState<Record<number, string>>({});
+
+  const [isRecurring, setIsRecurring] = useState(false);
+  const [frequency, setFrequency] = useState("MONTHLY");
 
   const [confirming, setConfirming] = useState(false);
   const [discarding, setDiscarding] = useState(false);
@@ -240,6 +247,8 @@ export function ReviewClient({ id }: ReviewClientProps) {
           items: buildItemsPayload(),
           clarifications: buildClarificationsPayload(),
           duplicateResolution: duplicateResolution ?? null,
+          isRecurring,
+          frequency,
         }),
       });
 
@@ -262,7 +271,9 @@ export function ReviewClient({ id }: ReviewClientProps) {
         return;
       }
 
-      if (data.action === "discarded") {
+      if (data.action === "recurring") {
+        toast.success("Added to recurring bills");
+      } else if (data.action === "discarded") {
         toast.info("Receipt discarded — existing expense kept");
       } else if (data.action === "merged") {
         toast.success("Receipt merged into existing expense");
@@ -344,6 +355,11 @@ export function ReviewClient({ id }: ReviewClientProps) {
     (item) => item.categorySuggestion?.isAmbiguous && item.categorySuggestion.clarificationQuestion
   );
 
+  const isGmail = parsed?.source === "gmail";
+  const displayName = isGmail
+    ? (parsed?.subject || null)
+    : (imp.receipt?.originalFilename || null);
+
   return (
     <div className="max-w-2xl mx-auto py-8 px-4 space-y-6">
       {/* Back */}
@@ -357,34 +373,48 @@ export function ReviewClient({ id }: ReviewClientProps) {
 
       {/* Title */}
       <div className="flex items-center gap-3">
-        <div className="p-2 rounded-lg bg-primary/10">
+        <div className="p-2 rounded-lg bg-primary/10 shrink-0">
           <Receipt className="w-5 h-5 text-primary" />
         </div>
-        <div>
+        <div className="flex-1 min-w-0">
           <h1 className="text-xl font-semibold">
             {isAlreadyDone ? "Receipt" : "Review Receipt"}
           </h1>
-          {imp.receipt?.originalFilename && (
-            <p className="text-sm text-muted-foreground">{imp.receipt.originalFilename}</p>
+          {displayName && (
+            <p className="text-sm text-muted-foreground truncate">{displayName}</p>
+          )}
+          {isGmail && parsed?.sender && (
+            <p className="text-xs text-muted-foreground truncate mt-0.5">
+              <Mail className="w-3 h-3 inline mr-1" />
+              {parsed.sender}
+            </p>
           )}
         </div>
-        <Badge
-          variant="secondary"
-          className={`ml-auto ${
-            imp.status === "CONFIRMED"
-              ? "text-green-500"
-              : imp.status === "DISCARDED"
-              ? "text-muted-foreground"
-              : imp.status === "NEEDS_REVIEW"
-              ? "text-amber-500"
-              : ""
-          }`}
-        >
-          {imp.status === "CONFIRMED" ? "Confirmed" :
-           imp.status === "DISCARDED" ? "Discarded" :
-           imp.status === "NEEDS_REVIEW" ? "Needs review" :
-           imp.status === "PROCESSING" ? "Processing..." : imp.status}
-        </Badge>
+        <div className="flex items-center gap-2 shrink-0">
+          {isGmail && (
+            <Badge variant="outline" className="text-xs gap-1 border-blue-500/40 text-blue-600 dark:text-blue-400">
+              <Mail className="w-3 h-3" />
+              Gmail
+            </Badge>
+          )}
+          <Badge
+            variant="secondary"
+            className={
+              imp.status === "CONFIRMED"
+                ? "text-green-500"
+                : imp.status === "DISCARDED"
+                ? "text-muted-foreground"
+                : imp.status === "NEEDS_REVIEW"
+                ? "text-amber-500"
+                : ""
+            }
+          >
+            {imp.status === "CONFIRMED" ? "Confirmed" :
+             imp.status === "DISCARDED" ? "Discarded" :
+             imp.status === "NEEDS_REVIEW" ? "Needs review" :
+             imp.status === "PROCESSING" ? "Processing..." : imp.status}
+          </Badge>
+        </div>
       </div>
 
       {/* Processing state */}
@@ -606,6 +636,50 @@ export function ReviewClient({ id }: ReviewClientProps) {
               disabled={isAlreadyDone}
             />
           </div>
+
+          {!isAlreadyDone && !isProcessing && (
+            <div className="pt-1 space-y-3">
+              <button
+                type="button"
+                onClick={() => setIsRecurring((v) => !v)}
+                className={`w-full flex items-center gap-3 p-3 rounded-lg border transition-colors text-left ${
+                  isRecurring
+                    ? "border-primary/40 bg-primary/5"
+                    : "border-border hover:bg-muted/30"
+                }`}
+              >
+                <div className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-none transition-colors ${
+                  isRecurring ? "bg-primary border-primary" : "border-muted-foreground/40"
+                }`}>
+                  {isRecurring && <CheckCircle2 className="w-3 h-3 text-primary-foreground" />}
+                </div>
+                <Repeat className={`w-4 h-4 shrink-0 ${isRecurring ? "text-primary" : "text-muted-foreground"}`} />
+                <div>
+                  <p className={`text-sm font-medium ${isRecurring ? "text-primary" : ""}`}>Save as recurring bill</p>
+                  <p className="text-xs text-muted-foreground">Track as a repeating subscription or bill instead of a one-time expense</p>
+                </div>
+              </button>
+
+              {isRecurring && (
+                <div className="space-y-1.5 pl-1">
+                  <Label className="text-sm">Billing frequency</Label>
+                  <Select value={frequency} onValueChange={setFrequency}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="DAILY">Daily</SelectItem>
+                      <SelectItem value="WEEKLY">Weekly</SelectItem>
+                      <SelectItem value="BIWEEKLY">Every 2 weeks</SelectItem>
+                      <SelectItem value="MONTHLY">Monthly</SelectItem>
+                      <SelectItem value="QUARTERLY">Quarterly</SelectItem>
+                      <SelectItem value="ANNUALLY">Annually</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -693,10 +767,12 @@ export function ReviewClient({ id }: ReviewClientProps) {
           >
             {confirming ? (
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : isRecurring ? (
+              <Repeat className="w-4 h-4 mr-2" />
             ) : (
               <Save className="w-4 h-4 mr-2" />
             )}
-            Confirm & add to budget
+            {isRecurring ? "Save as recurring bill" : "Confirm & add to budget"}
           </Button>
           <Button
             variant="outline"

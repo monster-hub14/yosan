@@ -44,6 +44,8 @@ export async function POST(request: NextRequest, { params }: Params) {
       itemDescription?: string | null;
     }>;
     duplicateResolution?: string | null;
+    isRecurring?: boolean;
+    frequency?: string;
   };
 
   const pending = await db.pendingImport.findUnique({
@@ -70,6 +72,34 @@ export async function POST(request: NextRequest, { params }: Params) {
   const categoryId: string | null = body.categoryId ?? null;
   const notes: string | null = body.notes ?? null;
   const duplicateResolution: string | null = body.duplicateResolution ?? null;
+  const isRecurring: boolean = body.isRecurring === true;
+  const frequency: string = body.frequency ?? "MONTHLY";
+
+  // Handle "save as recurring bill" — create a RecurringExpense instead of an Expense
+  if (isRecurring) {
+    const VALID_FREQUENCIES = ["DAILY", "WEEKLY", "BIWEEKLY", "MONTHLY", "QUARTERLY", "ANNUALLY"];
+    const safeFrequency = VALID_FREQUENCIES.includes(frequency) ? frequency : "MONTHLY";
+    await db.$transaction(async (tx) => {
+      await tx.recurringExpense.create({
+        data: {
+          budgetId: pending.budgetId,
+          categoryId: categoryId || undefined,
+          name: merchant || "Unknown",
+          amount: total ?? 0,
+          frequency: safeFrequency as "DAILY" | "WEEKLY" | "BIWEEKLY" | "MONTHLY" | "QUARTERLY" | "ANNUALLY",
+          notes: notes || undefined,
+        },
+      });
+      await tx.pendingImport.delete({ where: { id } });
+      if (pending.receiptId) {
+        await tx.receipt.update({
+          where: { id: pending.receiptId },
+          data: { status: "CONFIRMED" },
+        });
+      }
+    });
+    return NextResponse.json({ ok: true, action: "recurring" }, { status: 201 });
+  }
 
   // Handle "keep_existing" — user chose to discard this new import
   if (duplicateResolution === "keep_existing") {
