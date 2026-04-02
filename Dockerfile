@@ -33,7 +33,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     openssl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy runtime dependencies (includes prisma CLI — a production dependency)
+# Copy runtime dependencies and app files
 COPY --from=deps /workspace/artifacts/budget-app/node_modules ./node_modules
 COPY --from=builder /workspace/artifacts/budget-app/.next ./.next
 COPY --from=builder /workspace/artifacts/budget-app/public ./public
@@ -52,5 +52,4 @@ USER nextjs
 
 EXPOSE 3000
 
-# node_modules/.bin/* are shell wrapper scripts — execute via sh, not node
 CMD ["sh", "-c", "./node_modules/.bin/prisma migrate deploy && ./node_modules/.bin/next start -p ${PORT:-3000}"]
