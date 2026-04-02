@@ -357,8 +357,8 @@ export function ReviewClient({ id }: ReviewClientProps) {
 
   const isGmail = parsed?.source === "gmail";
   const displayName = isGmail
-    ? (parsed?.subject || null)
-    : (imp.receipt?.originalFilename || null);
+    ? (parsed?.subject || parsed?.merchant || null)
+    : (imp.receipt?.originalFilename || parsed?.merchant || null);
 
   return (
     <div className="max-w-2xl mx-auto py-8 px-4 space-y-6">
