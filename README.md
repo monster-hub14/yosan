@@ -3,7 +3,7 @@
 ## Project Overview
 A self-hosted, AI-powered, receipt-driven budget tracking application built with Next.js 15 App Router. Designed for deployment on TrueNAS SCALE and other self-hosting environments. No cloud dependencies, no SaaS lock-in.
 
-![App Screenshot](./screenshot.png)
+![App Screenshot](https://github.com/monster-hub14/yosan-assets/blob/main/Untitled%20design%20(7).png?raw=true)
 
 ## Architecture
 
