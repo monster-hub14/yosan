@@ -1,0 +1,2 @@
+ALTER TABLE "Expense"
+ADD COLUMN "addedById" TEXT;
