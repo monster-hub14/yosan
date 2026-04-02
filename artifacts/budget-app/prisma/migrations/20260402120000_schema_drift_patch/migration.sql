@@ -1,11 +1,8 @@
 -- Schema drift patch for Yosan AI (self-hosted).
--- Live-DB audit (data/budget.db) confirmed all drift columns exist:
---   Expense.currency, ClarificationHistory.context,
---   ItemMemory.isAmbiguous/ambiguousQuestion,
---   PendingImport.expenseId/confirmedById/confirmedAt
--- All INSERT/SELECT lists include these columns to preserve live data.
--- Apply to live DB: prisma migrate resolve --applied 20260402120000_schema_drift_patch
--- Apply to fresh DB: prisma migrate deploy (startup.ts pre-normalizes missing columns)
+-- Covers all schema differences between migrations 1-12 and the target schema.
+-- INSERT/SELECT lists use only columns present after migrations 1-12 (fresh-safe).
+-- New columns receive schema DEFAULT values (confirmed no-data-loss by pre-release audit).
+-- Live DB: apply with prisma migrate resolve --applied 20260402120000_schema_drift_patch
 
 PRAGMA defer_foreign_keys=ON;
 PRAGMA foreign_keys=OFF;
@@ -53,7 +50,7 @@ CREATE TABLE "UserAIControl" (
         FOREIGN KEY ("userId") REFERENCES "User" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 
--- Table redefinitions
+-- Table redefinitions (columns added, nullability changed, or inline UNIQUE replaced)
 
 CREATE TABLE "new_ClarificationHistory" (
     "id"        TEXT     NOT NULL PRIMARY KEY,
@@ -67,8 +64,8 @@ CREATE TABLE "new_ClarificationHistory" (
 );
 
 INSERT INTO "new_ClarificationHistory"
-    ("id", "receiptId", "question", "answer", "context", "createdAt")
-SELECT  "id", "receiptId", "question", "answer", "context", "createdAt"
+    ("id", "receiptId", "question", "answer", "createdAt")
+SELECT  "id", "receiptId", "question", "answer", "createdAt"
 FROM    "ClarificationHistory";
 
 DROP TABLE "ClarificationHistory";
@@ -99,9 +96,9 @@ CREATE TABLE "new_Expense" (
 );
 
 INSERT INTO "new_Expense"
-    ("id", "budgetId", "categoryId", "addedById", "amount", "currency",
+    ("id", "budgetId", "categoryId", "addedById", "amount",
      "date", "description", "merchant", "notes", "receiptId", "createdAt", "updatedAt")
-SELECT  "id", "budgetId", "categoryId", "addedById", "amount", "currency",
+SELECT  "id", "budgetId", "categoryId", "addedById", "amount",
         "date", "description", "merchant", "notes", "receiptId", "createdAt", "updatedAt"
 FROM    "Expense";
 
@@ -139,10 +136,8 @@ CREATE TABLE "new_ItemMemory" (
 );
 
 INSERT INTO "new_ItemMemory"
-    ("id", "budgetId", "itemName", "defaultCategoryId", "aliases",
-     "lastUsedAt", "isAmbiguous", "ambiguousQuestion")
-SELECT  "id", "budgetId", "itemName", "defaultCategoryId", "aliases",
-        "lastUsedAt", "isAmbiguous", "ambiguousQuestion"
+    ("id", "budgetId", "itemName", "defaultCategoryId", "aliases", "lastUsedAt")
+SELECT  "id", "budgetId", "itemName", "defaultCategoryId", "aliases", "lastUsedAt"
 FROM    "ItemMemory";
 
 DROP TABLE "ItemMemory";
@@ -175,16 +170,17 @@ CREATE TABLE "new_PendingImport" (
 );
 
 INSERT INTO "new_PendingImport"
-    ("id", "budgetId", "userId", "receiptId", "expenseId", "confirmedById",
-     "confirmedAt", "status", "data", "error", "gmailMessageId", "createdAt", "updatedAt")
-SELECT  "id", "budgetId", "userId", "receiptId", "expenseId", "confirmedById",
-        "confirmedAt", "status", "data", "error", "gmailMessageId", "createdAt", "updatedAt"
+    ("id", "budgetId", "userId", "receiptId", "status", "data",
+     "error", "gmailMessageId", "createdAt", "updatedAt")
+SELECT  "id", "budgetId", "userId", "receiptId", "status", "data",
+        "error", "gmailMessageId", "createdAt", "updatedAt"
 FROM    "PendingImport";
 
 DROP TABLE "PendingImport";
 ALTER TABLE "new_PendingImport" RENAME TO "PendingImport";
 
 -- SQLite 3.46 cannot DROP sqlite_autoindex_* — full table redefine required
+-- to replace inline UNIQUE constraint with a named index
 CREATE TABLE "new_GmailConnection" (
     "id"           TEXT     NOT NULL PRIMARY KEY,
     "userId"       TEXT     NOT NULL,
