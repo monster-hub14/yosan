@@ -53,6 +53,8 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+.replit
+.replitignore
 
 # Budget App dev data
 artifacts/budget-app/data/
