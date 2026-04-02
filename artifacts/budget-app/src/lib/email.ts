@@ -190,17 +190,16 @@ export async function testEmailConfig(params: TestEmailParams): Promise<{ ok: bo
 // ---- Email templates ----
 
 /**
- * Optional public URL for the app logo shown in outgoing emails.
- * Set EMAIL_LOGO_URL to a publicly reachable HTTPS URL (e.g. your CDN or object store).
- * When unset, emails are sent without a logo image.
+ * Public URL for the Yosan AI logo shown in outgoing emails.
+ * Returns the hosted logo URL; email clients load images from external URLs only.
  */
 function getLogoUrl(): string {
-  return process.env.EMAIL_LOGO_URL || "";
+  return "https://github.com/monster-hub14/yosan-assets/blob/main/Untitled%20design%20(7).png?raw=true";
 }
 
 /**
  * Branded base template for all Yosan AI emails.
- * Logo is loaded from EMAIL_LOGO_URL env var — no logo is shown when the var is unset.
+ * Logo is loaded from the hosted asset URL above.
  * Emails stay well under Gmail's 102 KB clip threshold.
  * @param title  Card header title
  * @param body   HTML body content
