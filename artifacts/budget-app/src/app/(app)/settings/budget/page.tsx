@@ -13,7 +13,6 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Wallet } from "lucide-react";
-import { EmailForwardingPanel } from "./email-forwarding-panel";
 import { AdditionalNotificationEmailsPanel } from "./additional-notification-emails-panel";
 
 export const metadata: Metadata = {
@@ -112,9 +111,6 @@ export default async function BudgetSettingsPage() {
           )}
         </CardContent>
       </Card>
-
-      {/* Receipt forwarding (budget-level) */}
-      <EmailForwardingPanel budgetId={budget.id} />
 
       {/* Additional notification email addresses */}
       <AdditionalNotificationEmailsPanel

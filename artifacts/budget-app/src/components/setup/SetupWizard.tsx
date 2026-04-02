@@ -623,7 +623,7 @@ export default function SetupWizard() {
               {step.id === "email" && (
                 <>
                   <p className="text-sm text-muted-foreground">
-                    Configure SMTP for email notifications and receipt forwarding.
+                    Configure SMTP for email notifications.
                     You can set this up later in Settings &rsaquo; Email.
                   </p>
                   <div className="grid grid-cols-2 gap-4">

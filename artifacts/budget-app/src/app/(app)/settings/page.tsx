@@ -77,7 +77,7 @@ const instanceItems: SettingItem[] = [
     href: "/settings/email",
     icon: Mail,
     label: "Email / SMTP",
-    description: "Set up email delivery and receipt forwarding addresses",
+    description: "Set up email delivery for notifications",
   },
 ];
 
