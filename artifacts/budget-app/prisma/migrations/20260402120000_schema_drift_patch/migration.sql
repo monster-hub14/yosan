@@ -1,27 +1,13 @@
--- =============================================================================
--- Schema drift patch: brings a fresh self-hosted deployment fully up to date
--- with the current schema.prisma after migrations 1–12.
---
--- This migration achieves zero schema drift on a fresh deploy. It covers all
--- tables and indexes missing from the 12-migration history using exclusively
--- table redefinitions (no ALTER TABLE), making it safe to apply on any DB
--- regardless of column state.
---
--- Missing columns that are introduced for the first time in this migration
--- (Expense.currency, ItemMemory.isAmbiguous/ambiguousQuestion,
--- PendingImport.expenseId/confirmedById/confirmedAt, ClarificationHistory.context)
--- receive their schema-defined defaults for pre-existing rows. A live-DB audit
--- performed prior to this migration confirmed all pre-existing rows contained
--- only these exact default values, so no operational data is lost.
---
--- Run via: prisma migrate deploy  (standard on first-boot of a new deployment)
--- =============================================================================
+-- Schema drift patch for Yosan AI.
+-- Brings a self-hosted instance up to date with the current prisma schema
+-- after the 12-migration history.  Apply with prisma migrate deploy.
 
--- ---------------------------------------------------------------------------
--- 1. New tables (idempotent via IF NOT EXISTS)
--- ---------------------------------------------------------------------------
+PRAGMA defer_foreign_keys=ON;
+PRAGMA foreign_keys=OFF;
 
-CREATE TABLE IF NOT EXISTS "CategoryTarget" (
+-- New tables ------------------------------------------------------------
+
+CREATE TABLE "CategoryTarget" (
     "id"         TEXT     NOT NULL PRIMARY KEY,
     "budgetId"   TEXT     NOT NULL,
     "categoryId" TEXT     NOT NULL,
@@ -35,7 +21,7 @@ CREATE TABLE IF NOT EXISTS "CategoryTarget" (
         FOREIGN KEY ("categoryId") REFERENCES "Category" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 
-CREATE TABLE IF NOT EXISTS "AIUsageLog" (
+CREATE TABLE "AIUsageLog" (
     "id"         TEXT     NOT NULL PRIMARY KEY,
     "userId"     TEXT     NOT NULL,
     "feature"    TEXT     NOT NULL,
@@ -45,7 +31,7 @@ CREATE TABLE IF NOT EXISTS "AIUsageLog" (
         FOREIGN KEY ("userId") REFERENCES "User" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 
-CREATE TABLE IF NOT EXISTS "UserAIControl" (
+CREATE TABLE "UserAIControl" (
     "id"                             TEXT     NOT NULL PRIMARY KEY,
     "userId"                         TEXT     NOT NULL,
     "aiEnabled"                      BOOLEAN  NOT NULL DEFAULT true,
@@ -62,26 +48,9 @@ CREATE TABLE IF NOT EXISTS "UserAIControl" (
         FOREIGN KEY ("userId") REFERENCES "User" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 
--- ---------------------------------------------------------------------------
--- 2. Table redefinitions (rename/copy/drop pattern)
---
--- FK enforcement is disabled during rebuilds to prevent cascade checks on
--- intermediate table names; restored unconditionally at the end.
---
--- INSERT/SELECT column lists reflect the state of each table AFTER running
--- migrations 1–12. Columns being introduced for the first time in this
--- migration are absent from SELECT and receive schema DEFAULTs in new rows.
--- A pre-release audit confirmed all pre-existing rows had only these defaults.
--- ---------------------------------------------------------------------------
+-- Table redefinitions ---------------------------------------------------
 
-PRAGMA defer_foreign_keys=ON;
-PRAGMA foreign_keys=OFF;
-
--- ── ClarificationHistory ───────────────────────────────────────────────────
--- Changes: receiptId NOT NULL → nullable; adds context TEXT column.
--- State after migrations 1–12: id, receiptId (NOT NULL), question, answer, createdAt
--- context is new; pre-existing rows receive NULL (audited: no rows had context set).
-
+-- ClarificationHistory: receiptId NOT NULL -> nullable; add context
 CREATE TABLE "new_ClarificationHistory" (
     "id"        TEXT     NOT NULL PRIMARY KEY,
     "receiptId" TEXT,
@@ -94,19 +63,14 @@ CREATE TABLE "new_ClarificationHistory" (
 );
 
 INSERT INTO "new_ClarificationHistory"
-    ("id", "receiptId", "question", "answer", "createdAt")
-SELECT  "id", "receiptId", "question", "answer", "createdAt"
+    ("id", "receiptId", "question", "answer", "context", "createdAt")
+SELECT  "id", "receiptId", "question", "answer", "context", "createdAt"
 FROM    "ClarificationHistory";
 
 DROP TABLE "ClarificationHistory";
 ALTER TABLE "new_ClarificationHistory" RENAME TO "ClarificationHistory";
 
--- ── Expense ────────────────────────────────────────────────────────────────
--- Changes: adds currency TEXT NOT NULL DEFAULT 'USD'; adds addedById FK constraint.
--- State after migrations 1–12: id, budgetId, categoryId, addedById, amount,
---   date, description, merchant, notes, receiptId, createdAt, updatedAt
--- currency is new; audited: all pre-existing rows had currency = 'USD'.
-
+-- Expense: add currency column and addedById FK constraint
 CREATE TABLE "new_Expense" (
     "id"          TEXT     NOT NULL PRIMARY KEY,
     "budgetId"    TEXT     NOT NULL,
@@ -132,20 +96,16 @@ CREATE TABLE "new_Expense" (
 );
 
 INSERT INTO "new_Expense"
-    ("id", "budgetId", "categoryId", "addedById", "amount",
+    ("id", "budgetId", "categoryId", "addedById", "amount", "currency",
      "date", "description", "merchant", "notes", "receiptId", "createdAt", "updatedAt")
-SELECT  "id", "budgetId", "categoryId", "addedById", "amount",
+SELECT  "id", "budgetId", "categoryId", "addedById", "amount", "currency",
         "date", "description", "merchant", "notes", "receiptId", "createdAt", "updatedAt"
 FROM    "Expense";
 
 DROP TABLE "Expense";
 ALTER TABLE "new_Expense" RENAME TO "Expense";
 
--- ── GmailOAuthConfig ───────────────────────────────────────────────────────
--- Change: remove stray DEFAULT CURRENT_TIMESTAMP from updatedAt column.
--- Prisma manages @updatedAt values itself; the DB-level default causes drift.
--- No column structure change; full data copy.
-
+-- GmailOAuthConfig: remove DEFAULT CURRENT_TIMESTAMP from updatedAt
 CREATE TABLE "new_GmailOAuthConfig" (
     "id"           TEXT     NOT NULL PRIMARY KEY DEFAULT 'singleton',
     "clientId"     TEXT,
@@ -161,13 +121,7 @@ FROM    "GmailOAuthConfig";
 DROP TABLE "GmailOAuthConfig";
 ALTER TABLE "new_GmailOAuthConfig" RENAME TO "GmailOAuthConfig";
 
--- ── ItemMemory ─────────────────────────────────────────────────────────────
--- Changes: adds isAmbiguous BOOLEAN NOT NULL DEFAULT false; adds ambiguousQuestion TEXT.
--- State after migrations 1–12: id, budgetId, itemName, defaultCategoryId, aliases, lastUsedAt
--- Both columns are new; audited: all pre-existing rows had only the default values.
--- Existing named index ItemMemory_budgetId_itemName_key is dropped with the
--- table and recreated in section 3 below.
-
+-- ItemMemory: add isAmbiguous and ambiguousQuestion columns
 CREATE TABLE "new_ItemMemory" (
     "id"                TEXT     NOT NULL PRIMARY KEY,
     "budgetId"          TEXT     NOT NULL,
@@ -184,22 +138,16 @@ CREATE TABLE "new_ItemMemory" (
 );
 
 INSERT INTO "new_ItemMemory"
-    ("id", "budgetId", "itemName", "defaultCategoryId", "aliases", "lastUsedAt")
-SELECT  "id", "budgetId", "itemName", "defaultCategoryId", "aliases", "lastUsedAt"
+    ("id", "budgetId", "itemName", "defaultCategoryId", "aliases",
+     "lastUsedAt", "isAmbiguous", "ambiguousQuestion")
+SELECT  "id", "budgetId", "itemName", "defaultCategoryId", "aliases",
+        "lastUsedAt", "isAmbiguous", "ambiguousQuestion"
 FROM    "ItemMemory";
 
 DROP TABLE "ItemMemory";
 ALTER TABLE "new_ItemMemory" RENAME TO "ItemMemory";
 
--- ── PendingImport ──────────────────────────────────────────────────────────
--- Changes: adds expenseId TEXT (UNIQUE), confirmedById TEXT, confirmedAt DATETIME;
---   adds FK constraints on all reference columns.
--- State after migrations 1–12: id, budgetId, userId, receiptId, status, data,
---   error, gmailMessageId, createdAt, updatedAt
--- Three columns are new; audited: all had only NULL defaults.
--- Existing named index PendingImport_gmailMessageId_idx is dropped with the
--- table and recreated in section 3 below.
-
+-- PendingImport: add expenseId, confirmedById, confirmedAt and FK constraints
 CREATE TABLE "new_PendingImport" (
     "id"             TEXT     NOT NULL PRIMARY KEY,
     "budgetId"       TEXT     NOT NULL,
@@ -227,23 +175,18 @@ CREATE TABLE "new_PendingImport" (
 );
 
 INSERT INTO "new_PendingImport"
-    ("id", "budgetId", "userId", "receiptId", "status", "data",
-     "error", "gmailMessageId", "createdAt", "updatedAt")
-SELECT  "id", "budgetId", "userId", "receiptId", "status", "data",
-        "error", "gmailMessageId", "createdAt", "updatedAt"
+    ("id", "budgetId", "userId", "receiptId", "expenseId", "confirmedById",
+     "confirmedAt", "status", "data", "error", "gmailMessageId", "createdAt", "updatedAt")
+SELECT  "id", "budgetId", "userId", "receiptId", "expenseId", "confirmedById",
+        "confirmedAt", "status", "data", "error", "gmailMessageId", "createdAt", "updatedAt"
 FROM    "PendingImport";
 
 DROP TABLE "PendingImport";
 ALTER TABLE "new_PendingImport" RENAME TO "PendingImport";
 
--- ── GmailConnection ────────────────────────────────────────────────────────
--- Change: replace inline UNIQUE on userId with a separate named index.
--- SQLite 3.46.0 raises "index associated with UNIQUE or PRIMARY KEY constraint
--- cannot be dropped" — the auto-index sqlite_autoindex_GmailConnection_2 cannot
--- be removed with DROP INDEX. A full table redefine (removing the inline UNIQUE
--- keyword) is required; a named CREATE UNIQUE INDEX replaces it in section 3.
--- Full data copy; no column-structure change.
-
+-- GmailConnection: convert inline UNIQUE on userId to named index.
+-- SQLite 3.46 cannot DROP the auto-index (sqlite_autoindex_GmailConnection_2)
+-- without a full table redefine.
 CREATE TABLE "new_GmailConnection" (
     "id"           TEXT     NOT NULL PRIMARY KEY,
     "userId"       TEXT     NOT NULL,
@@ -267,9 +210,7 @@ FROM    "GmailConnection";
 DROP TABLE "GmailConnection";
 ALTER TABLE "new_GmailConnection" RENAME TO "GmailConnection";
 
--- ── GmailLabelConfig ───────────────────────────────────────────────────────
--- Change: same as GmailConnection — inline UNIQUE userId → named index.
-
+-- GmailLabelConfig: same as GmailConnection
 CREATE TABLE "new_GmailLabelConfig" (
     "id"                  TEXT     NOT NULL PRIMARY KEY,
     "userId"              TEXT     NOT NULL,
@@ -297,35 +238,28 @@ ALTER TABLE "new_GmailLabelConfig" RENAME TO "GmailLabelConfig";
 PRAGMA foreign_keys=ON;
 PRAGMA defer_foreign_keys=OFF;
 
--- ---------------------------------------------------------------------------
--- 3. Indexes
---    IF NOT EXISTS for idempotency. Recreates indexes dropped with tables.
--- ---------------------------------------------------------------------------
+-- Indexes ---------------------------------------------------------------
 
--- ItemMemory (dropped with table above)
-CREATE UNIQUE INDEX IF NOT EXISTS "ItemMemory_budgetId_itemName_key"
-    ON "ItemMemory"("budgetId", "itemName");
-
--- PendingImport (both dropped with table above)
-CREATE UNIQUE INDEX IF NOT EXISTS "PendingImport_expenseId_key"
-    ON "PendingImport"("expenseId");
-CREATE INDEX IF NOT EXISTS "PendingImport_gmailMessageId_idx"
-    ON "PendingImport"("gmailMessageId");
-
--- GmailConnection: named index replaces sqlite_autoindex_GmailConnection_2
-CREATE UNIQUE INDEX IF NOT EXISTS "GmailConnection_userId_key"
-    ON "GmailConnection"("userId");
-
--- GmailLabelConfig: named index replaces sqlite_autoindex_GmailLabelConfig_2
-CREATE UNIQUE INDEX IF NOT EXISTS "GmailLabelConfig_userId_key"
-    ON "GmailLabelConfig"("userId");
-
--- New tables
-CREATE UNIQUE INDEX IF NOT EXISTS "CategoryTarget_budgetId_categoryId_key"
+CREATE UNIQUE INDEX "CategoryTarget_budgetId_categoryId_key"
     ON "CategoryTarget"("budgetId", "categoryId");
 
-CREATE INDEX IF NOT EXISTS "AIUsageLog_userId_feature_windowDate_idx"
+CREATE INDEX "AIUsageLog_userId_feature_windowDate_idx"
     ON "AIUsageLog"("userId", "feature", "windowDate");
 
-CREATE UNIQUE INDEX IF NOT EXISTS "UserAIControl_userId_key"
+CREATE UNIQUE INDEX "UserAIControl_userId_key"
     ON "UserAIControl"("userId");
+
+CREATE UNIQUE INDEX "ItemMemory_budgetId_itemName_key"
+    ON "ItemMemory"("budgetId", "itemName");
+
+CREATE UNIQUE INDEX "PendingImport_expenseId_key"
+    ON "PendingImport"("expenseId");
+
+CREATE INDEX "PendingImport_gmailMessageId_idx"
+    ON "PendingImport"("gmailMessageId");
+
+CREATE UNIQUE INDEX "GmailConnection_userId_key"
+    ON "GmailConnection"("userId");
+
+CREATE UNIQUE INDEX "GmailLabelConfig_userId_key"
+    ON "GmailLabelConfig"("userId");
