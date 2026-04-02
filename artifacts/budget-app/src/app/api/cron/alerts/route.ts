@@ -39,6 +39,35 @@ function getNotifyEmail(
   return notifConfig?.notificationEmail?.trim() || userEmail;
 }
 
+/**
+ * Select the primary income source by rule:
+ *  1. Prefer the first MONTHLY source (most common pay-period anchor).
+ *  2. Fall back to the highest-frequency source
+ *     (WEEKLY > BIWEEKLY > SEMIMONTHLY > MONTHLY > CUSTOM).
+ *  3. If all else fails, return null (no sources to anchor on).
+ */
+function selectPrimaryIncomeSource<
+  T extends { frequency: string; isActive: boolean }
+>(sources: T[]): T | null {
+  const active = sources.filter((s) => s.isActive);
+  if (active.length === 0) return null;
+  // Prefer MONTHLY as the canonical pay-period anchor
+  const monthly = active.find((s) => s.frequency === "MONTHLY");
+  if (monthly) return monthly;
+  // Fall back by highest frequency (shortest period first)
+  const frequencyRank: Record<string, number> = {
+    WEEKLY: 0,
+    BIWEEKLY: 1,
+    SEMIMONTHLY: 2,
+    MONTHLY: 3,
+    CUSTOM: 4,
+  };
+  return active.slice().sort(
+    (a, b) =>
+      (frequencyRank[a.frequency] ?? 99) - (frequencyRank[b.frequency] ?? 99)
+  )[0] ?? null;
+}
+
 /** Write an in-app notification, respecting the user's IN_APP preference for the event. */
 async function writeInApp(params: {
   userId: string;
@@ -586,13 +615,15 @@ export async function POST(request: NextRequest) {
     }
 
     // ── Income threshold (>80% of pay-period income spent) ───────────────────
-    // Uses the PRIMARY income source only to derive one pay window per budget,
-    // with total income = sum of all active sources for that period.
+    // Primary source is selected by rule (MONTHLY-first, then highest-frequency),
+    // to derive one pay window per budget. Total income = sum of all active sources.
     if (alertType === "all" || alertType === "income_threshold") {
       try {
-        const primarySource = budget.incomeSources[0] ?? null;
+        const primarySource = selectPrimaryIncomeSource(budget.incomeSources);
         if (primarySource) {
-          const totalIncome = budget.incomeSources.reduce((s, src) => s + src.amount, 0);
+          const totalIncome = budget.incomeSources
+            .filter((s) => s.isActive)
+            .reduce((s, src) => s + src.amount, 0);
           const period = computePayPeriod(
             primarySource.frequency,
             primarySource.nextPayDate,

@@ -111,6 +111,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     budgetId,
     actorId: session.userId,
     activityType: "expense",
+    action: "edited",
     amount: expense.amount,
     description: expense.merchant || expense.description || "",
   }).catch((err) => console.error("[expenses/patch] shared activity notify failed:", err));

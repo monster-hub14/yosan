@@ -9,6 +9,7 @@ export async function notifySharedBudgetActivity(params: {
   budgetId: string;
   actorId: string;
   activityType: "expense" | "income";
+  action?: "added" | "edited";
   amount: number;
   description: string;
 }) {
@@ -45,6 +46,7 @@ export async function notifySharedBudgetActivity(params: {
   const emailEnabled = emailConfig?.isEnabled ?? false;
 
   const fmt = new Intl.NumberFormat("en-US", { style: "currency", currency: budget.currency });
+  const action = params.action ?? "added";
   const typeLabel = params.activityType === "expense" ? "expense" : "income entry";
   const icon = params.activityType === "expense" ? "💸" : "💰";
 
@@ -59,8 +61,8 @@ export async function notifySharedBudgetActivity(params: {
           userId: user.id,
           budgetId: params.budgetId,
           event: "shared_budget_activity",
-          title: `${icon} ${actorName} added a ${typeLabel}`,
-          body: `${actorName} added ${fmt.format(params.amount)}${params.description ? ` — ${params.description}` : ""} in ${budget.name}.`,
+          title: `${icon} ${actorName} ${action} a ${typeLabel}`,
+          body: `${actorName} ${action} ${fmt.format(params.amount)}${params.description ? ` — ${params.description}` : ""} in ${budget.name}.`,
         },
       });
     }

@@ -124,27 +124,42 @@ export default function AppHeader({ user, activeBudgetId, onMobileMenuToggle }: 
   }
 
   async function markRead(id: string) {
+    // Optimistic local update
     setNotifications((prev) =>
       prev.map((n) => (n.id === id ? { ...n, isRead: true } : n))
     );
-    setUnreadCount((c) => Math.max(0, c - 1));
-    await fetch("/api/notifications/inbox/mark-read", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
-    }).catch(() => {});
+    try {
+      const res = await fetch("/api/notifications/inbox/mark-read", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (typeof data.unreadCount === "number") {
+          setUnreadCount(data.unreadCount);
+        }
+      }
+    } catch {
+      // keep optimistic update on error
+    }
   }
 
   async function markAllRead() {
     setMarkingAll(true);
     try {
-      await fetch("/api/notifications/inbox/mark-read", {
+      const res = await fetch("/api/notifications/inbox/mark-read", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ all: true }),
       });
       setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
-      setUnreadCount(0);
+      if (res.ok) {
+        const data = await res.json();
+        setUnreadCount(typeof data.unreadCount === "number" ? data.unreadCount : 0);
+      } else {
+        setUnreadCount(0);
+      }
     } catch {
       toast.error("Failed to mark all as read");
     } finally {
