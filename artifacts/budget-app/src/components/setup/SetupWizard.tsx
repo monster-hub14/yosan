@@ -110,6 +110,26 @@ export default function SetupWizard() {
 
   const step = steps[currentStep];
 
+  async function setupPost(url: string, body?: unknown): Promise<boolean> {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: body ? { "Content-Type": "application/json" } : undefined,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    if (!res.ok) {
+      if (res.status === 401) {
+        toast.error(
+          "Session cookie conflict — please clear your browser cookies and reload."
+        );
+      } else {
+        const data = await res.json().catch(() => ({}));
+        toast.error((data as { error?: string }).error ?? "Something went wrong.");
+      }
+      return false;
+    }
+    return true;
+  }
+
   async function handleNext() {
     setLoading(true);
     try {
@@ -126,28 +146,14 @@ export default function SetupWizard() {
           toast.error("Password must be at least 8 characters");
           return;
         }
-        const res = await fetch("/api/setup/account", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            email: accountData.email,
-            name: accountData.name,
-            password: accountData.password,
-            budgetName: accountData.budgetName || undefined,
-            currency: accountData.currency,
-          }),
+        const ok = await setupPost("/api/setup/account", {
+          email: accountData.email,
+          name: accountData.name,
+          password: accountData.password,
+          budgetName: accountData.budgetName || undefined,
+          currency: accountData.currency,
         });
-        const data = await res.json();
-        if (!res.ok) {
-          if (res.status === 401) {
-            toast.error(
-              "Session cookie conflict — please clear your browser cookies and reload the page."
-            );
-          } else {
-            toast.error(data.error);
-          }
-          return;
-        }
+        if (!ok) return;
       }
 
       if (step.id === "income") {
@@ -155,76 +161,47 @@ export default function SetupWizard() {
           toast.error("Income source name and amount are required");
           return;
         }
-        const res = await fetch("/api/setup/income", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(incomeData),
-        });
-        const data = await res.json();
-        if (!res.ok) { toast.error(data.error); return; }
+        const ok = await setupPost("/api/setup/income", incomeData);
+        if (!ok) return;
       }
 
       if (step.id === "savings" && savingsData.name && savingsData.targetAmount) {
-        const res = await fetch("/api/setup/savings", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: savingsData.name,
-            targetAmount: parseFloat(savingsData.targetAmount),
-          }),
+        const ok = await setupPost("/api/setup/savings", {
+          name: savingsData.name,
+          targetAmount: parseFloat(savingsData.targetAmount),
         });
-        const data = await res.json();
-        if (!res.ok) { toast.error(data.error); return; }
+        if (!ok) return;
       }
 
       if (step.id === "recurring" && recurringData.name && recurringData.amount) {
-        const res = await fetch("/api/setup/recurring", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: recurringData.name,
-            amount: parseFloat(recurringData.amount),
-            frequency: recurringData.frequency,
-          }),
+        const ok = await setupPost("/api/setup/recurring", {
+          name: recurringData.name,
+          amount: parseFloat(recurringData.amount),
+          frequency: recurringData.frequency,
         });
-        const data = await res.json();
-        if (!res.ok) { toast.error(data.error); return; }
+        if (!ok) return;
       }
 
       if (step.id === "ai" && aiData.apiKey) {
-        const res = await fetch("/api/setup/ai", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(aiData),
-        });
-        const data = await res.json();
-        if (!res.ok) { toast.error(data.error); return; }
+        const ok = await setupPost("/api/setup/ai", aiData);
+        if (!ok) return;
       }
 
       if (step.id === "email" && emailData.smtpHost) {
-        const res = await fetch("/api/setup/email", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            smtpHost: emailData.smtpHost,
-            smtpPort: parseInt(emailData.smtpPort),
-            smtpUser: emailData.smtpUser,
-            smtpPass: emailData.smtpPass,
-            fromAddress: emailData.fromAddress,
-            fromName: emailData.fromName,
-          }),
+        const ok = await setupPost("/api/setup/email", {
+          smtpHost: emailData.smtpHost,
+          smtpPort: parseInt(emailData.smtpPort),
+          smtpUser: emailData.smtpUser,
+          smtpPass: emailData.smtpPass,
+          fromAddress: emailData.fromAddress,
+          fromName: emailData.fromName,
         });
-        const data = await res.json();
-        if (!res.ok) { toast.error(data.error); return; }
+        if (!ok) return;
       }
 
       if (step.id === "done") {
-        const res = await fetch("/api/setup/complete", { method: "POST" });
-        if (!res.ok) {
-          const data = await res.json();
-          toast.error(data.error);
-          return;
-        }
+        const ok = await setupPost("/api/setup/complete");
+        if (!ok) return;
         router.push("/login");
         return;
       }
