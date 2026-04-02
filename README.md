@@ -1,4 +1,4 @@
-# Budget App — Self-Hosted AI-Powered Budget Tracker
+# Yosan AI — Self-Hosted AI-Powered Budget Tracker
 
 ## Project Overview
 A self-hosted, AI-powered, receipt-driven budget tracking application built with Next.js 15 App Router. Designed for deployment on TrueNAS SCALE and other self-hosting environments. No cloud dependencies, no SaaS lock-in.
