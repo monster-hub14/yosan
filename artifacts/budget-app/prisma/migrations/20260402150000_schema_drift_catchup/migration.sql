@@ -1,24 +1,33 @@
 -- =============================================================================
--- Schema drift catch-up migration
--- Applies to: a fresh SQLite DB after running migrations 1–12
--- Live DB: already has all changes — mark applied instead of running SQL:
+-- Schema drift catch-up part 2 of 2: table redefinitions + new tables.
+--
+-- Depends on: 20260402120000_schema_drift_add_columns (must run first on fresh
+-- DBs, or be marked --applied on live DBs that have already been patched).
+-- The column additions in part 1 ensure every column referenced in the
+-- INSERT/SELECT lists below already exists in the source tables, so existing
+-- data is preserved on any DB (fresh or live).
+--
+-- LIVE DB: mark both migrations applied without running SQL:
+--   prisma migrate resolve --applied 20260402120000_schema_drift_add_columns
 --   prisma migrate resolve --applied 20260402150000_schema_drift_catchup
+-- (The live DB already has the correct structure from manual patches.)
 --
--- Covers all items missing from the 12-migration history:
+-- Covers:
 --   • 3 new tables: CategoryTarget, AIUsageLog, UserAIControl
---   • 7 table redefinitions:
---       ClarificationHistory — receiptId nullable + context column
---       Expense              — currency column + addedById FK constraint
---       GmailOAuthConfig     — remove stray DEFAULT CURRENT_TIMESTAMP from updatedAt
---       ItemMemory           — isAmbiguous + ambiguousQuestion columns
---       PendingImport        — expenseId/confirmedById/confirmedAt + FK constraints
---       GmailConnection      — replace inline UNIQUE userId with named index
---       GmailLabelConfig     — same
+--   • 7 table redefinitions (rename/copy/drop pattern):
+--       ClarificationHistory — receiptId NOT NULL → nullable
+--       Expense              — addedById FK constraint
+--       GmailOAuthConfig     — remove stray DEFAULT CURRENT_TIMESTAMP
+--       ItemMemory           — FK integrity cleanup
+--       PendingImport        — FK constraints on new + existing columns
+--       GmailConnection      — inline UNIQUE userId → named index
+--       GmailLabelConfig     — inline UNIQUE userId → named index
+--   • All required indexes
 --
--- Note on GmailConnection/GmailLabelConfig: SQLite 3.37+ does NOT allow
--- DROP INDEX on auto-indexes (those created by inline UNIQUE/PRIMARY KEY
--- constraints). "index associated with UNIQUE or PRIMARY KEY constraint
--- cannot be dropped". A full table redefine is required to rename them.
+-- Note on Gmail index renames: SQLite 3.37+ raises "index associated with
+-- UNIQUE or PRIMARY KEY constraint cannot be dropped" for auto-indexes.
+-- DROP INDEX cannot be used. Full table redefines (removing inline UNIQUE and
+-- adding a separate named CREATE UNIQUE INDEX) are required instead.
 -- =============================================================================
 
 -- ---------------------------------------------------------------------------
@@ -67,22 +76,21 @@ CREATE TABLE IF NOT EXISTS "UserAIControl" (
 );
 
 -- ---------------------------------------------------------------------------
--- 2. Table redefinitions (SQLite rename/copy/drop pattern)
+-- 2. Table redefinitions
 --
--- FK enforcement is disabled during rebuilds to avoid cascade checks on
--- intermediate table names, then restored afterwards.
---
--- INSERT SELECT column lists reflect the state of each table AFTER running
--- migrations 1–12 (fresh install). Columns being added for the first time
--- are NOT in the SELECT — they receive their DEFAULT or NULL instead.
+-- FK enforcement is disabled during rebuilds, then restored afterwards.
+-- All INSERT/SELECT lists include EVERY column present in the source table
+-- at the time this migration runs (after part 1 has added missing columns).
+-- This preserves all data on both fresh installs and live-DB upgrades.
 -- ---------------------------------------------------------------------------
 
 PRAGMA defer_foreign_keys=ON;
 PRAGMA foreign_keys=OFF;
 
 -- ── ClarificationHistory ───────────────────────────────────────────────────
--- Change: receiptId NOT NULL → nullable; add context TEXT column.
--- State after migrations 1–12: id, receiptId (NOT NULL), question, answer, createdAt
+-- Change: receiptId NOT NULL → nullable.
+-- Part 1 already added: context (TEXT nullable).
+-- INSERT copies all columns including context (added by part 1 or pre-existing).
 
 CREATE TABLE "new_ClarificationHistory" (
     "id"        TEXT     NOT NULL PRIMARY KEY,
@@ -96,18 +104,17 @@ CREATE TABLE "new_ClarificationHistory" (
 );
 
 INSERT INTO "new_ClarificationHistory"
-    ("id", "receiptId", "question", "answer", "createdAt")
-SELECT  "id", "receiptId", "question", "answer", "createdAt"
+    ("id", "receiptId", "question", "answer", "context", "createdAt")
+SELECT  "id", "receiptId", "question", "answer", "context", "createdAt"
 FROM    "ClarificationHistory";
 
 DROP TABLE "ClarificationHistory";
 ALTER TABLE "new_ClarificationHistory" RENAME TO "ClarificationHistory";
 
 -- ── Expense ────────────────────────────────────────────────────────────────
--- Change: add currency TEXT NOT NULL DEFAULT 'USD'; add FK on addedById.
--- State after migrations 1–12: id, budgetId, categoryId, addedById (TEXT, no FK),
---   amount, date, description, merchant, notes, receiptId, createdAt, updatedAt
--- currency is NOT in the SELECT (doesn't exist yet); rows get DEFAULT 'USD'.
+-- Change: add addedById FK constraint.
+-- Part 1 already added: currency (TEXT NOT NULL DEFAULT 'USD').
+-- INSERT copies all columns including currency (preserves existing values).
 
 CREATE TABLE "new_Expense" (
     "id"          TEXT     NOT NULL PRIMARY KEY,
@@ -134,20 +141,19 @@ CREATE TABLE "new_Expense" (
 );
 
 INSERT INTO "new_Expense"
-    ("id", "budgetId", "categoryId", "addedById", "amount", "date",
-     "description", "merchant", "notes", "receiptId", "createdAt", "updatedAt")
-SELECT
-     "id", "budgetId", "categoryId", "addedById", "amount", "date",
-     "description", "merchant", "notes", "receiptId", "createdAt", "updatedAt"
-FROM "Expense";
+    ("id", "budgetId", "categoryId", "addedById", "amount", "currency",
+     "date", "description", "merchant", "notes", "receiptId", "createdAt", "updatedAt")
+SELECT  "id", "budgetId", "categoryId", "addedById", "amount", "currency",
+        "date", "description", "merchant", "notes", "receiptId", "createdAt", "updatedAt"
+FROM    "Expense";
 
 DROP TABLE "Expense";
 ALTER TABLE "new_Expense" RENAME TO "Expense";
 
 -- ── GmailOAuthConfig ───────────────────────────────────────────────────────
 -- Change: remove stray DEFAULT CURRENT_TIMESTAMP from updatedAt.
--- Prisma manages @updatedAt itself; the DB default is never used at runtime
--- but causes migration history drift.
+-- (Prisma's @updatedAt is always set explicitly in queries; the DB default
+-- is never used but causes migration history drift.)
 
 CREATE TABLE "new_GmailOAuthConfig" (
     "id"           TEXT NOT NULL PRIMARY KEY DEFAULT 'singleton',
@@ -165,11 +171,9 @@ DROP TABLE "GmailOAuthConfig";
 ALTER TABLE "new_GmailOAuthConfig" RENAME TO "GmailOAuthConfig";
 
 -- ── ItemMemory ─────────────────────────────────────────────────────────────
--- Change: add isAmbiguous BOOLEAN NOT NULL DEFAULT false; add ambiguousQuestion TEXT.
--- State after migrations 1–12: id, budgetId, itemName, defaultCategoryId,
---   aliases, lastUsedAt
--- Existing named index ItemMemory_budgetId_itemName_key is dropped with the
--- table and must be recreated.
+-- Change: FK integrity re-declared (part 1 added isAmbiguous + ambiguousQuestion).
+-- INSERT copies all columns including the newly-added ones.
+-- Existing named index is dropped with the table and recreated below.
 
 CREATE TABLE "new_ItemMemory" (
     "id"                TEXT     NOT NULL PRIMARY KEY,
@@ -187,35 +191,36 @@ CREATE TABLE "new_ItemMemory" (
 );
 
 INSERT INTO "new_ItemMemory"
-    ("id", "budgetId", "itemName", "defaultCategoryId", "aliases", "lastUsedAt")
-SELECT  "id", "budgetId", "itemName", "defaultCategoryId", "aliases", "lastUsedAt"
+    ("id", "budgetId", "itemName", "defaultCategoryId", "aliases",
+     "lastUsedAt", "isAmbiguous", "ambiguousQuestion")
+SELECT  "id", "budgetId", "itemName", "defaultCategoryId", "aliases",
+        "lastUsedAt", "isAmbiguous", "ambiguousQuestion"
 FROM    "ItemMemory";
 
 DROP TABLE "ItemMemory";
 ALTER TABLE "new_ItemMemory" RENAME TO "ItemMemory";
 
 -- ── PendingImport ──────────────────────────────────────────────────────────
--- Change: add expenseId TEXT (UNIQUE), confirmedById TEXT, confirmedAt DATETIME;
---   add FK constraints on all reference columns.
--- State after migrations 1–12: id, budgetId, userId, receiptId, status, data,
---   error, gmailMessageId, createdAt, updatedAt
--- Existing named index PendingImport_gmailMessageId_idx is dropped with the
--- table and must be recreated.
+-- Change: add FK constraints on all reference columns.
+-- Part 1 already added: expenseId, confirmedById, confirmedAt.
+-- INSERT copies all columns including the newly-added ones.
+-- PendingImport_gmailMessageId_idx (from migration 6) is dropped with the
+-- table and recreated below.
 
 CREATE TABLE "new_PendingImport" (
-    "id"            TEXT     NOT NULL PRIMARY KEY,
-    "budgetId"      TEXT     NOT NULL,
-    "userId"        TEXT     NOT NULL,
-    "receiptId"     TEXT,
-    "expenseId"     TEXT,
-    "confirmedById" TEXT,
-    "confirmedAt"   DATETIME,
-    "status"        TEXT     NOT NULL DEFAULT 'PENDING',
-    "data"          TEXT     NOT NULL DEFAULT '{}',
-    "error"         TEXT,
+    "id"             TEXT     NOT NULL PRIMARY KEY,
+    "budgetId"       TEXT     NOT NULL,
+    "userId"         TEXT     NOT NULL,
+    "receiptId"      TEXT,
+    "expenseId"      TEXT,
+    "confirmedById"  TEXT,
+    "confirmedAt"    DATETIME,
+    "status"         TEXT     NOT NULL DEFAULT 'PENDING',
+    "data"           TEXT     NOT NULL DEFAULT '{}',
+    "error"          TEXT,
     "gmailMessageId" TEXT,
-    "createdAt"     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt"     DATETIME NOT NULL,
+    "createdAt"      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt"      DATETIME NOT NULL,
     CONSTRAINT "PendingImport_budgetId_fkey"
         FOREIGN KEY ("budgetId")      REFERENCES "Budget"  ("id") ON DELETE CASCADE  ON UPDATE CASCADE,
     CONSTRAINT "PendingImport_userId_fkey"
@@ -229,10 +234,10 @@ CREATE TABLE "new_PendingImport" (
 );
 
 INSERT INTO "new_PendingImport"
-    ("id", "budgetId", "userId", "receiptId", "status", "data",
-     "error", "gmailMessageId", "createdAt", "updatedAt")
-SELECT  "id", "budgetId", "userId", "receiptId", "status", "data",
-        "error", "gmailMessageId", "createdAt", "updatedAt"
+    ("id", "budgetId", "userId", "receiptId", "expenseId", "confirmedById",
+     "confirmedAt", "status", "data", "error", "gmailMessageId", "createdAt", "updatedAt")
+SELECT  "id", "budgetId", "userId", "receiptId", "expenseId", "confirmedById",
+        "confirmedAt", "status", "data", "error", "gmailMessageId", "createdAt", "updatedAt"
 FROM    "PendingImport";
 
 DROP TABLE "PendingImport";
@@ -240,10 +245,10 @@ ALTER TABLE "new_PendingImport" RENAME TO "PendingImport";
 
 -- ── GmailConnection ────────────────────────────────────────────────────────
 -- Change: replace inline UNIQUE on userId with a separate named index.
--- SQLite 3.37+ cannot DROP an index created by an inline UNIQUE constraint
--- ("index associated with UNIQUE or PRIMARY KEY constraint cannot be dropped").
--- A full table redefine is required: the new table omits the inline UNIQUE;
--- a named CREATE UNIQUE INDEX is added after the rename.
+-- SQLite 3.46.0 raises "index associated with UNIQUE or PRIMARY KEY constraint
+-- cannot be dropped" — DROP INDEX on auto-indexes always fails. A full table
+-- redefine (removing the inline UNIQUE keyword) is the only safe path.
+-- All data columns are copied; no data loss.
 
 CREATE TABLE "new_GmailConnection" (
     "id"           TEXT     NOT NULL PRIMARY KEY,
@@ -259,28 +264,28 @@ CREATE TABLE "new_GmailConnection" (
 );
 
 INSERT INTO "new_GmailConnection"
-    ("id", "userId", "accessToken", "refreshToken", "tokenEmail",
-     "expiresAt", "connectedAt", "isRevoked")
-SELECT  "id", "userId", "accessToken", "refreshToken", "tokenEmail",
-        "expiresAt", "connectedAt", "isRevoked"
+    ("id", "userId", "accessToken", "refreshToken",
+     "tokenEmail", "expiresAt", "connectedAt", "isRevoked")
+SELECT  "id", "userId", "accessToken", "refreshToken",
+        "tokenEmail", "expiresAt", "connectedAt", "isRevoked"
 FROM    "GmailConnection";
 
 DROP TABLE "GmailConnection";
 ALTER TABLE "new_GmailConnection" RENAME TO "GmailConnection";
 
 -- ── GmailLabelConfig ───────────────────────────────────────────────────────
--- Change: same as GmailConnection — replace inline UNIQUE userId with named index.
+-- Change: same as GmailConnection — inline UNIQUE userId → named index.
 
 CREATE TABLE "new_GmailLabelConfig" (
-    "id"                 TEXT     NOT NULL PRIMARY KEY,
-    "userId"             TEXT     NOT NULL,
-    "selectedLabelIds"   TEXT     NOT NULL DEFAULT '[]',
-    "selectedLabelNames" TEXT     NOT NULL DEFAULT '{}',
-    "lastSyncAt"         DATETIME,
-    "lastSyncError"      TEXT,
-    "syncCutoffDate"     DATETIME,
-    "maxPerSync"         INTEGER  NOT NULL DEFAULT 50,
-    "syncIntervalMinutes" INTEGER NOT NULL DEFAULT 60,
+    "id"                  TEXT     NOT NULL PRIMARY KEY,
+    "userId"              TEXT     NOT NULL,
+    "selectedLabelIds"    TEXT     NOT NULL DEFAULT '[]',
+    "selectedLabelNames"  TEXT     NOT NULL DEFAULT '{}',
+    "lastSyncAt"          DATETIME,
+    "lastSyncError"       TEXT,
+    "syncCutoffDate"      DATETIME,
+    "maxPerSync"          INTEGER  NOT NULL DEFAULT 50,
+    "syncIntervalMinutes" INTEGER  NOT NULL DEFAULT 60,
     CONSTRAINT "GmailLabelConfig_userId_fkey"
         FOREIGN KEY ("userId") REFERENCES "User" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
@@ -300,8 +305,7 @@ PRAGMA defer_foreign_keys=OFF;
 
 -- ---------------------------------------------------------------------------
 -- 3. Indexes
---    Recreate indexes dropped with their tables + create new ones.
---    IF NOT EXISTS makes each statement idempotent.
+--    IF NOT EXISTS for idempotency; recreates indexes dropped with tables above.
 -- ---------------------------------------------------------------------------
 
 -- ItemMemory (dropped with table above; recreate)
