@@ -1,9 +1,8 @@
 /**
  * /api/cron/alerts
  * Callable by an external cron scheduler on self-hosted setups.
- * Sends overspending alerts, weekly summaries, payday reminders,
- * upcoming bill notifications, deficit risk alerts, savings goal risk alerts,
- * and receipt upload reminders.
+ * Writes IN_APP notifications for all events regardless of email configuration.
+ * Also sends email alerts when SMTP is configured and the user has EMAIL prefs enabled.
  *
  * Secure with CRON_SECRET env var: Authorization: Bearer <CRON_SECRET>
  */
@@ -19,9 +18,12 @@ import {
   deficitRiskEmail,
   savingsGoalRiskEmail,
   receiptReminderEmail,
+  receiptsNeedReviewEmail,
+  incomeThresholdEmail,
 } from "@/lib/email";
 import { generateInsights } from "@/lib/ai/insights";
 import { buildForecast } from "@/lib/forecast";
+import { computePayPeriod } from "@/lib/pay-period";
 
 function isCronAuthorized(request: NextRequest): boolean {
   const secret = process.env.CRON_SECRET;
@@ -30,12 +32,38 @@ function isCronAuthorized(request: NextRequest): boolean {
   return auth === `Bearer ${secret}`;
 }
 
-/** Get the effective notification email for a user (custom address or account email). */
 function getNotifyEmail(
   userEmail: string,
   notifConfig: { notificationEmail: string | null } | null
 ): string {
   return notifConfig?.notificationEmail?.trim() || userEmail;
+}
+
+/** Write an in-app notification unless the user has explicitly disabled it. */
+async function writeInApp(params: {
+  userId: string;
+  budgetId: string;
+  event: string;
+  title: string;
+  body: string;
+}) {
+  const { userId, budgetId, event, title, body } = params;
+  // Only skip if there is an explicit opt-out row (isEnabled = false)
+  const disabled = await db.notificationPreference.findFirst({
+    where: { userId, channel: "IN_APP", event, isEnabled: false },
+  });
+  if (disabled) return;
+  await db.inAppNotification.create({
+    data: { userId, budgetId, event, title, body },
+  });
+}
+
+/** Check whether a user has EMAIL pref enabled for an event. */
+async function hasEmailPref(userId: string, event: string): Promise<boolean> {
+  const pref = await db.notificationPreference.findFirst({
+    where: { userId, channel: "EMAIL", event, isEnabled: true },
+  });
+  return !!pref;
 }
 
 export async function POST(request: NextRequest) {
@@ -48,10 +76,6 @@ export async function POST(request: NextRequest) {
 
   const emailConfig = await db.emailConfig.findUnique({ where: { id: "singleton" } });
   const emailEnabled = emailConfig?.isEnabled ?? false;
-
-  if (!emailEnabled) {
-    return NextResponse.json({ message: "Email not configured — skipping alert delivery", emailEnabled: false });
-  }
 
   const budgets = await db.budget.findMany({
     include: {
@@ -73,6 +97,8 @@ export async function POST(request: NextRequest) {
     deficitRisk: 0,
     savingsGoalRisk: 0,
     receiptReminder: 0,
+    receiptsNeedReview: 0,
+    incomeThreshold: 0,
   };
 
   const today = new Date();
@@ -83,7 +109,6 @@ export async function POST(request: NextRequest) {
       ...budget.memberships.map((m) => m.user),
     ].filter((u): u is typeof budget.owner => !!u);
 
-    // Parse additional notification email addresses (budget-level, no account required)
     const extraEmails: string[] = (() => {
       try {
         const parsed: unknown = JSON.parse(budget.additionalNotificationEmails);
@@ -91,53 +116,58 @@ export async function POST(request: NextRequest) {
       } catch { return []; }
     })();
 
-    // Load per-user notification configs for bill reminder lead time + notification email
     const userIds = allUsers.map((u) => u.id);
     const notifConfigs = await db.userNotificationConfig.findMany({
       where: { userId: { in: userIds } },
     });
     const notifConfigByUserId = new Map(notifConfigs.map((c) => [c.userId, c]));
 
-    // Overspending alerts
+    // ── Overspending alerts ──────────────────────────────────────────────────
     if (alertType === "all" || alertType === "overspending") {
       try {
         const analysis = await generateInsights(budget.id, budget.owner.id);
         const overspentCats = analysis.insights.filter((i) => i.type === "overspent");
 
         for (const user of allUsers) {
-          const pref = await db.notificationPreference.findFirst({
-            where: { userId: user.id, channel: "EMAIL", event: "overspending_alert", isEnabled: true },
-          });
-          if (!pref) continue;
-
-          const toEmail = getNotifyEmail(user.email, notifConfigByUserId.get(user.id) ?? null);
           for (const cat of overspentCats) {
-            const { subject, html } = overspendingAlertEmail({
-              userName: user.name,
-              budgetName: budget.name,
-              categoryName: cat.categoryName,
-              spent: cat.actual,
-              target: cat.target ?? cat.actual,
-              currency: budget.currency,
+            await writeInApp({
+              userId: user.id,
+              budgetId: budget.id,
+              event: "overspending_alert",
+              title: `Over budget: ${cat.categoryName}`,
+              body: `You've spent ${new Intl.NumberFormat("en-US", { style: "currency", currency: budget.currency }).format(cat.actual)} in ${cat.categoryName} (target: ${new Intl.NumberFormat("en-US", { style: "currency", currency: budget.currency }).format(cat.target ?? cat.actual)}) in ${budget.name}.`,
             });
-            await sendMail({ to: toEmail, subject, html });
             sentCount.overspending++;
+
+            if (emailEnabled && await hasEmailPref(user.id, "overspending_alert")) {
+              const toEmail = getNotifyEmail(user.email, notifConfigByUserId.get(user.id) ?? null);
+              const { subject, html } = overspendingAlertEmail({
+                userName: user.name,
+                budgetName: budget.name,
+                categoryName: cat.categoryName,
+                spent: cat.actual,
+                target: cat.target ?? cat.actual,
+                currency: budget.currency,
+              });
+              await sendMail({ to: toEmail, subject, html });
+            }
           }
         }
 
-        // Extra recipients (no preference check — explicitly configured)
-        for (const extraEmail of extraEmails) {
-          for (const cat of overspentCats) {
-            const { subject, html } = overspendingAlertEmail({
-              userName: budget.name,
-              budgetName: budget.name,
-              categoryName: cat.categoryName,
-              spent: cat.actual,
-              target: cat.target ?? cat.actual,
-              currency: budget.currency,
-            });
-            await sendMail({ to: extraEmail, subject, html });
-            sentCount.overspending++;
+        if (emailEnabled) {
+          for (const extraEmail of extraEmails) {
+            for (const cat of overspentCats) {
+              const { subject, html } = overspendingAlertEmail({
+                userName: budget.name,
+                budgetName: budget.name,
+                categoryName: cat.categoryName,
+                spent: cat.actual,
+                target: cat.target ?? cat.actual,
+                currency: budget.currency,
+              });
+              await sendMail({ to: extraEmail, subject, html });
+              sentCount.overspending++;
+            }
           }
         }
       } catch (err) {
@@ -145,33 +175,25 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Digest summary — frequency per user (DAILY / WEEKLY on Sunday / MONTHLY on 1st)
+    // ── Digest summary ───────────────────────────────────────────────────────
     if (alertType === "all" || alertType === "weekly") {
       try {
         const isSunday = today.getDay() === 0;
         const isFirstOfMonth = today.getDate() === 1;
 
-        // Only generate analysis if at least one user qualifies
         let analysis: Awaited<ReturnType<typeof generateInsights>> | null = null;
 
         for (const user of allUsers) {
-          const pref = await db.notificationPreference.findFirst({
-            where: { userId: user.id, channel: "EMAIL", event: "weekly_summary", isEnabled: true },
-          });
-          if (!pref) continue;
-
           const notifConfig = notifConfigByUserId.get(user.id) ?? null;
           const freq = notifConfig?.digestFrequency ?? "WEEKLY";
 
-          // Determine whether today qualifies for this user's frequency
           const shouldSend =
-            alertType === "weekly" || // forced run always sends
+            alertType === "weekly" ||
             freq === "DAILY" ||
             (freq === "WEEKLY" && isSunday) ||
             (freq === "MONTHLY" && isFirstOfMonth);
           if (!shouldSend) continue;
 
-          // Lazy-load analysis once
           if (!analysis) {
             analysis = await generateInsights(budget.id, budget.owner.id);
           }
@@ -182,23 +204,33 @@ export async function POST(request: NextRequest) {
             .slice(0, 5)
             .map((i) => ({ name: i.categoryName, amount: i.actual }));
 
-          const toEmail = getNotifyEmail(user.email, notifConfig);
-          const { subject, html } = weeklySummaryEmail({
-            userName: user.name,
-            budgetName: budget.name,
-            totalSpent: analysis.totalSpent,
-            totalIncome: analysis.totalBudget ?? 0,
-            currency: budget.currency,
-            topCategories: topCats,
-            status: analysis.status,
+          const topLine = topCats.map((c) => `${c.name}: ${new Intl.NumberFormat("en-US", { style: "currency", currency: budget.currency }).format(c.amount)}`).join(" · ");
+
+          await writeInApp({
+            userId: user.id,
+            budgetId: budget.id,
+            event: "weekly_summary",
+            title: `Summary: ${budget.name}`,
+            body: `Total spent: ${new Intl.NumberFormat("en-US", { style: "currency", currency: budget.currency }).format(analysis.totalSpent)}${topLine ? ` — ${topLine}` : ""}`,
           });
-          await sendMail({ to: toEmail, subject, html });
           sentCount.weekly++;
+
+          if (emailEnabled && await hasEmailPref(user.id, "weekly_summary")) {
+            const toEmail = getNotifyEmail(user.email, notifConfig);
+            const { subject, html } = weeklySummaryEmail({
+              userName: user.name,
+              budgetName: budget.name,
+              totalSpent: analysis.totalSpent,
+              totalIncome: analysis.totalBudget ?? 0,
+              currency: budget.currency,
+              topCategories: topCats,
+              status: analysis.status,
+            });
+            await sendMail({ to: toEmail, subject, html });
+          }
         }
 
-        // Extra recipients — unconditional; no frequency/day gating, no pref check.
-        // Lazy-load analysis here too if the per-user loop didn't trigger it.
-        if (extraEmails.length > 0) {
+        if (emailEnabled && extraEmails.length > 0) {
           if (!analysis) {
             analysis = await generateInsights(budget.id, budget.owner.id);
           }
@@ -226,14 +258,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Upcoming bills — user-configurable lead days (default 3)
+    // ── Upcoming bills ───────────────────────────────────────────────────────
     if (alertType === "all" || alertType === "bills") {
       for (const user of allUsers) {
-        const pref = await db.notificationPreference.findFirst({
-          where: { userId: user.id, channel: "EMAIL", event: "upcoming_bill", isEnabled: true },
-        });
-        if (!pref) continue;
-
         const notifConfig = notifConfigByUserId.get(user.id) ?? null;
         const leadDays = notifConfig?.billReminderDays ?? 3;
         const targetDate = new Date(today.getTime() + leadDays * 86400000);
@@ -244,127 +271,151 @@ export async function POST(request: NextRequest) {
           const dueStr = new Date(rec.nextDueDate).toISOString().slice(0, 10);
           if (dueStr !== targetDateStr) continue;
 
-          const toEmail = getNotifyEmail(user.email, notifConfig);
-          const { subject, html } = upcomingBillEmail({
-            userName: user.name,
-            budgetName: budget.name,
-            billName: rec.name,
-            amount: rec.amount,
-            dueDate: dueStr,
-            currency: budget.currency,
+          const fmt = new Intl.NumberFormat("en-US", { style: "currency", currency: budget.currency });
+          await writeInApp({
+            userId: user.id,
+            budgetId: budget.id,
+            event: "upcoming_bill",
+            title: `Bill due in ${leadDays}d: ${rec.name}`,
+            body: `${rec.name} (${fmt.format(rec.amount)}) is due on ${dueStr} in ${budget.name}.`,
           });
-          await sendMail({ to: toEmail, subject, html });
           sentCount.bills++;
+
+          if (emailEnabled && await hasEmailPref(user.id, "upcoming_bill")) {
+            const toEmail = getNotifyEmail(user.email, notifConfig);
+            const { subject, html } = upcomingBillEmail({
+              userName: user.name,
+              budgetName: budget.name,
+              billName: rec.name,
+              amount: rec.amount,
+              dueDate: dueStr,
+              currency: budget.currency,
+            });
+            await sendMail({ to: toEmail, subject, html });
+          }
         }
       }
 
-      // Extra recipients — use default lead of 3 days
-      const extraTargetDate = new Date(today.getTime() + 3 * 86400000);
-      const extraTargetDateStr = extraTargetDate.toISOString().slice(0, 10);
-      for (const rec of budget.recurringExpenses) {
-        if (!rec.nextDueDate) continue;
-        const dueStr = new Date(rec.nextDueDate).toISOString().slice(0, 10);
-        if (dueStr !== extraTargetDateStr) continue;
-        for (const extraEmail of extraEmails) {
-          const { subject, html } = upcomingBillEmail({
-            userName: budget.name,
-            budgetName: budget.name,
-            billName: rec.name,
-            amount: rec.amount,
-            dueDate: dueStr,
-            currency: budget.currency,
-          });
-          await sendMail({ to: extraEmail, subject, html });
-          sentCount.bills++;
+      if (emailEnabled) {
+        const extraTargetDateStr = new Date(today.getTime() + 3 * 86400000).toISOString().slice(0, 10);
+        for (const rec of budget.recurringExpenses) {
+          if (!rec.nextDueDate) continue;
+          const dueStr = new Date(rec.nextDueDate).toISOString().slice(0, 10);
+          if (dueStr !== extraTargetDateStr) continue;
+          for (const extraEmail of extraEmails) {
+            const { subject, html } = upcomingBillEmail({
+              userName: budget.name,
+              budgetName: budget.name,
+              billName: rec.name,
+              amount: rec.amount,
+              dueDate: dueStr,
+              currency: budget.currency,
+            });
+            await sendMail({ to: extraEmail, subject, html });
+            sentCount.bills++;
+          }
         }
       }
     }
 
-    // Payday reminders — 1 day ahead
+    // ── Payday reminders ─────────────────────────────────────────────────────
     if (alertType === "all" || alertType === "payday") {
-      const tomorrow = new Date(today.getTime() + 86400000);
-      const tomorrowStr = tomorrow.toISOString().slice(0, 10);
+      const tomorrowStr = new Date(today.getTime() + 86400000).toISOString().slice(0, 10);
 
       for (const source of budget.incomeSources) {
         if (!source.nextPayDate) continue;
         const payStr = new Date(source.nextPayDate).toISOString().slice(0, 10);
         if (payStr !== tomorrowStr) continue;
 
+        const fmt = new Intl.NumberFormat("en-US", { style: "currency", currency: budget.currency });
         for (const user of allUsers) {
-          const pref = await db.notificationPreference.findFirst({
-            where: { userId: user.id, channel: "EMAIL", event: "payday_reminder", isEnabled: true },
+          await writeInApp({
+            userId: user.id,
+            budgetId: budget.id,
+            event: "payday_reminder",
+            title: `Payday tomorrow — ${budget.name}`,
+            body: `${fmt.format(source.amount)} from ${source.name ?? "income"} is expected tomorrow (${tomorrowStr}).`,
           });
-          if (!pref) continue;
-
-          const toEmail = getNotifyEmail(user.email, notifConfigByUserId.get(user.id) ?? null);
-          const { subject, html } = paydayReminderEmail({
-            userName: user.name,
-            budgetName: budget.name,
-            payAmount: source.amount,
-            payDate: tomorrowStr,
-            currency: budget.currency,
-          });
-          await sendMail({ to: toEmail, subject, html });
           sentCount.payday++;
+
+          if (emailEnabled && await hasEmailPref(user.id, "payday_reminder")) {
+            const toEmail = getNotifyEmail(user.email, notifConfigByUserId.get(user.id) ?? null);
+            const { subject, html } = paydayReminderEmail({
+              userName: user.name,
+              budgetName: budget.name,
+              payAmount: source.amount,
+              payDate: tomorrowStr,
+              currency: budget.currency,
+            });
+            await sendMail({ to: toEmail, subject, html });
+          }
         }
 
-        // Extra recipients
-        for (const extraEmail of extraEmails) {
-          const { subject, html } = paydayReminderEmail({
-            userName: budget.name,
-            budgetName: budget.name,
-            payAmount: source.amount,
-            payDate: tomorrowStr,
-            currency: budget.currency,
-          });
-          await sendMail({ to: extraEmail, subject, html });
-          sentCount.payday++;
+        if (emailEnabled) {
+          for (const extraEmail of extraEmails) {
+            const { subject, html } = paydayReminderEmail({
+              userName: budget.name,
+              budgetName: budget.name,
+              payAmount: source.amount,
+              payDate: tomorrowStr,
+              currency: budget.currency,
+            });
+            await sendMail({ to: extraEmail, subject, html });
+            sentCount.payday++;
+          }
         }
       }
     }
 
-    // Deficit risk alerts — check cash flow forecast for negative balance within 14 days
+    // ── Deficit risk ─────────────────────────────────────────────────────────
     if (alertType === "all" || alertType === "deficit_risk") {
       try {
         const forecast = await buildForecast(budget.id, budget.owner.id, 14);
-        // Use isDangerZone which includes "approaching zero" threshold
         const dangerPoints = forecast.points.filter((p) => p.isDangerZone);
 
         if (dangerPoints.length > 0) {
           const worstBalance = Math.min(...dangerPoints.map((p) => p.balance));
           const firstDangerPoint = dangerPoints[0];
-          const firstDangerDate = new Date(firstDangerPoint.date);
-          const withinDays = Math.ceil((firstDangerDate.getTime() - today.getTime()) / 86400000);
+          const withinDays = Math.ceil(
+            (new Date(firstDangerPoint.date).getTime() - today.getTime()) / 86400000
+          );
+          const fmt = new Intl.NumberFormat("en-US", { style: "currency", currency: budget.currency });
 
           for (const user of allUsers) {
-            const pref = await db.notificationPreference.findFirst({
-              where: { userId: user.id, channel: "EMAIL", event: "deficit_risk", isEnabled: true },
+            await writeInApp({
+              userId: user.id,
+              budgetId: budget.id,
+              event: "deficit_risk",
+              title: `Cash flow risk — ${budget.name}`,
+              body: `Projected deficit of ${fmt.format(Math.abs(worstBalance))} within ${Math.max(1, withinDays)} day${withinDays !== 1 ? "s" : ""}.`,
             });
-            if (!pref) continue;
-
-            const toEmail = getNotifyEmail(user.email, notifConfigByUserId.get(user.id) ?? null);
-            const { subject, html } = deficitRiskEmail({
-              userName: user.name,
-              budgetName: budget.name,
-              projectedDeficit: worstBalance,
-              withinDays: Math.max(1, withinDays),
-              currency: budget.currency,
-            });
-            await sendMail({ to: toEmail, subject, html });
             sentCount.deficitRisk++;
+
+            if (emailEnabled && await hasEmailPref(user.id, "deficit_risk")) {
+              const toEmail = getNotifyEmail(user.email, notifConfigByUserId.get(user.id) ?? null);
+              const { subject, html } = deficitRiskEmail({
+                userName: user.name,
+                budgetName: budget.name,
+                projectedDeficit: worstBalance,
+                withinDays: Math.max(1, withinDays),
+                currency: budget.currency,
+              });
+              await sendMail({ to: toEmail, subject, html });
+            }
           }
 
-          // Extra recipients
-          for (const extraEmail of extraEmails) {
-            const { subject, html } = deficitRiskEmail({
-              userName: budget.name,
-              budgetName: budget.name,
-              projectedDeficit: worstBalance,
-              withinDays: Math.max(1, withinDays),
-              currency: budget.currency,
-            });
-            await sendMail({ to: extraEmail, subject, html });
-            sentCount.deficitRisk++;
+          if (emailEnabled) {
+            for (const extraEmail of extraEmails) {
+              const { subject, html } = deficitRiskEmail({
+                userName: budget.name,
+                budgetName: budget.name,
+                projectedDeficit: worstBalance,
+                withinDays: Math.max(1, withinDays),
+                currency: budget.currency,
+              });
+              await sendMail({ to: extraEmail, subject, html });
+              sentCount.deficitRisk++;
+            }
           }
         }
       } catch (err) {
@@ -372,60 +423,63 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Savings goal risk alerts — goals where progress is behind pace
+    // ── Savings goal risk ────────────────────────────────────────────────────
     if (alertType === "all" || alertType === "savings_goal_risk") {
       for (const goal of budget.savingsGoals) {
         if (!goal.targetAmount) continue;
         const progressPct = goal.targetAmount > 0
           ? (goal.currentAmount ?? 0) / goal.targetAmount
           : 0;
-        // Alert if goal is less than 50% funded and active
         if (progressPct >= 0.5) continue;
 
+        const fmt = new Intl.NumberFormat("en-US", { style: "currency", currency: budget.currency });
         for (const user of allUsers) {
-          const pref = await db.notificationPreference.findFirst({
-            where: { userId: user.id, channel: "EMAIL", event: "savings_goal_risk", isEnabled: true },
+          await writeInApp({
+            userId: user.id,
+            budgetId: budget.id,
+            event: "savings_goal_risk",
+            title: `Savings goal at risk: ${goal.name}`,
+            body: `${goal.name} is ${Math.round(progressPct * 100)}% funded (${fmt.format(goal.currentAmount ?? 0)} of ${fmt.format(goal.targetAmount)}).`,
           });
-          if (!pref) continue;
-
-          const toEmail = getNotifyEmail(user.email, notifConfigByUserId.get(user.id) ?? null);
-          const { subject, html } = savingsGoalRiskEmail({
-            userName: user.name,
-            budgetName: budget.name,
-            goalName: goal.name,
-            targetAmount: goal.targetAmount,
-            currentAmount: goal.currentAmount ?? 0,
-            currency: budget.currency,
-          });
-          await sendMail({ to: toEmail, subject, html });
           sentCount.savingsGoalRisk++;
+
+          if (emailEnabled && await hasEmailPref(user.id, "savings_goal_risk")) {
+            const toEmail = getNotifyEmail(user.email, notifConfigByUserId.get(user.id) ?? null);
+            const { subject, html } = savingsGoalRiskEmail({
+              userName: user.name,
+              budgetName: budget.name,
+              goalName: goal.name,
+              targetAmount: goal.targetAmount,
+              currentAmount: goal.currentAmount ?? 0,
+              currency: budget.currency,
+            });
+            await sendMail({ to: toEmail, subject, html });
+          }
         }
 
-        // Extra recipients
-        for (const extraEmail of extraEmails) {
-          const { subject, html } = savingsGoalRiskEmail({
-            userName: budget.name,
-            budgetName: budget.name,
-            goalName: goal.name,
-            targetAmount: goal.targetAmount,
-            currentAmount: goal.currentAmount ?? 0,
-            currency: budget.currency,
-          });
-          await sendMail({ to: extraEmail, subject, html });
-          sentCount.savingsGoalRisk++;
+        if (emailEnabled) {
+          for (const extraEmail of extraEmails) {
+            const { subject, html } = savingsGoalRiskEmail({
+              userName: budget.name,
+              budgetName: budget.name,
+              goalName: goal.name,
+              targetAmount: goal.targetAmount,
+              currentAmount: goal.currentAmount ?? 0,
+              currency: budget.currency,
+            });
+            await sendMail({ to: extraEmail, subject, html });
+            sentCount.savingsGoalRisk++;
+          }
         }
       }
     }
 
-    // Receipt upload reminder — if no receipt uploaded in 7+ days
+    // ── Receipt upload reminder ──────────────────────────────────────────────
     if (alertType === "all" || alertType === "receipt_reminder") {
       try {
         const sevenDaysAgo = new Date(today.getTime() - 7 * 86400000);
         const recentReceipt = await db.receipt.findFirst({
-          where: {
-            budgetId: budget.id,
-            uploadedAt: { gte: sevenDaysAgo },
-          },
+          where: { budgetId: budget.id, uploadedAt: { gte: sevenDaysAgo } },
           orderBy: { uploadedAt: "desc" },
         });
 
@@ -439,37 +493,170 @@ export async function POST(request: NextRequest) {
             : 7;
 
           for (const user of allUsers) {
-            const pref = await db.notificationPreference.findFirst({
-              where: { userId: user.id, channel: "EMAIL", event: "receipt_upload_reminder", isEnabled: true },
+            await writeInApp({
+              userId: user.id,
+              budgetId: budget.id,
+              event: "receipt_upload_reminder",
+              title: `No receipts uploaded — ${budget.name}`,
+              body: `It's been ${daysSince} day${daysSince !== 1 ? "s" : ""} since a receipt was uploaded to ${budget.name}.`,
             });
-            if (!pref) continue;
-
-            const toEmail = getNotifyEmail(user.email, notifConfigByUserId.get(user.id) ?? null);
-            const { subject, html } = receiptReminderEmail({
-              userName: user.name,
-              budgetName: budget.name,
-              daysSinceLastUpload: daysSince,
-            });
-            await sendMail({ to: toEmail, subject, html });
             sentCount.receiptReminder++;
+
+            if (emailEnabled && await hasEmailPref(user.id, "receipt_upload_reminder")) {
+              const toEmail = getNotifyEmail(user.email, notifConfigByUserId.get(user.id) ?? null);
+              const { subject, html } = receiptReminderEmail({
+                userName: user.name,
+                budgetName: budget.name,
+                daysSinceLastUpload: daysSince,
+              });
+              await sendMail({ to: toEmail, subject, html });
+            }
           }
 
-          // Extra recipients
-          for (const extraEmail of extraEmails) {
-            const { subject, html } = receiptReminderEmail({
-              userName: budget.name,
-              budgetName: budget.name,
-              daysSinceLastUpload: daysSince,
-            });
-            await sendMail({ to: extraEmail, subject, html });
-            sentCount.receiptReminder++;
+          if (emailEnabled) {
+            for (const extraEmail of extraEmails) {
+              const { subject, html } = receiptReminderEmail({
+                userName: budget.name,
+                budgetName: budget.name,
+                daysSinceLastUpload: daysSince,
+              });
+              await sendMail({ to: extraEmail, subject, html });
+              sentCount.receiptReminder++;
+            }
           }
         }
       } catch (err) {
         console.error(`[cron/alerts] receipt reminder check failed for budget ${budget.id}:`, err);
       }
     }
+
+    // ── Receipts need review ─────────────────────────────────────────────────
+    if (alertType === "all" || alertType === "receipts_need_review") {
+      try {
+        const oneDayAgo = new Date(today.getTime() - 24 * 3600000);
+        const pendingReceipts = await db.receipt.findMany({
+          where: {
+            budgetId: budget.id,
+            status: { in: ["PENDING", "NEEDS_REVIEW"] },
+            uploadedAt: { lte: oneDayAgo },
+          },
+          select: { id: true },
+        });
+
+        if (pendingReceipts.length > 0) {
+          const count = pendingReceipts.length;
+          for (const user of allUsers) {
+            await writeInApp({
+              userId: user.id,
+              budgetId: budget.id,
+              event: "receipts_need_review",
+              title: `${count} receipt${count !== 1 ? "s" : ""} need${count === 1 ? "s" : ""} review`,
+              body: `${count} receipt${count !== 1 ? "s" : ""} in ${budget.name} ha${count === 1 ? "s" : "ve"} been waiting for review for over 24 hours.`,
+            });
+            sentCount.receiptsNeedReview++;
+
+            if (emailEnabled && await hasEmailPref(user.id, "receipts_need_review")) {
+              const toEmail = getNotifyEmail(user.email, notifConfigByUserId.get(user.id) ?? null);
+              const { subject, html } = receiptsNeedReviewEmail({
+                userName: user.name,
+                budgetName: budget.name,
+                count,
+              });
+              await sendMail({ to: toEmail, subject, html });
+            }
+          }
+
+          if (emailEnabled) {
+            for (const extraEmail of extraEmails) {
+              const { subject, html } = receiptsNeedReviewEmail({
+                userName: budget.name,
+                budgetName: budget.name,
+                count,
+              });
+              await sendMail({ to: extraEmail, subject, html });
+              sentCount.receiptsNeedReview++;
+            }
+          }
+        }
+      } catch (err) {
+        console.error(`[cron/alerts] receipts_need_review check failed for budget ${budget.id}:`, err);
+      }
+    }
+
+    // ── Income threshold (>80% of pay-period income spent) ───────────────────
+    if (alertType === "all" || alertType === "income_threshold") {
+      try {
+        for (const source of budget.incomeSources) {
+          const period = computePayPeriod(
+            source.frequency,
+            source.nextPayDate,
+            source.amount,
+            source.customDays
+          );
+
+          const periodExpenses = await db.expense.aggregate({
+            where: {
+              budgetId: budget.id,
+              date: { gte: period.start, lt: period.end },
+            },
+            _sum: { amount: true },
+          });
+          const spent = periodExpenses._sum.amount ?? 0;
+          const income = period.periodIncome;
+          if (income <= 0) continue;
+          const pct = (spent / income) * 100;
+          if (pct < 80) continue;
+
+          const fmt = new Intl.NumberFormat("en-US", { style: "currency", currency: budget.currency });
+          for (const user of allUsers) {
+            await writeInApp({
+              userId: user.id,
+              budgetId: budget.id,
+              event: "income_threshold",
+              title: `${Math.round(pct)}% of period income spent`,
+              body: `You've spent ${fmt.format(spent)} of ${fmt.format(income)} (${Math.round(pct)}%) this pay period in ${budget.name}.`,
+            });
+            sentCount.incomeThreshold++;
+
+            if (emailEnabled && await hasEmailPref(user.id, "income_threshold")) {
+              const toEmail = getNotifyEmail(user.email, notifConfigByUserId.get(user.id) ?? null);
+              const { subject, html } = incomeThresholdEmail({
+                userName: user.name,
+                budgetName: budget.name,
+                spent,
+                income,
+                pct,
+                currency: budget.currency,
+              });
+              await sendMail({ to: toEmail, subject, html });
+            }
+          }
+
+          if (emailEnabled) {
+            for (const extraEmail of extraEmails) {
+              const { subject, html } = incomeThresholdEmail({
+                userName: budget.name,
+                budgetName: budget.name,
+                spent,
+                income,
+                pct,
+                currency: budget.currency,
+              });
+              await sendMail({ to: extraEmail, subject, html });
+              sentCount.incomeThreshold++;
+            }
+          }
+        }
+      } catch (err) {
+        console.error(`[cron/alerts] income threshold check failed for budget ${budget.id}:`, err);
+      }
+    }
   }
 
-  return NextResponse.json({ ok: true, sentCount, budgetsChecked: budgets.length });
+  return NextResponse.json({
+    ok: true,
+    emailEnabled,
+    sentCount,
+    budgetsChecked: budgets.length,
+  });
 }

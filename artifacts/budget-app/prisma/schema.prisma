@@ -103,6 +103,7 @@ model User {
   addedExpenses         Expense[]       @relation("AddedExpenses")
   gmailConnection       GmailConnection?
   gmailLabelConfig      GmailLabelConfig?
+  inAppNotifications    InAppNotification[]
 }
 
 model Budget {
@@ -134,6 +135,7 @@ model Budget {
   emailForwarding       EmailForwardingConfig?
   pendingImports        PendingImport[]
   categoryTargets       CategoryTarget[]
+  inAppNotifications    InAppNotification[]
 }
 
 model BudgetMembership {
@@ -407,6 +409,22 @@ model NotificationPreference {
   budget Budget? @relation(fields: [budgetId], references: [id], onDelete: Cascade)
 
   @@unique([userId, budgetId, channel, event])
+}
+
+model InAppNotification {
+  id        String   @id @default(cuid())
+  userId    String
+  budgetId  String?
+  event     String
+  title     String
+  body      String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  budget Budget? @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead, createdAt])
 }
 
 enum AIFeature {

@@ -1,13 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Bell, Mail, Smartphone, Loader2, Save, Settings } from "lucide-react";
+import { Bell, Mail, Smartphone, Loader2, Save, Settings, BellOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 
 interface Pref {
@@ -44,6 +43,11 @@ const EVENT_META: Record<string, { label: string; description: string; group: st
     description: "When a savings goal is less than 50% funded",
     group: "Spending",
   },
+  income_threshold: {
+    label: "Income Threshold",
+    description: "When you've spent over 80% of your pay-period income",
+    group: "Spending",
+  },
   weekly_summary: {
     label: "Weekly Summary",
     description: "Weekly digest of spending and budget status",
@@ -69,10 +73,20 @@ const EVENT_META: Record<string, { label: string; description: string; group: st
     description: "When no receipt has been uploaded for 7+ days",
     group: "Reminders",
   },
+  receipts_need_review: {
+    label: "Receipts Need Review",
+    description: "When receipts have been stuck in pending/review for 24+ hours",
+    group: "Reminders",
+  },
+  shared_budget_activity: {
+    label: "Shared Budget Activity",
+    description: "When another member adds an expense or income entry to a shared budget",
+    group: "Sharing",
+  },
 };
 
 const EVENT_KEYS = Object.keys(EVENT_META);
-const GROUPS = ["Spending", "Digest", "Reminders"] as const;
+const GROUPS = ["Spending", "Digest", "Reminders", "Sharing"] as const;
 
 type PrefKey = `${string}:${string}`;
 function buildKey(channel: string, event: string): PrefKey {
@@ -121,6 +135,18 @@ export function NotificationsForm() {
     setPrefs((prev) => {
       const next = new Map(prev);
       next.set(buildKey(channel, event), !prev.get(buildKey(channel, event)));
+      return next;
+    });
+  }
+
+  function muteGroup(group: string, channel: "IN_APP" | "EMAIL") {
+    const groupEvents = EVENT_KEYS.filter((k) => EVENT_META[k].group === group);
+    const allOn = groupEvents.every((e) => prefs.get(buildKey(channel, e)) ?? false);
+    setPrefs((prev) => {
+      const next = new Map(prev);
+      for (const e of groupEvents) {
+        next.set(buildKey(channel, e), !allOn);
+      }
       return next;
     });
   }
@@ -289,10 +315,34 @@ export function NotificationsForm() {
 
           {GROUPS.map((group, gIdx) => {
             const groupEvents = EVENT_KEYS.filter((k) => EVENT_META[k].group === group);
+            const allInAppOn = groupEvents.every((e) => prefs.get(buildKey("IN_APP", e)) ?? false);
+            const allEmailOn = groupEvents.every((e) => prefs.get(buildKey("EMAIL", e)) ?? false);
             return (
               <div key={group}>
-                <div className="px-6 py-2 bg-muted/40 border-b border-border">
+                <div className="px-6 py-2 bg-muted/40 border-b border-border flex items-center justify-between">
                   <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{group}</span>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => muteGroup(group, "IN_APP")}
+                      className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                      title={allInAppOn ? "Mute all in-app" : "Unmute all in-app"}
+                    >
+                      <BellOff className="w-3 h-3" />
+                      {allInAppOn ? "Mute all" : "Unmute all"}
+                    </button>
+                    {emailEnabled && (
+                      <button
+                        type="button"
+                        onClick={() => muteGroup(group, "EMAIL")}
+                        className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                        title={allEmailOn ? "Mute all email" : "Unmute all email"}
+                      >
+                        <Mail className="w-3 h-3" />
+                        {allEmailOn ? "Mute email" : "Unmute email"}
+                      </button>
+                    )}
+                  </div>
                 </div>
                 {groupEvents.map((event, idx) => {
                   const meta = EVENT_META[event];
@@ -337,8 +387,8 @@ export function NotificationsForm() {
           <CardDescription className="text-xs">
             Schedule <code className="bg-muted px-1 py-0.5 rounded font-mono text-xs">POST /api/cron/alerts</code> daily with{" "}
             <code className="bg-muted px-1 py-0.5 rounded font-mono text-xs">Authorization: Bearer &lt;CRON_SECRET&gt;</code> to deliver
-            email notifications automatically. Pass <code className="bg-muted px-1 py-0.5 rounded font-mono text-xs">{`{"type":"deficit_risk"}`}</code>{" "}
-            in the body to run a specific alert type.
+            notifications automatically. Pass <code className="bg-muted px-1 py-0.5 rounded font-mono text-xs">{`{"type":"deficit_risk"}`}</code>{" "}
+            in the body to run a specific alert type. In-app notifications are written regardless of email configuration.
           </CardDescription>
         </CardHeader>
       </Card>

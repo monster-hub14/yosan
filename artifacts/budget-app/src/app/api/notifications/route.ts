@@ -12,6 +12,9 @@ const VALID_EVENTS = [
   "deficit_risk",
   "savings_goal_risk",
   "receipt_upload_reminder",
+  "receipts_need_review",
+  "income_threshold",
+  "shared_budget_activity",
 ];
 
 const VALID_CHANNELS = ["EMAIL", "IN_APP"] as const;
@@ -50,7 +53,6 @@ export async function PUT(request: NextRequest) {
 
       const budgetId = item.budgetId ?? null;
 
-      // Find existing pref with matching key
       const existing = await db.notificationPreference.findFirst({
         where: {
           userId: session.userId,
