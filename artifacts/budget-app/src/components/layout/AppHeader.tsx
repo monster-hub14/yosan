@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useTheme } from "next-themes";
@@ -51,27 +52,6 @@ function getAnchoredPos(el: HTMLElement, align: "left" | "right"): DropdownPos {
   return { top, right: window.innerWidth - rect.right };
 }
 
-/**
- * Hook that fires `onClose` when a mousedown occurs outside all the provided refs.
- */
-function useOutsideClick(
-  refs: Array<React.RefObject<HTMLElement | null>>,
-  onClose: () => void,
-  enabled: boolean
-) {
-  useEffect(() => {
-    if (!enabled) return;
-    function handler(e: MouseEvent) {
-      const target = e.target as Node;
-      if (refs.every((r) => !r.current?.contains(target))) {
-        onClose();
-      }
-    }
-    document.addEventListener("mousedown", handler, true);
-    return () => document.removeEventListener("mousedown", handler, true);
-  }, [enabled, onClose, ...refs.map((r) => r.current)]); // eslint-disable-line react-hooks/exhaustive-deps
-}
-
 export default function AppHeader({ user, activeBudgetId, onMobileMenuToggle }: AppHeaderProps) {
   const { theme, setTheme } = useTheme();
   const router = useRouter();
@@ -87,20 +67,19 @@ export default function AppHeader({ user, activeBudgetId, onMobileMenuToggle }: 
   const [unreadCount, setUnreadCount] = useState(0);
   const [markingAll, setMarkingAll] = useState(false);
 
-  // Dropdown anchor positions (fixed, viewport-relative)
+  // Dropdown panel anchor positions (fixed, viewport-relative)
   const [budgetPos, setBudgetPos] = useState<DropdownPos | null>(null);
   const [bellPos, setBellPos] = useState<DropdownPos | null>(null);
   const [menuPos, setMenuPos] = useState<DropdownPos | null>(null);
 
-  // Trigger button refs
+  // Trigger button refs (used to compute panel positions)
   const budgetBtnRef = useRef<HTMLButtonElement>(null);
   const bellBtnRef = useRef<HTMLButtonElement>(null);
   const menuBtnRef = useRef<HTMLButtonElement>(null);
 
-  // Panel refs (used by outside-click hooks)
-  const budgetPanelRef = useRef<HTMLDivElement>(null);
-  const bellPanelRef = useRef<HTMLDivElement>(null);
-  const menuPanelRef = useRef<HTMLDivElement>(null);
+  // Portal target — set client-side only (SSR safety)
+  const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
+  useEffect(() => { setPortalTarget(document.body); }, []);
 
   useEffect(() => { setMounted(true); }, []);
 
@@ -132,24 +111,7 @@ export default function AppHeader({ user, activeBudgetId, onMobileMenuToggle }: 
     return () => clearInterval(interval);
   }, [fetchNotifications]);
 
-  // Outside-click handlers (no backdrop overlay needed)
-  useOutsideClick(
-    [budgetBtnRef, budgetPanelRef],
-    useCallback(() => setBudgetMenuOpen(false), []),
-    budgetMenuOpen
-  );
-  useOutsideClick(
-    [bellBtnRef, bellPanelRef],
-    useCallback(() => setBellOpen(false), []),
-    bellOpen
-  );
-  useOutsideClick(
-    [menuBtnRef, menuPanelRef],
-    useCallback(() => setMenuOpen(false), []),
-    menuOpen
-  );
-
-  // Recompute panel positions on window resize so open panels track correctly
+  // Recompute panel positions on window resize so open panels stay anchored
   useEffect(() => {
     function handleResize() {
       if (budgetMenuOpen && budgetBtnRef.current) {
@@ -249,137 +211,193 @@ export default function AppHeader({ user, activeBudgetId, onMobileMenuToggle }: 
   }
 
   return (
-    <header className="h-14 flex items-center px-4 gap-3 border-b border-border bg-card/50 backdrop-blur-sm flex-shrink-0">
-      {/* Mobile hamburger */}
-      {onMobileMenuToggle && (
-        <button
-          onClick={onMobileMenuToggle}
-          className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors lg:hidden"
-          aria-label="Open navigation"
-        >
-          <Menu className="w-5 h-5" />
-        </button>
-      )}
+    <>
+      {/*
+        header uses relative + z-[9999] so that its buttons always render
+        above any backdrop overlay portaled into document.body at z-[9998].
+        backdrop-blur-sm creates a CSS stacking context which would otherwise
+        trap absolutely-positioned children; dropdown panels are portaled
+        into document.body to fully escape it.
+      */}
+      <header className="relative z-[9999] h-14 flex items-center px-4 gap-3 border-b border-border bg-card/50 backdrop-blur-sm flex-shrink-0">
+        {/* Mobile hamburger */}
+        {onMobileMenuToggle && (
+          <button
+            onClick={onMobileMenuToggle}
+            className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors lg:hidden"
+            aria-label="Open navigation"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
+        )}
 
-      {/* Budget switcher */}
-      {budgets.length > 0 && (
+        {/* Budget switcher */}
+        {budgets.length > 0 && (
+          <div className="relative">
+            <button
+              ref={budgetBtnRef}
+              onClick={() => {
+                const opening = !budgetMenuOpen;
+                setBudgetMenuOpen(opening);
+                setBellOpen(false);
+                setMenuOpen(false);
+                if (opening && budgetBtnRef.current) {
+                  setBudgetPos(getAnchoredPos(budgetBtnRef.current, "left"));
+                }
+              }}
+              disabled={switching}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
+                "border border-border hover:bg-muted",
+                budgetMenuOpen && "bg-muted",
+                switching && "opacity-50 cursor-not-allowed"
+              )}
+            >
+              <Wallet className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+              <span className="max-w-28 sm:max-w-36 truncate">
+                {currentBudget?.name ?? "Select budget"}
+              </span>
+              <ChevronDown className={cn("w-3.5 h-3.5 text-muted-foreground transition-transform", budgetMenuOpen && "rotate-180")} />
+            </button>
+          </div>
+        )}
+
+        <div className="flex-1" />
+
+        {user.role === "ADMIN" && (
+          <Badge variant="secondary" className="text-xs hidden sm:flex">
+            Admin
+          </Badge>
+        )}
+
+        <button
+          suppressHydrationWarning
+          onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+          className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          aria-label="Toggle theme"
+        >
+          {mounted ? (theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />) : <span className="w-4 h-4 block" />}
+        </button>
+
+        {/* Bell trigger */}
         <div className="relative">
           <button
-            ref={budgetBtnRef}
+            ref={bellBtnRef}
             onClick={() => {
-              const opening = !budgetMenuOpen;
-              setBudgetMenuOpen(opening);
-              setBellOpen(false);
+              const opening = !bellOpen;
+              setBellOpen(opening);
               setMenuOpen(false);
-              if (opening && budgetBtnRef.current) {
-                setBudgetPos(getAnchoredPos(budgetBtnRef.current, "left"));
+              setBudgetMenuOpen(false);
+              if (opening) {
+                fetchNotifications();
+                if (bellBtnRef.current) {
+                  setBellPos(getAnchoredPos(bellBtnRef.current, "right"));
+                }
               }
             }}
-            disabled={switching}
             className={cn(
-              "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
-              "border border-border hover:bg-muted",
-              budgetMenuOpen && "bg-muted",
-              switching && "opacity-50 cursor-not-allowed"
+              "relative p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors",
+              bellOpen && "bg-muted text-foreground"
             )}
+            aria-label="Notifications"
           >
-            <Wallet className="w-3.5 h-3.5 text-primary flex-shrink-0" />
-            <span className="max-w-28 sm:max-w-36 truncate">
-              {currentBudget?.name ?? "Select budget"}
-            </span>
-            <ChevronDown className={cn("w-3.5 h-3.5 text-muted-foreground transition-transform", budgetMenuOpen && "rotate-180")} />
+            <Bell className="w-4 h-4" />
+            {unreadCount > 0 && (
+              <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500 ring-2 ring-background" />
+            )}
           </button>
-
-          {budgetMenuOpen && budgetPos && (
-            <div
-              ref={budgetPanelRef}
-              className="fixed z-[9999] w-64 rounded-lg border border-border bg-popover shadow-lg py-1"
-              style={{ top: budgetPos.top, left: budgetPos.left }}
-            >
-              <p className="px-3 py-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                Your budgets
-              </p>
-              {budgets.map((b) => (
-                <button
-                  key={b.id}
-                  onClick={() => handleSwitchBudget(b)}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted transition-colors text-left"
-                >
-                  <div className="w-6 h-6 rounded bg-primary/10 flex items-center justify-center flex-shrink-0">
-                    <Wallet className="w-3 h-3 text-primary" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="truncate font-medium">{b.name}</p>
-                    <p className="text-xs text-muted-foreground">{b.budgetType === "SOLO" ? "Solo" : "Shared"} · {b.currency}</p>
-                  </div>
-                  {b.id === currentBudget?.id && <Check className="w-4 h-4 text-primary flex-shrink-0" />}
-                </button>
-              ))}
-              {user.role === "ADMIN" && (
-                <div className="border-t border-border mt-1 pt-1">
-                  <Link
-                    href="/budgets/new"
-                    onClick={() => setBudgetMenuOpen(false)}
-                    className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted transition-colors text-muted-foreground"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    New budget
-                  </Link>
-                </div>
-              )}
-            </div>
-          )}
         </div>
-      )}
 
-      <div className="flex-1" />
-
-      {user.role === "ADMIN" && (
-        <Badge variant="secondary" className="text-xs hidden sm:flex">
-          Admin
-        </Badge>
-      )}
-
-      <button
-        suppressHydrationWarning
-        onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-        className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-        aria-label="Toggle theme"
-      >
-        {mounted ? (theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />) : <span className="w-4 h-4 block" />}
-      </button>
-
-      {/* Bell / Notifications */}
-      <div className="relative">
-        <button
-          ref={bellBtnRef}
-          onClick={() => {
-            const opening = !bellOpen;
-            setBellOpen(opening);
-            setMenuOpen(false);
-            setBudgetMenuOpen(false);
-            if (opening) {
-              fetchNotifications();
-              if (bellBtnRef.current) {
-                setBellPos(getAnchoredPos(bellBtnRef.current, "right"));
+        {/* User menu trigger */}
+        <div className="relative">
+          <button
+            ref={menuBtnRef}
+            onClick={() => {
+              const opening = !menuOpen;
+              setMenuOpen(opening);
+              setBellOpen(false);
+              setBudgetMenuOpen(false);
+              if (opening && menuBtnRef.current) {
+                setMenuPos(getAnchoredPos(menuBtnRef.current, "right"));
               }
-            }
-          }}
-          className={cn(
-            "relative p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors",
-            bellOpen && "bg-muted text-foreground"
-          )}
-          aria-label="Notifications"
-        >
-          <Bell className="w-4 h-4" />
-          {unreadCount > 0 && (
-            <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500 ring-2 ring-background" />
-          )}
-        </button>
+            }}
+            className={cn(
+              "flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors",
+              "text-muted-foreground hover:text-foreground hover:bg-muted",
+              menuOpen && "bg-muted text-foreground"
+            )}
+            aria-label="User menu"
+            aria-expanded={menuOpen}
+          >
+            <div className="w-7 h-7 rounded-full bg-primary/15 flex items-center justify-center flex-shrink-0">
+              <span className="text-xs font-bold text-primary">
+                {user.name.charAt(0).toUpperCase()}
+              </span>
+            </div>
+            <span className="text-sm font-medium hidden sm:block max-w-32 truncate">{user.name}</span>
+            <ChevronRight className={cn("w-3.5 h-3.5 transition-transform hidden sm:block", menuOpen && "rotate-90")} />
+          </button>
+        </div>
+      </header>
 
-        {bellOpen && bellPos && (
+      {/* ── Portaled dropdown panels ────────────────────────────────────────────
+          All three panels are portaled into document.body so they render
+          outside the header's stacking context (created by backdrop-blur-sm).
+          The backdrop at z-[9998] consumes first-click on page content
+          (restoring the original click-capture behaviour). The header is at
+          z-[9999] so its buttons remain clickable above the backdrop.
+          Each panel is at z-[9999] so it sits on top of both.
+      */}
+
+      {/* Budget panel */}
+      {portalTarget && budgetMenuOpen && budgetPos && createPortal(
+        <>
+          <div className="fixed inset-0 z-[9998]" onClick={() => setBudgetMenuOpen(false)} aria-hidden />
           <div
-            ref={bellPanelRef}
+            className="fixed z-[9999] w-64 rounded-lg border border-border bg-popover shadow-lg py-1"
+            style={{ top: budgetPos.top, left: budgetPos.left }}
+          >
+            <p className="px-3 py-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wide">
+              Your budgets
+            </p>
+            {budgets.map((b) => (
+              <button
+                key={b.id}
+                onClick={() => handleSwitchBudget(b)}
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted transition-colors text-left"
+              >
+                <div className="w-6 h-6 rounded bg-primary/10 flex items-center justify-center flex-shrink-0">
+                  <Wallet className="w-3 h-3 text-primary" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="truncate font-medium">{b.name}</p>
+                  <p className="text-xs text-muted-foreground">{b.budgetType === "SOLO" ? "Solo" : "Shared"} · {b.currency}</p>
+                </div>
+                {b.id === currentBudget?.id && <Check className="w-4 h-4 text-primary flex-shrink-0" />}
+              </button>
+            ))}
+            {user.role === "ADMIN" && (
+              <div className="border-t border-border mt-1 pt-1">
+                <Link
+                  href="/budgets/new"
+                  onClick={() => setBudgetMenuOpen(false)}
+                  className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted transition-colors text-muted-foreground"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  New budget
+                </Link>
+              </div>
+            )}
+          </div>
+        </>,
+        portalTarget
+      )}
+
+      {/* Bell panel */}
+      {portalTarget && bellOpen && bellPos && createPortal(
+        <>
+          <div className="fixed inset-0 z-[9998]" onClick={() => setBellOpen(false)} aria-hidden />
+          <div
             className="fixed z-[9999] w-80 rounded-lg border border-border bg-popover shadow-xl flex flex-col max-h-[480px]"
             style={{ top: bellPos.top, right: bellPos.right }}
           >
@@ -459,42 +477,15 @@ export default function AppHeader({ user, activeBudgetId, onMobileMenuToggle }: 
               </Link>
             </div>
           </div>
-        )}
-      </div>
+        </>,
+        portalTarget
+      )}
 
-      {/* User menu */}
-      <div className="relative">
-        <button
-          ref={menuBtnRef}
-          onClick={() => {
-            const opening = !menuOpen;
-            setMenuOpen(opening);
-            setBellOpen(false);
-            setBudgetMenuOpen(false);
-            if (opening && menuBtnRef.current) {
-              setMenuPos(getAnchoredPos(menuBtnRef.current, "right"));
-            }
-          }}
-          className={cn(
-            "flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors",
-            "text-muted-foreground hover:text-foreground hover:bg-muted",
-            menuOpen && "bg-muted text-foreground"
-          )}
-          aria-label="User menu"
-          aria-expanded={menuOpen}
-        >
-          <div className="w-7 h-7 rounded-full bg-primary/15 flex items-center justify-center flex-shrink-0">
-            <span className="text-xs font-bold text-primary">
-              {user.name.charAt(0).toUpperCase()}
-            </span>
-          </div>
-          <span className="text-sm font-medium hidden sm:block max-w-32 truncate">{user.name}</span>
-          <ChevronRight className={cn("w-3.5 h-3.5 transition-transform hidden sm:block", menuOpen && "rotate-90")} />
-        </button>
-
-        {menuOpen && menuPos && (
+      {/* User menu panel */}
+      {portalTarget && menuOpen && menuPos && createPortal(
+        <>
+          <div className="fixed inset-0 z-[9998]" onClick={() => setMenuOpen(false)} aria-hidden />
           <div
-            ref={menuPanelRef}
             className="fixed z-[9999] w-52 rounded-lg border border-border bg-popover shadow-lg py-1"
             style={{ top: menuPos.top, right: menuPos.right }}
           >
@@ -529,8 +520,9 @@ export default function AppHeader({ user, activeBudgetId, onMobileMenuToggle }: 
               </button>
             </div>
           </div>
-        )}
-      </div>
-    </header>
+        </>,
+        portalTarget
+      )}
+    </>
   );
 }
