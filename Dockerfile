@@ -18,7 +18,7 @@ COPY --from=deps /workspace/node_modules ./node_modules
 COPY --from=deps /workspace/artifacts/budget-app/node_modules ./artifacts/budget-app/node_modules
 COPY . .
 WORKDIR /workspace/artifacts/budget-app
-RUN ./node_modules/.bin/prisma generate
+RUN pnpm --filter @workspace/budget-app exec prisma generate
 WORKDIR /workspace
 ENV NODE_ENV=production
 RUN pnpm --filter @workspace/budget-app run build
