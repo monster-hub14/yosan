@@ -38,6 +38,7 @@ COPY --from=deps /workspace/node_modules/.pnpm /node_modules/.pnpm
 
 # Copy runtime dependencies and app files
 COPY --from=deps /workspace/artifacts/budget-app/node_modules ./node_modules
+COPY --from=builder /workspace/artifacts/budget-app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /workspace/artifacts/budget-app/.next ./.next
 COPY --from=builder /workspace/artifacts/budget-app/public ./public
 COPY --from=builder /workspace/artifacts/budget-app/prisma ./prisma
