@@ -4,6 +4,47 @@ import { execSync } from "child_process";
 import { db } from "@/lib/db";
 import { encryptIfPlaintext } from "@/lib/encryption";
 
+async function columnExists(table: string, column: string): Promise<boolean> {
+  try {
+    const rows = await db.$queryRawUnsafe<{ name: string }[]>(
+      `SELECT name FROM pragma_table_info('${table}') WHERE name = '${column}'`
+    );
+    return rows.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+async function addColumnIfMissing(
+  table: string,
+  column: string,
+  definition: string
+): Promise<void> {
+  if (!(await columnExists(table, column))) {
+    await db.$executeRawUnsafe(
+      `ALTER TABLE "${table}" ADD COLUMN "${column}" ${definition}`
+    );
+    console.log(`[startup] Added missing column ${table}.${column}`);
+  }
+}
+
+async function ensureDriftColumns(): Promise<void> {
+  try {
+    await addColumnIfMissing("ClarificationHistory", "context", "TEXT");
+    await addColumnIfMissing("Expense", "currency", "TEXT NOT NULL DEFAULT 'USD'");
+    await addColumnIfMissing("ItemMemory", "isAmbiguous", "BOOLEAN NOT NULL DEFAULT false");
+    await addColumnIfMissing("ItemMemory", "ambiguousQuestion", "TEXT");
+    await addColumnIfMissing("PendingImport", "expenseId", "TEXT");
+    await addColumnIfMissing("PendingImport", "confirmedById", "TEXT");
+    await addColumnIfMissing("PendingImport", "confirmedAt", "DATETIME");
+  } catch (err) {
+    // Non-fatal: tables may not exist yet on a brand-new DB.
+    // prisma migrate deploy will create them correctly.
+    const msg = err instanceof Error ? err.message : String(err);
+    console.log(`[startup] ensureDriftColumns skipped (likely fresh DB): ${msg}`);
+  }
+}
+
 export async function checkStartup(): Promise<void> {
   const uploadDir = process.env.UPLOAD_DIR || path.join(process.cwd(), "uploads");
 
@@ -52,6 +93,14 @@ export async function checkStartup(): Promise<void> {
     : "(non-file datasource — see DATABASE_URL)";
   console.log(`[startup] DATABASE_URL: ${safeDbUrl}`);
   console.log(`[startup] Resolved SQLite path (approx): ${resolvedDbPath}`);
+
+  // Pre-normalize columns needed by the schema drift patch migration.
+  // The patch migration (20260402120000_schema_drift_patch) uses full
+  // INSERT/SELECT lists that include manually-added columns.  On a fresh
+  // install those columns do not yet exist after migrations 1–12, so we
+  // add them here before migrate deploy runs.  On the live DB (or any DB
+  // where the columns already exist) these calls are no-ops.
+  await ensureDriftColumns();
 
   // Apply any pending Prisma migrations before the app starts serving requests.
   // In development this is a fast no-op when nothing is pending.
