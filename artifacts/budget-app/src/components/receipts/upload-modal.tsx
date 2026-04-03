@@ -4,7 +4,7 @@ import { useState, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Upload, X, FileImage, CheckCircle2, AlertCircle, Receipt,
-  Camera, Type, Image, ArrowLeft,
+  Camera, Type, ArrowLeft,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,7 +24,7 @@ interface UploadModalProps {
   budgetId?: string;
 }
 
-type CaptureMode = "choose" | "upload" | "camera" | "screenshot" | "manual";
+type CaptureMode = "choose" | "upload" | "camera" | "manual";
 type UploadState = "idle" | "uploading" | "processing" | "done" | "error";
 
 function ScanAnimation({ label, sublabel }: { label: string; sublabel: string }) {
@@ -91,7 +91,6 @@ export function UploadReceiptModal({ open, onClose, budgetId }: UploadModalProps
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
-  const screenshotInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -228,12 +227,6 @@ export function UploadReceiptModal({ open, onClose, budgetId }: UploadModalProps
       desc: "Use your device camera to capture the receipt",
     },
     {
-      mode: "screenshot" as CaptureMode,
-      icon: Image,
-      label: "Upload screenshot",
-      desc: "Select a screenshot or screen capture",
-    },
-    {
       mode: "manual" as CaptureMode,
       icon: Type,
       label: "Enter manually",
@@ -271,9 +264,6 @@ export function UploadReceiptModal({ open, onClose, budgetId }: UploadModalProps
                     if (mode === "camera") {
                       setCaptureMode("camera");
                       setTimeout(() => cameraInputRef.current?.click(), 50);
-                    } else if (mode === "screenshot") {
-                      setCaptureMode("screenshot");
-                      setTimeout(() => screenshotInputRef.current?.click(), 50);
                     } else {
                       setCaptureMode(mode);
                     }
@@ -292,22 +282,12 @@ export function UploadReceiptModal({ open, onClose, budgetId }: UploadModalProps
                 </motion.button>
               ))}
 
-              {/* Hidden file inputs for camera and screenshot */}
+              {/* Hidden file input for camera */}
               <input
                 ref={cameraInputRef}
                 type="file"
                 accept="image/*"
                 capture="environment"
-                className="hidden"
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) { handleFileSelect(f); }
-                }}
-              />
-              <input
-                ref={screenshotInputRef}
-                type="file"
-                accept="image/*"
                 className="hidden"
                 onChange={(e) => {
                   const f = e.target.files?.[0];
@@ -323,8 +303,8 @@ export function UploadReceiptModal({ open, onClose, budgetId }: UploadModalProps
             </motion.div>
           )}
 
-          {/* === FILE/CAMERA/SCREENSHOT UPLOAD === */}
-          {uploadState === "idle" && (captureMode === "upload" || captureMode === "camera" || captureMode === "screenshot") && (
+          {/* === FILE/CAMERA UPLOAD === */}
+          {uploadState === "idle" && (captureMode === "upload" || captureMode === "camera") && (
             <motion.div
               key="file"
               initial={{ opacity: 0, y: 8 }}
@@ -356,8 +336,6 @@ export function UploadReceiptModal({ open, onClose, budgetId }: UploadModalProps
                     <div className="p-3 rounded-full bg-primary/10">
                       {captureMode === "camera" ? (
                         <Camera className="w-6 h-6 text-primary" />
-                      ) : captureMode === "screenshot" ? (
-                        <Image className="w-6 h-6 text-primary" />
                       ) : (
                         <Upload className="w-6 h-6 text-primary" />
                       )}
@@ -366,8 +344,6 @@ export function UploadReceiptModal({ open, onClose, budgetId }: UploadModalProps
                       <p className="font-medium">
                         {captureMode === "camera"
                           ? "Tap to open camera"
-                          : captureMode === "screenshot"
-                          ? "Drop screenshot or click to browse"
                           : "Drop receipt here or click to browse"}
                       </p>
                       <p className="text-sm text-muted-foreground mt-1">
