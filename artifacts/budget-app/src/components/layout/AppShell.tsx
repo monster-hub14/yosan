@@ -6,7 +6,6 @@ import AppSidebar from "./AppSidebar";
 import AppHeader from "./AppHeader";
 import MobileNav from "./MobileNav";
 import { UploadFAB } from "@/components/receipts/upload-fab";
-import { LoginReceiptPrompt } from "@/components/receipts/login-receipt-prompt";
 import { type SessionPayload } from "@/lib/auth/types";
 
 interface AppShellProps {
@@ -66,7 +65,6 @@ export default function AppShell({ user, activeBudgetId, children }: AppShellPro
       <MobileNav />
 
       <UploadFAB />
-      <LoginReceiptPrompt />
     </div>
   );
 }
