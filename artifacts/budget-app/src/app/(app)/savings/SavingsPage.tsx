@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Plus, Pencil, Trash2, PiggyBank, RefreshCw } from "lucide-react";
+import { Plus, Pencil, Trash2, PiggyBank, RefreshCw, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,9 +14,10 @@ import {
 } from "@/components/ui/dialog";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
+import { getPeriodsPerYear } from "@/lib/pay-period";
+import type { PayFrequency } from "@prisma/client";
 
 interface SavingsGoal {
   id: string;
@@ -27,6 +28,13 @@ interface SavingsGoal {
   isMonthlyGoal: boolean;
   targetDate: string | null;
   notes: string | null;
+  isActive: boolean;
+}
+
+interface IncomeSource {
+  id: string;
+  frequency: PayFrequency;
+  customDays: number | null;
   isActive: boolean;
 }
 
@@ -105,27 +113,57 @@ const containerVariants = {
   show: { transition: { staggerChildren: 0.08 } },
 };
 
+/**
+ * Calculate the number of pay periods between today and a target date.
+ * Returns null if the target date is in the past or no income source is available.
+ * Uses Math.ceil to avoid under-counting periods near boundaries.
+ */
+function calcPayPeriodsUntil(
+  targetDate: string,
+  frequency: PayFrequency,
+  customDays: number | null
+): number | null {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const target = new Date(targetDate);
+  target.setHours(0, 0, 0, 0);
+
+  if (target <= today) return null;
+
+  const daysRemaining = (target.getTime() - today.getTime()) / 86400000;
+  const periodsPerYear = getPeriodsPerYear(frequency, customDays);
+  const daysPerPeriod = 365 / periodsPerYear;
+
+  return Math.max(1, Math.ceil(daysRemaining / daysPerPeriod));
+}
+
 export default function SavingsPage({ budgetId, currency }: Props) {
   const [goals, setGoals] = useState<SavingsGoal[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingGoal, setEditingGoal] = useState<SavingsGoal | null>(null);
   const [saving, setSaving] = useState(false);
+  const [activeIncomeSource, setActiveIncomeSource] = useState<IncomeSource | null>(null);
 
   const [form, setForm] = useState({
     name: "",
     targetAmount: "",
-    perPaycheckAmount: "",
-    isMonthlyGoal: false,
+    manualPerPaycheck: "",
     targetDate: "",
     notes: "",
   });
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch(`/api/budgets/${budgetId}/savings-goals`);
-      const { goals } = await res.json();
+      const [goalsRes, sourcesRes] = await Promise.all([
+        fetch(`/api/budgets/${budgetId}/savings-goals`),
+        fetch(`/api/budgets/${budgetId}/income-sources`),
+      ]);
+      const { goals } = await goalsRes.json();
+      const { sources } = await sourcesRes.json();
       setGoals(goals ?? []);
+      const active = (sources ?? []).find((s: IncomeSource) => s.isActive) ?? null;
+      setActiveIncomeSource(active);
     } catch {
       toast.error("Failed to load savings goals");
     } finally {
@@ -135,19 +173,37 @@ export default function SavingsPage({ budgetId, currency }: Props) {
 
   useEffect(() => { load(); }, [load]);
 
+  // Derived: calculated per-paycheck amount when target amount + date both set.
+  // When editing an in-progress goal, divide the *remaining* amount (not total target)
+  // so the calculation reflects what still needs to be saved.
+  const calculatedPerPaycheck = (() => {
+    if (!form.targetAmount || !form.targetDate || !activeIncomeSource) return null;
+    const targetAmt = parseFloat(form.targetAmount);
+    if (isNaN(targetAmt) || targetAmt <= 0) return null;
+    const alreadySaved = editingGoal ? (editingGoal.currentAmount ?? 0) : 0;
+    const remaining = Math.max(targetAmt - alreadySaved, 0);
+    if (remaining === 0) return null;
+    const periods = calcPayPeriodsUntil(form.targetDate, activeIncomeSource.frequency, activeIncomeSource.customDays);
+    if (!periods) return null;
+    return remaining / periods;
+  })();
+
   function openAdd() {
     setEditingGoal(null);
-    setForm({ name: "", targetAmount: "", perPaycheckAmount: "", isMonthlyGoal: false, targetDate: "", notes: "" });
+    setForm({ name: "", targetAmount: "", manualPerPaycheck: "", targetDate: "", notes: "" });
     setShowForm(true);
   }
 
   function openEdit(goal: SavingsGoal) {
     setEditingGoal(goal);
+    // Pre-populate manualPerPaycheck when editing a goal without an income source for auto-calc,
+    // or when no target date is set. When a target date is present and an income source exists,
+    // the value will be auto-calculated from the remaining amount.
+    const canAutoCalc = !!(goal.targetDate && activeIncomeSource);
     setForm({
       name: goal.name,
       targetAmount: goal.targetAmount.toString(),
-      perPaycheckAmount: goal.perPaycheckAmount?.toString() ?? "",
-      isMonthlyGoal: goal.isMonthlyGoal,
+      manualPerPaycheck: (!canAutoCalc && goal.perPaycheckAmount != null) ? goal.perPaycheckAmount.toString() : "",
       targetDate: goal.targetDate ? goal.targetDate.slice(0, 10) : "",
       notes: goal.notes ?? "",
     });
@@ -161,11 +217,16 @@ export default function SavingsPage({ budgetId, currency }: Props) {
     }
     setSaving(true);
     try {
+      const perPaycheckAmount = calculatedPerPaycheck !== null
+        ? calculatedPerPaycheck
+        : form.manualPerPaycheck
+        ? parseFloat(form.manualPerPaycheck)
+        : null;
+
       const body = {
         name: form.name,
         targetAmount: parseFloat(form.targetAmount),
-        perPaycheckAmount: form.perPaycheckAmount ? parseFloat(form.perPaycheckAmount) : null,
-        isMonthlyGoal: form.isMonthlyGoal,
+        perPaycheckAmount,
         targetDate: form.targetDate || null,
         notes: form.notes || null,
       };
@@ -304,7 +365,6 @@ export default function SavingsPage({ budgetId, currency }: Props) {
                           {goal.perPaycheckAmount !== null && (
                             <p className="text-xs text-muted-foreground mt-2">
                               {formatCurrency(goal.perPaycheckAmount, currency)} / paycheck
-                              {goal.isMonthlyGoal && " (monthly)"}
                             </p>
                           )}
                           {goal.targetDate && (
@@ -365,33 +425,63 @@ export default function SavingsPage({ budgetId, currency }: Props) {
               <Label>Total target amount</Label>
               <Input type="number" min="0" step="0.01" placeholder="0.00" value={form.targetAmount} onChange={(e) => setForm({ ...form, targetAmount: e.target.value })} />
             </div>
-            <div className="flex items-center justify-between rounded-lg border border-border p-3">
-              <div>
-                <p className="text-sm font-medium">Monthly contribution</p>
-                <p className="text-xs text-muted-foreground">Toggle to enter a monthly amount instead of per-paycheck</p>
-              </div>
-              <Switch checked={form.isMonthlyGoal} onCheckedChange={(v) => setForm({ ...form, isMonthlyGoal: v })} />
-            </div>
-            <div className="space-y-1.5">
-              <Label>{form.isMonthlyGoal ? "Monthly contribution" : "Per-paycheck contribution"}</Label>
-              <Input
-                type="number"
-                min="0"
-                step="0.01"
-                placeholder="0.00"
-                value={form.perPaycheckAmount}
-                onChange={(e) => setForm({ ...form, perPaycheckAmount: e.target.value })}
-              />
-              {form.isMonthlyGoal && (
-                <p className="text-xs text-muted-foreground">
-                  This will be converted to a per-paycheck amount based on your pay schedule.
-                </p>
-              )}
-            </div>
             <div className="space-y-1.5">
               <Label>Target date (optional)</Label>
               <Input type="date" value={form.targetDate} onChange={(e) => setForm({ ...form, targetDate: e.target.value })} />
             </div>
+
+            {/* Auto-calculated info line when both target amount and date are set */}
+            {calculatedPerPaycheck !== null && (
+              <div className="flex items-start gap-2 rounded-lg bg-muted/50 border border-border px-3 py-2.5">
+                <Info className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+                <p className="text-sm text-muted-foreground">
+                  You need to save{" "}
+                  <span className="font-semibold text-foreground">
+                    ~{formatCurrency(calculatedPerPaycheck, currency)}
+                  </span>{" "}
+                  per paycheck to reach this goal by{" "}
+                  {new Date(form.targetDate).toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                  })}
+                </p>
+              </div>
+            )}
+
+            {/* Fallback: target date set but no pay frequency configured — show manual input */}
+            {form.targetDate && !activeIncomeSource && (
+              <div className="space-y-1.5">
+                <Label>Per-paycheck contribution (optional)</Label>
+                <p className="text-xs text-muted-foreground">
+                  Add an income source with a pay schedule to auto-calculate this.
+                </p>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="0.00"
+                  value={form.manualPerPaycheck}
+                  onChange={(e) => setForm({ ...form, manualPerPaycheck: e.target.value })}
+                />
+              </div>
+            )}
+
+            {/* Manual per-paycheck input when no target date */}
+            {!form.targetDate && (
+              <div className="space-y-1.5">
+                <Label>Per-paycheck contribution (optional)</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="0.00"
+                  value={form.manualPerPaycheck}
+                  onChange={(e) => setForm({ ...form, manualPerPaycheck: e.target.value })}
+                />
+              </div>
+            )}
+
             <div className="space-y-1.5">
               <Label>Notes (optional)</Label>
               <Input placeholder="Any notes…" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
