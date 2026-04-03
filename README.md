@@ -1,5 +1,11 @@
 # Yosan AI — Self-Hosted AI-Powered Budget Tracker
 
+<a href="https://buymeacoffee.com/monsterreview" target="_blank">
+  <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" 
+       alt="Buy Me A Coffee" 
+       style="height: 60px !important;width: 217px !important;">
+</a>
+
 ## Project Overview
 A self-hosted, AI-powered, receipt-driven budget tracking application built with Next.js 15 App Router. Designed for deployment on TrueNAS SCALE and other self-hosting environments. No cloud dependencies, no SaaS lock-in.
 
