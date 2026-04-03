@@ -7,9 +7,9 @@ import { Plus, Search, Filter, Trash2, Pencil, TrendingDown, Loader2, Wallet, Ca
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { ExpenseFormModal } from "@/components/expenses/expense-form-modal";
+import { CategoryPicker, CategoryNode } from "@/components/expenses/category-picker";
 import { cn } from "@/lib/utils";
 
 interface Category {
@@ -103,6 +103,22 @@ export function ExpensesClient({ budgetId, initialCategories }: ExpensesClientPr
   const [lastSafeToSpend, setLastSafeToSpend] = useState<SafeToSpend | null>(null);
 
   const flatCategories = initialCategories;
+
+  const categoryTree: CategoryNode[] = (() => {
+    const map = new Map<string, CategoryNode>();
+    for (const c of flatCategories) {
+      map.set(c.id, { id: c.id, name: c.name, color: c.color, icon: c.icon, parentId: c.parentId, children: [] });
+    }
+    const roots: CategoryNode[] = [];
+    for (const node of map.values()) {
+      if (node.parentId && map.has(node.parentId)) {
+        map.get(node.parentId)!.children!.push(node);
+      } else {
+        roots.push(node);
+      }
+    }
+    return roots;
+  })();
 
   const hasCustomDates = !!(dateFrom || dateTo);
   const isPeriodFiltered = !showAll && !hasCustomDates;
@@ -294,22 +310,14 @@ export function ExpensesClient({ budgetId, initialCategories }: ExpensesClientPr
               className="overflow-hidden"
             >
               <div className="flex flex-wrap gap-3 pb-1">
-                <Select value={categoryFilter} onValueChange={(v) => { setCategoryFilter(v === "all" ? "" : v); setPage(1); }}>
-                  <SelectTrigger className="w-48">
-                    <SelectValue placeholder="All categories" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All categories</SelectItem>
-                    {flatCategories.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        <span className="flex items-center gap-2">
-                          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: c.color ?? "#6b7280" }} />
-                          {c.parentId ? "  " : ""}{c.name}
-                        </span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="w-52">
+                  <CategoryPicker
+                    categories={categoryTree}
+                    value={categoryFilter || null}
+                    onChange={(id) => { setCategoryFilter(id ?? ""); setPage(1); }}
+                    placeholder="All categories"
+                  />
+                </div>
                 <div className="flex items-center gap-2">
                   <Input
                     type="date"
