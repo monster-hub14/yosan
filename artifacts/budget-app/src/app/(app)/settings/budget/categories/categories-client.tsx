@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface Category {
@@ -178,7 +178,10 @@ export function CategoriesClient({ budgetId, isAdmin }: CategoriesClientProps) {
     try {
       const res = await fetch(`/api/categories/${deleteTarget.id}`, { method: "DELETE" });
       const data = await res.json() as { error?: string };
-      if (!res.ok) { setDeleteError(data.error ?? "Failed to delete"); return; }
+      if (!res.ok) {
+        setDeleteError(data.error ?? "Failed to delete");
+        return;
+      }
       setDeleteTarget(null);
       load();
     } catch {
@@ -262,20 +265,26 @@ export function CategoriesClient({ budgetId, isAdmin }: CategoriesClientProps) {
         onSaved={load}
       />
 
-      <AlertDialog open={!!deleteTarget} onOpenChange={(v) => { if (!v) { setDeleteTarget(null); setDeleteError(null); } }}>
+      <AlertDialog open={!!deleteTarget} onOpenChange={(v) => { if (!v && !deleting) { setDeleteTarget(null); setDeleteError(null); } }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete &quot;{deleteTarget?.name}&quot;?</AlertDialogTitle>
             <AlertDialogDescription>
-              This category will be permanently deleted. Expenses using it will become uncategorized.
-              {deleteError && <span className="block mt-2 text-destructive">{deleteError}</span>}
+              This category will be permanently deleted. Categories with expenses or subcategories assigned to them cannot be deleted until those are reassigned or removed first.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {deleteError && (
+            <p className="text-sm text-destructive px-1 -mt-2">{deleteError}</p>
+          )}
           <AlertDialogFooter>
             <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} disabled={deleting} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+            <Button
+              onClick={handleDelete}
+              disabled={deleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
               {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Delete"}
-            </AlertDialogAction>
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
