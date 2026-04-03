@@ -4,6 +4,14 @@ A self-hosted, AI-powered personal and household budget tracker. Track expenses,
 
 ---
 
+<a href="https://buymeacoffee.com/monsterreview" target="_blank">
+  <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" 
+       alt="Buy Me A Coffee" 
+       style="height: 60px !important;width: 217px !important;">
+</a>
+
+---
+
 ## Features
 
 - **AI receipt extraction** — upload photos or PDFs; merchant, date, and total are extracted automatically
