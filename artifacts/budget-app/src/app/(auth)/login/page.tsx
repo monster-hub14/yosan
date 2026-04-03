@@ -43,7 +43,8 @@ export default async function LoginPage() {
       <p className="text-center text-xs text-muted-foreground">
         Self-hosted &middot;{" "}
         <Link
-          href="https://github.com"
+          href="https://github.com/monster-hub14/yosan"
+          target="_blank"
           className="underline hover:text-foreground transition-colors"
         >
           View on GitHub
