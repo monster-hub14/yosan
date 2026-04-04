@@ -5,7 +5,6 @@ import { ChevronDown, ChevronRight, Search, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { ScrollArea } from "@/components/ui/scroll-area";
 
 export interface CategoryNode {
   id: string;
@@ -101,7 +100,7 @@ export function CategoryPicker({
             className="pl-8 h-8 text-sm"
           />
         </div>
-        <ScrollArea className="h-56">
+        <div className="h-56 overflow-y-auto overscroll-contain">
           <div className="space-y-0.5">
             {filtered.map((parent) => {
               const hasChildren = (parent.children?.length ?? 0) > 0;
@@ -185,7 +184,7 @@ export function CategoryPicker({
               </p>
             )}
           </div>
-        </ScrollArea>
+        </div>
         {value && (
           <div className="pt-2 border-t mt-2">
             <button
