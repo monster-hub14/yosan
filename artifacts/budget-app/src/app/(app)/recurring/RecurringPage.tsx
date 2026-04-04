@@ -124,8 +124,8 @@ export default function RecurringPage({ budgetId, currency }: Props) {
   useEffect(() => {
     fetch(`/api/categories?budgetId=${budgetId}`)
       .then((r) => r.json())
-      .then((data: { categories?: FlatCategory[] }) => {
-        setCategories(buildCategoryTree(data.categories ?? []));
+      .then((data: { flat?: FlatCategory[] }) => {
+        setCategories(buildCategoryTree(data.flat ?? []));
       })
       .catch(() => {});
   }, [budgetId]);
