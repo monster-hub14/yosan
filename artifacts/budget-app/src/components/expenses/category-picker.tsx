@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import * as PopoverPrimitive from "@radix-ui/react-popover";
 import { ChevronDown, ChevronRight, Search, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 export interface CategoryNode {
   id: string;
@@ -72,8 +72,8 @@ export function CategoryPicker({
   const filtered = filterCategories(categories, search);
 
   return (
-    <Popover open={open && !disabled} onOpenChange={(v) => { if (!disabled) setOpen(v); }}>
-      <PopoverTrigger asChild>
+    <PopoverPrimitive.Root open={open && !disabled} onOpenChange={(v) => { if (!disabled) setOpen(v); }}>
+      <PopoverPrimitive.Trigger asChild>
         <Button
           variant="outline"
           className={`w-full justify-between font-normal ${className ?? ""}`}
@@ -89,8 +89,14 @@ export function CategoryPicker({
           )}
           <ChevronDown className="h-4 w-4 opacity-50 shrink-0" />
         </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-72 p-2" align="start">
+      </PopoverPrimitive.Trigger>
+      {/* No Portal wrapper — content stays inside the Dialog DOM subtree so
+          @radix-ui/react-remove-scroll does not block wheel/touch scroll events */}
+      <PopoverPrimitive.Content
+        align="start"
+        sideOffset={4}
+        className="z-50 w-72 rounded-md border bg-popover p-2 text-popover-foreground shadow-md outline-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 origin-[--radix-popover-content-transform-origin]"
+      >
         <div className="relative mb-2">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
           <Input
@@ -198,8 +204,8 @@ export function CategoryPicker({
             </button>
           </div>
         )}
-      </PopoverContent>
-    </Popover>
+      </PopoverPrimitive.Content>
+    </PopoverPrimitive.Root>
   );
 }
 
