@@ -106,7 +106,7 @@ export function CategoryPicker({
             className="pl-8 h-8 text-sm"
           />
         </div>
-        <div className="h-56 overflow-y-auto overscroll-contain">
+        <div className="h-56 overflow-y-auto overscroll-contain touch-pan-y">
           <div className="space-y-0.5">
             {filtered.map((parent) => {
               const hasChildren = (parent.children?.length ?? 0) > 0;
