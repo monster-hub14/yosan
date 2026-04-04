@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Plus, Pencil, Trash2, RefreshCw, Clock } from "lucide-react";
+import { Plus, Pencil, Trash2, RefreshCw, Clock, Tag } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/dialog";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { CategoryPicker, type CategoryNode } from "@/components/expenses/category-picker";
 import { toast } from "sonner";
 
 interface RecurringExpense {
@@ -32,6 +33,14 @@ interface RecurringExpense {
   notes: string | null;
   isActive: boolean;
   category: { id: string; name: string; color: string | null } | null;
+}
+
+interface FlatCategory {
+  id: string;
+  name: string;
+  color: string | null;
+  icon: string | null;
+  parentId: string | null;
 }
 
 const FREQ_LABELS: Record<string, string> = {
@@ -59,6 +68,22 @@ function formatDueDate(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
+function buildCategoryTree(flat: FlatCategory[]): CategoryNode[] {
+  const map = new Map<string, CategoryNode>();
+  for (const c of flat) {
+    map.set(c.id, { id: c.id, name: c.name, color: c.color, icon: c.icon, parentId: c.parentId, children: [] });
+  }
+  const roots: CategoryNode[] = [];
+  for (const node of map.values()) {
+    if (node.parentId && map.has(node.parentId)) {
+      map.get(node.parentId)!.children!.push(node);
+    } else {
+      roots.push(node);
+    }
+  }
+  return roots;
+}
+
 interface Props {
   budgetId: string;
   currency: string;
@@ -71,6 +96,8 @@ export default function RecurringPage({ budgetId, currency }: Props) {
   const [editingItem, setEditingItem] = useState<RecurringExpense | null>(null);
   const [saving, setSaving] = useState(false);
 
+  const [categories, setCategories] = useState<CategoryNode[]>([]);
+
   const [form, setForm] = useState({
     name: "",
     amount: "",
@@ -78,6 +105,7 @@ export default function RecurringPage({ budgetId, currency }: Props) {
     nextDueDate: "",
     notes: "",
   });
+  const [categoryId, setCategoryId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -93,9 +121,19 @@ export default function RecurringPage({ budgetId, currency }: Props) {
 
   useEffect(() => { load(); }, [load]);
 
+  useEffect(() => {
+    fetch(`/api/categories?budgetId=${budgetId}`)
+      .then((r) => r.json())
+      .then((data: { categories?: FlatCategory[] }) => {
+        setCategories(buildCategoryTree(data.categories ?? []));
+      })
+      .catch(() => {});
+  }, [budgetId]);
+
   function openAdd() {
     setEditingItem(null);
     setForm({ name: "", amount: "", frequency: "MONTHLY", nextDueDate: "", notes: "" });
+    setCategoryId(null);
     setShowForm(true);
   }
 
@@ -108,6 +146,7 @@ export default function RecurringPage({ budgetId, currency }: Props) {
       nextDueDate: item.nextDueDate ? item.nextDueDate.slice(0, 10) : "",
       notes: item.notes ?? "",
     });
+    setCategoryId(item.category?.id ?? null);
     setShowForm(true);
   }
 
@@ -124,6 +163,7 @@ export default function RecurringPage({ budgetId, currency }: Props) {
         frequency: form.frequency,
         nextDueDate: form.nextDueDate || null,
         notes: form.notes || null,
+        categoryId: categoryId || null,
       };
 
       let res: Response;
@@ -253,6 +293,22 @@ export default function RecurringPage({ budgetId, currency }: Props) {
                               </span>
                             </>
                           )}
+                          {item.category && (
+                            <>
+                              <span>·</span>
+                              <span className="flex items-center gap-1">
+                                {item.category.color ? (
+                                  <span
+                                    className="w-2 h-2 rounded-full flex-shrink-0"
+                                    style={{ backgroundColor: item.category.color }}
+                                  />
+                                ) : (
+                                  <Tag className="w-3 h-3 flex-shrink-0" />
+                                )}
+                                {item.category.name}
+                              </span>
+                            </>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -303,11 +359,20 @@ export default function RecurringPage({ budgetId, currency }: Props) {
               </Select>
             </div>
             <div className="space-y-1.5">
+              <Label>Category <span className="text-muted-foreground font-normal">(optional)</span></Label>
+              <CategoryPicker
+                categories={categories}
+                value={categoryId}
+                onChange={(id) => setCategoryId(id)}
+                placeholder="Select a category…"
+              />
+            </div>
+            <div className="space-y-1.5">
               <Label>Next due date</Label>
               <Input type="date" value={form.nextDueDate} onChange={(e) => setForm({ ...form, nextDueDate: e.target.value })} />
             </div>
             <div className="space-y-1.5">
-              <Label>Notes (optional)</Label>
+              <Label>Notes <span className="text-muted-foreground font-normal">(optional)</span></Label>
               <Input placeholder="Any notes…" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
             </div>
           </div>
