@@ -127,7 +127,9 @@ export default function RecurringPage({ budgetId, currency }: Props) {
       .then((data: { flat?: FlatCategory[] }) => {
         setCategories(buildCategoryTree(data.flat ?? []));
       })
-      .catch(() => {});
+      .catch((err) => {
+        console.warn("[RecurringPage] Failed to load categories:", err);
+      });
   }, [budgetId]);
 
   function openAdd() {
