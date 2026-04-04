@@ -464,7 +464,7 @@ export function ReviewClient({ id }: ReviewClientProps) {
                   disabled={confirming}
                 >
                   {confirming && <Loader2 className="w-3 h-3 mr-1.5 animate-spin" />}
-                  {opt.label}
+                  {opt.value === "keep_new" && isRecurring ? "Save as recurring bill" : opt.label}
                 </Button>
               ))}
               <Button

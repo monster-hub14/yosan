@@ -79,6 +79,9 @@ export async function POST(request: NextRequest, { params }: Params) {
   if (isRecurring) {
     const VALID_FREQUENCIES = ["DAILY", "WEEKLY", "BIWEEKLY", "MONTHLY", "QUARTERLY", "ANNUALLY"];
     const safeFrequency = VALID_FREQUENCIES.includes(frequency) ? frequency : "MONTHLY";
+    // Use the receipt's date as nextDueDate so the bill appears near the top of the
+    // Recurring tab (which sorts by nextDueDate asc). Fall back to today if no date.
+    const recurringNextDue = dateStr ? new Date(dateStr) : new Date();
     await db.$transaction(async (tx) => {
       await tx.recurringExpense.create({
         data: {
@@ -87,6 +90,7 @@ export async function POST(request: NextRequest, { params }: Params) {
           name: merchant || "Unknown",
           amount: total ?? 0,
           frequency: safeFrequency as "DAILY" | "WEEKLY" | "BIWEEKLY" | "MONTHLY" | "QUARTERLY" | "ANNUALLY",
+          nextDueDate: recurringNextDue,
           notes: notes || undefined,
         },
       });
